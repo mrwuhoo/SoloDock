@@ -1,0 +1,134 @@
+{
+  "name": "solodock",
+  "version": "0.1.0",
+  "description": "SoloDock — 一人公司的桌面效率工作台",
+  "main": "main.js",
+  "author": "mrwuhoo",
+  "license": "MIT",
+  "scripts": {
+    "test": "node scripts/test-desktop.js",
+    "start": "electron .",
+    "build": "electron-builder --mac dmg --publish never",
+    "build:win": "electron-builder --win nsis --x64 --publish never",
+    "build:zip": "electron-builder --mac zip",
+    "pack": "electron-builder --dir"
+  },
+  "devDependencies": {
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.7"
+  },
+  "build": {
+    "appId": "com.dynamicpanel.glass",
+    "productName": "SoloDock",
+    "artifactName": "SoloDock-${version}-${arch}.${ext}",
+    "copyright": "Copyright © 2026 TO-DO Panel contributors; SoloDock modifications © 2026 mrwuhoo",
+    "asar": false,
+    "directories": {
+      "output": "dist.noindex",
+      "buildResources": "build"
+    },
+    "afterPack": "./build/afterPack.js",
+    "files": [
+      "main.js",
+      "main-services.js",
+      "platform.js",
+      "build/solodock-icon.png",
+      "preload.js",
+      "renderer/**/*",
+      "scripts/codex-notify.js",
+      "scripts/claude-notify.js",
+      "package.json",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/.bin",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "LICENSE",
+      "NOTICE.md",
+      "THIRD_PARTY_NOTICES.md",
+      "ASSET_LICENSES.md"
+    ],
+    "mac": {
+      "icon": "build/solodock-icon.icns",
+      "category": "public.app-category.productivity",
+      "minimumSystemVersion": "13.0",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.plist",
+      "darkModeSupport": true,
+      "extendInfo": {
+        "LSUIElement": true,
+        "NSHighResolutionCapable": true,
+        "CFBundleDisplayName": "SoloDock",
+        "NSCameraUsageDescription": "SoloDock 需要使用摄像头来显示「镜子」预览。",
+        "NSMicrophoneUsageDescription": "SoloDock 需要使用麦克风来录音并生成转写文本。",
+        "NSAppleEventsUsageDescription": "SoloDock 需要控制「系统事件」来枚举并聚焦当前窗口、发送汽水音乐快捷键。"
+      }
+    },
+    "win": {
+      "icon": "build/solodock-icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "SoloDock-${version}-windows-${arch}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "runAfterFinish": false,
+      "deleteAppDataOnUninstall": false
+    },
+    "dmg": {
+      "title": "SoloDock ${version}",
+      "iconSize": 100,
+      "contents": [
+        {
+          "x": 130,
+          "y": 220
+        },
+        {
+          "x": 410,
+          "y": 220,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ],
+      "window": {
+        "width": 540,
+        "height": 380
+      }
+    }
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  },
+  "contributors": [
+    "TO-DO Panel contributors (upstream)",
+    "SoloDock contributors"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mrwuhoo/SoloDock.git"
+  },
+  "homepage": "https://github.com/mrwuhoo/SoloDock",
+  "bugs": {
+    "url": "https://github.com/mrwuhoo/SoloDock/issues"
+  }
+}
