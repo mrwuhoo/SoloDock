@@ -6,7 +6,7 @@
 
 ## [0.1.0] - 2026-09-16
 
-SoloDock 首次公开源码版本，基于 TO-DO Panel v1.1.2；版本从 0.1.0 独立编号。当前没有二进制 Release。
+SoloDock 首次公开源码版本，基于 TO-DO Panel v1.1.2；版本从 0.1.0 独立编号。提供 macOS Apple Silicon DMG 与 Windows x64 NSIS 安装包，附 SHA-256 校验文件。
 
 - 清理来源不明的图片与旧截图，使用 SoloDock Logo 与代码渐变。
 - 补充 MIT 署名、依赖与素材来源、权限及发布边界。

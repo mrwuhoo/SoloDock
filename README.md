@@ -10,10 +10,17 @@
 
 ## 当前状态
 
-源码版本 **0.1.0**。SoloDock 暂未发布独立安装包，请从源码运行；上游安装包不包含本项目修改。
+当前版本 **0.1.0**。安装包和校验文件见 [GitHub Release](https://github.com/mrwuhoo/SoloDock/releases/tag/v0.1.0)。
+
+| 平台 | 安装包 |
+| --- | --- |
+| macOS 13+ Apple Silicon | [SoloDock-0.1.0-arm64.dmg](https://github.com/mrwuhoo/SoloDock/releases/download/v0.1.0/SoloDock-0.1.0-arm64.dmg) |
+| Windows 10/11 x64 | [SoloDock-0.1.0-windows-x64-setup.exe](https://github.com/mrwuhoo/SoloDock/releases/download/v0.1.0/SoloDock-0.1.0-windows-x64-setup.exe) |
+
+同一 Release 提供各安装包的 SHA-256。Mac 打开 DMG 后将 SoloDock 拖入应用程序；Windows 运行安装向导。macOS 安装包没有 Apple Developer ID 公证，Windows 安装包未作商业签名，系统可能提示确认来源。不要关闭系统整体安全保护。
 
 - macOS 13+ Apple Silicon：本地开发与验证的主要平台。
-- Windows 10/11 x64：继承上游兼容代码和构建配置，当前版本尚未完成 Windows 实机验收。
+- Windows 10/11 x64：继承上游兼容代码和构建配置，通过 Windows CI 的安装、启动、重装数据保留与卸载验证；实体设备仍待补充验收。
 - UI：浅蓝磨砂玻璃、透明外壳、柔和圆角与卡片。
 
 ## 功能

@@ -98,12 +98,17 @@ test('macOS packaging declares the Electron 44 minimum and least-privilege runti
   assert.match(entitlements, /com\.apple\.security\.cs\.disable-library-validation/);
 });
 
-test('unreleased SoloDock does not advertise upstream installers as its own', () => {
+test('SoloDock download links match the packaged version on both surfaces', () => {
   const readme = fs.readFileSync(readmePath, 'utf8');
   const lock = require(path.join(projectRoot, 'package-lock.json'));
   assert.equal(packageConfig.version, lock.version);
   assert.equal(packageConfig.name, lock.name);
-  assert.match(readme, /SoloDock 暂未发布独立安装包/);
+  const website = fs.readFileSync(path.join(projectRoot, 'website/index.html'), 'utf8');
+  for (const filename of [`SoloDock-${packageVersion}-arm64.dmg`, `SoloDock-${packageVersion}-windows-x64-setup.exe`]) {
+    const url = `https://github.com/mrwuhoo/SoloDock/releases/download/v${packageVersion}/${filename}`;
+    assert.ok(readme.includes(url), `README missing ${filename}`);
+    assert.ok(website.includes(url), `Website missing ${filename}`);
+  }
   assert.match(readme, /xiaopu-ai\/TO-DO-Panel/);
   assert.doesNotMatch(readme, /https:\/\/github\.com\/xiaopu-ai\/TO-DO-Panel\/releases\//);
   assert.match(readme, /https:\/\/github\.com\/mrwuhoo\/SoloDock/);

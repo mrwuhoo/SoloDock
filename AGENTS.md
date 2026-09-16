@@ -67,7 +67,7 @@
 
 - 任何产品更新推送到 GitHub 前，必须联动检查版本号、`CHANGELOG.md`、README 当前稳定版本与下载入口、GitHub Pages 下载按钮。
 - 正式发布必须保证 `package.json` 与 `package-lock.json` 版本一致，推送匹配的 `v*.*.*` 标签，并在 GitHub Actions 完成后验证 Release 的 DMG / SHA-256 资产与 Pages 实际下载指向。
-- 当前官网仅链接 SoloDock 源码，不提供安装包下载；实际发布后才添加经过验证的双平台下载入口。
+- README 与官网提供版本化双平台安装包链接；每次发布应与实际 Release 资产及 SHA-256 保持一致。
 
 ## NEVER
 

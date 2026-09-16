@@ -22,7 +22,7 @@
 
 为兼容已安装的 Glass 定制版，暂时保留 `com.dynamicpanel.glass` Bundle ID、`TO-DO Panel Glass` 用户数据目录、Electron 内部 app name，以及 build/afterPack.js 的本地证书目录。内部 app name 涉及 macOS safeStorage 钥匙串条目；不应仅为清理旧名称而直接改掉。系统钥匙串对话框仍可能出现旧 Safe Storage 名称。
 
-这些措施保留已有数据和身份配置，但不能保证 macOS 在应用重打包或改路径后绝不重新请求授权。当前仅更新源码及打包资源，尚未替换本机已安装应用。
+这些措施保留已有数据和身份配置，但不能保证 macOS 在应用重打包或改路径后绝不重新请求授权。打包后的对外应用名为 SoloDock；升级安装保留旧用户目录和钥匙串内部名称。
 
 `website/` 为 SoloDock 的静态介绍页。旧官网、旧截图及来源不明素材仅保留在本地 `.local-archive/`，不进入公开仓库。
 

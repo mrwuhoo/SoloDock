@@ -1,6 +1,6 @@
 # SoloDock releases
 
-Current source version: 0.1.0. No installers published.
+Current version: 0.1.0. Installer and checksum assets are published together after validation.
 
 1. Review README, CHANGELOG, licenses, attribution, dependencies and artwork provenance.
 2. Run npm ci and npm test on macOS and Windows. Separately validate real devices, permissions, data persistence and upgraded installations.
