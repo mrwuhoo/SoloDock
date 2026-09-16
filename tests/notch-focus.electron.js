@@ -49,7 +49,11 @@ async function main() {
 
     await window.webContents.debugger.attach('1.3');
     await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
-      features: [{ name: 'prefers-reduced-motion', value: 'reduce' }],
+      features: [
+        { name: 'prefers-reduced-motion', value: 'reduce' },
+        // CI hosts may reduce transparency by default; set the glass test baseline explicitly.
+        { name: 'prefers-reduced-transparency', value: 'no-preference' },
+      ],
     });
     window.show();
     window.focus();
@@ -943,7 +947,11 @@ async function main() {
     assert.equal(persistenceAndRecorderAudit.focusReleased, true);
 
     await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
-      features: [{ name: 'prefers-reduced-motion', value: 'no-preference' }],
+      features: [
+        { name: 'prefers-reduced-motion', value: 'no-preference' },
+        // CI hosts may reduce transparency by default; set the glass test baseline explicitly.
+        { name: 'prefers-reduced-transparency', value: 'no-preference' },
+      ],
     });
     const panelMotionAudit = await window.webContents.executeJavaScript(`
       (async () => {
@@ -1168,6 +1176,21 @@ async function main() {
     assert.equal(autoLayoutMotionAudit.rapidDuplicateGhosts, false, '连续切换必须先清理上一轮 Auto Layout ghost');
     assert.ok(autoLayoutMotionAudit.rapidMaxTileAnimations <= 1, '连续切换不得叠加多轮组件动画');
     assert.equal(autoLayoutMotionAudit.rapidGhostsAfter, 0, '连续切换结束后不得残留 Auto Layout ghost');
+    // Separately verify the accessibility fallback instead of inheriting the host's preference.
+    await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
+      features: [
+        { name: 'prefers-reduced-motion', value: 'reduce' },
+        { name: 'prefers-reduced-transparency', value: 'reduce' },
+      ],
+    });
+    const reducedTransparency = await window.webContents.executeJavaScript(`
+      (() => {
+        const style = getComputedStyle(document.getElementById('panel'), '::before');
+        return { backdrop: style.backdropFilter, background: style.backgroundColor };
+      })()
+    `);
+    assert.equal(reducedTransparency.backdrop, 'none', '减少透明度偏好应关闭背景模糊');
+    assert.match(reducedTransparency.background, /0\.96\)/, '减少透明度偏好应使用更不透明的背景');
   } finally {
     if (window.webContents.debugger.isAttached()) window.webContents.debugger.detach();
     window.destroy();
