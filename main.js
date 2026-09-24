@@ -25,6 +25,8 @@ const zlib = require('zlib');
 const crypto = require('crypto');
 const { execFile } = require('child_process');
 const platformPolicy = require('./platform');
+const codexUsage = require('./codex-usage').createCodexUsageService();
+const resetNews = require('./reset-news').createResetNewsService();
 const PLATFORM_CAPABILITIES = platformPolicy.capabilities(process.platform);
 const {
   isPrivateAddress,
@@ -200,6 +202,7 @@ const TAB_SIZES = {
   links: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
   recordings: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
   credentials: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
+  resets: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
   settings: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
 };
 // 与渲染层结构常量对应：panel padding-top(--s-2 8) + 顶栏(--topbar-h 40)
@@ -1119,6 +1122,7 @@ const DEFAULT_FEATURES = {
   recordings: true,
   credentials: true,
   clip: false,
+  resets: true,
 };
 
 function getJsonSettingsPath(name) {
@@ -1350,7 +1354,7 @@ function refreshTrayMenu() {
   if (!tray) return;
   const autoLaunch = isAutoLaunchEnabled();
   const settings = readAppSettings();
-  const featureLabels = { todo: '待办', notes: '笔记', links: '链接', recordings: '录制', credentials: '密钥', clip: '剪贴板' };
+  const featureLabels = { todo: '待办', notes: '笔记', links: '链接', recordings: '录制', credentials: '密钥', clip: '剪贴板', resets: '重置资讯' };
   const menu = Menu.buildFromTemplate([
     {
       label: 'API 配置…',
@@ -1447,6 +1451,20 @@ ipcMain.handle('window:set-mode', async (event, mode) => {
 
 ipcMain.handle('window:begin-collapse', () => {
   beginNativeCollapse();
+});
+
+ipcMain.handle('codex:usage', (event) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
+    return { ok: false, error: 'unavailable' };
+  }
+  return codexUsage.read();
+});
+
+ipcMain.handle('resets:read', (event, force) => {
+  if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
+    return { ok: false, error: 'unavailable' };
+  }
+  return resetNews.read({ force: force === true });
 });
 
 ipcMain.handle('settings:get', () => publicAppSettings());
@@ -3419,6 +3437,7 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', () => {
+  codexUsage.dispose();
   cancelCollapseWatchdog();
   clearTodoReminderTimer();
   stopHoverSpaceShortcut();

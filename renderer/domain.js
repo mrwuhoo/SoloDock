@@ -834,8 +834,12 @@
     if (!visibleOrder.length) return null;
 
     let placements;
-    if (visibleOrder.length === 7) {
-      placements = packHomeWidgetLayout(visibleOrder, sizes, columns, rows);
+    if (visibleOrder.length >= 7) {
+      const visibleSizes = Object.fromEntries(visibleOrder.map((id) => [id, sizes[id]]));
+      const fittedSizes = hidden.size
+        ? normalizeHomeWidgetSizes(visibleSizes, visibleSizes, '', columns * rows)
+        : sizes;
+      placements = packHomeWidgetLayout(visibleOrder, fittedSizes, columns, rows);
     } else {
       const template = HOME_GAPLESS_TEMPLATES[visibleOrder.length];
       if (!template) return null;

@@ -77,6 +77,10 @@
               </svg>
               <span class="tab-label">密钥</span>
             </button>
+            <button class="tab" id="tab-button-resets" type="button" data-tab="resets" role="tab" aria-controls="tab-resets" aria-selected="false" tabindex="-1">
+              <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M3 12h2"/></svg>
+              <span class="tab-label">重置资讯</span>
+            </button>
             <button class="tab" id="tab-button-settings" type="button" data-tab="settings" role="tab" aria-controls="tab-settings" aria-selected="false" tabindex="-1">
               <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="3" />
@@ -210,6 +214,18 @@
               </section>
 
               <!-- 常用指令 -->
+              <section class="tile home-usage" id="home-usage" data-state="empty" data-home-module="usage" data-widget-size="medium" aria-label="Codex 订阅用量">
+                <div class="usage-widget-heading"><h2>Codex</h2><button class="icon-button usage-configure" type="button" aria-label="订阅配置" title="订阅配置"></button></div>
+                <div class="usage-widget-body">
+                  <div class="usage-widget-value"><strong id="usage-remaining">—</strong><span id="usage-period">剩余额度</span></div>
+                  <progress id="usage-meter" max="100" value="0" aria-label="Codex 剩余额度" hidden></progress>
+                  <p id="usage-reset">连接后查看重置时间</p>
+                  <div id="usage-empty"><button class="workspace-button compact" id="usage-connect" type="button">连接 Codex</button></div>
+                  <p id="usage-secondary" hidden></p>
+                </div>
+                <div class="usage-widget-footer"><span id="usage-credits">重置卡 —</span><button id="usage-news" class="usage-text-button" type="button">重置资讯 <span aria-hidden="true">›</span></button></div>
+              </section>
+
               <section class="tile home-commands" data-home-module="commands" data-widget-size="medium">
                 <div class="tile-head">
                   <span class="tile-label">常用指令</span>
@@ -401,6 +417,24 @@
             </div>
           </section>
 
+          <section id="tab-resets" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-resets" aria-hidden="true" inert>
+            <div class="reset-news-page">
+              <section class="tile reset-news-calendar-card" aria-label="重置资讯日历">
+                <header class="reset-news-header"><div><span class="tile-label">重置资讯</span><h2 id="reset-news-month">读取中…</h2></div><div class="reset-news-actions"><button id="reset-news-today" type="button">回到最近</button><button id="reset-news-prev" type="button" aria-label="上个月">‹</button><button id="reset-news-next" type="button" aria-label="下个月">›</button></div></header>
+                <p class="reset-news-summary" id="reset-news-summary">正在读取公开动态…</p>
+                <div class="reset-news-week" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+                <div class="reset-news-calendar" id="reset-news-calendar" role="grid" aria-label="按日期查看重置资讯"></div>
+                <footer class="reset-news-foot">基于公开信息整理；预告日期可能变化。全部时间以北京时间为准。</footer>
+              </section>
+              <section class="tile reset-news-detail-card" aria-label="所选日期详情">
+                <header class="reset-news-detail-head"><div><span class="tile-label">当日记录</span><h2 id="reset-news-selected-date">选择日期</h2></div><button class="workspace-button compact" id="reset-news-refresh" type="button">刷新</button></header>
+                <p id="reset-news-status" class="reset-news-status" role="status" aria-live="polite"></p>
+                <div id="reset-news-events" class="reset-news-events"></div>
+                <footer class="reset-news-source"><span id="reset-news-updated">数据来源：AIHOT</span><button id="reset-news-open-source" class="usage-text-button" type="button">查看来源 ↗</button></footer>
+              </section>
+            </div>
+          </section>
+
           <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true" inert>
             <div class="settings-page" id="settings-page" aria-label="SoloDock 设置">
               <div class="settings-column settings-column-primary">
@@ -428,6 +462,7 @@
                     <label><span><b>录制</b><small>录音与转写</small></span><input type="checkbox" data-settings-feature="recordings" aria-label="显示录制" /><i aria-hidden="true"></i></label>
                     <label><span><b>密钥</b><small>本机安全存储</small></span><input type="checkbox" data-settings-feature="credentials" aria-label="显示密钥" /><i aria-hidden="true"></i></label>
                     <label><span><b>剪贴板</b><small>默认关闭</small></span><input type="checkbox" data-settings-feature="clip" aria-label="显示剪贴板" /><i aria-hidden="true"></i></label>
+                    <label><span><b>重置资讯</b><small>独立日历页面</small></span><input type="checkbox" data-settings-feature="resets" aria-label="显示重置资讯" /><i aria-hidden="true"></i></label>
                   </div>
                 </section>
 
@@ -437,6 +472,7 @@
                     <small id="settings-home-module-status">隐藏后自动填充 · 至少保留一个</small>
                   </div>
                   <div class="settings-home-module-grid" id="settings-home-module-list">
+                    <label><span><b>订阅用量</b><small>Codex 额度卡片</small></span><input type="checkbox" data-settings-home-module="usage" aria-label="显示订阅用量" /><i aria-hidden="true"></i></label>
                     <label><span><b>音乐</b><small>播放状态与控制</small></span><input type="checkbox" data-settings-home-module="music" aria-label="显示音乐" /><i aria-hidden="true"></i></label>
                     <label><span><b>番茄钟</b><small>专注计时</small></span><input type="checkbox" data-settings-home-module="pomodoro" aria-label="显示番茄钟" /><i aria-hidden="true"></i></label>
                     <label><span><b>快速录音</b><small data-home-module-setting-note="recorder">录音与转写</small></span><input type="checkbox" data-settings-home-module="recorder" aria-label="显示快速录音" /><i aria-hidden="true"></i></label>
@@ -449,6 +485,17 @@
               </div>
 
               <div class="settings-column settings-column-secondary">
+                <section class="tile settings-card settings-usage-card" id="settings-usage-card" tabindex="-1" aria-labelledby="settings-usage-title">
+                  <div class="settings-card-heading"><div><span class="tile-label">订阅</span><strong id="settings-usage-title">订阅配置</strong></div><button class="workspace-button compact" id="codex-usage-refresh" type="button">连接并读取</button></div>
+                  <div class="usage-setting-row"><span>已连接账号</span><span id="usage-account">Codex · 未连接</span></div>
+                  <label class="usage-setting-row" for="usage-sync"><span>自动同步</span><select id="usage-sync"><option value="0">仅手动</option><option value="1">每 1 分钟</option><option value="5">每 5 分钟</option><option value="15">每 15 分钟</option></select></label>
+                  <div class="usage-setting-row"><span>公开动态源</span><button class="usage-text-button" id="usage-source" type="button">AIHOT · Tibo公开动态 <span aria-hidden="true">↗</span></button></div>
+                  <p id="codex-usage-status" role="status">使用本机 Codex 当前登录账号，无需填写密码。</p>
+                  <p id="codex-usage-updated"></p>
+                  <div id="usage-details" class="usage-details"></div>
+                  <small class="usage-config-note">自动同步仅在首页组件可见或查看此配置时进行。公开发卡消息以 AIHOT 标注为准，个人余额以账号返回为准。</small>
+                </section>
+
                 <section class="tile settings-card settings-mirror-card">
                   <img id="settings-mirror-preview" src="assets/solodock-mirror.png" alt="当前首页镜子配图" draggable="false" />
                   <div>
@@ -477,6 +524,7 @@
                       <option value="recordings">录制</option>
                       <option value="credentials">密钥</option>
                       <option value="clip">剪贴板</option>
+                      <option value="resets">重置资讯</option>
                       <option value="settings">设置</option>
                     </select>
                   </label>
@@ -579,6 +627,8 @@
     <script src="effects.js"></script>
     <script src="app.js"></script>
     <script src="workspace.js"></script>
+    <script src="reset-news.js"></script>
+    <script src="codex-usage.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

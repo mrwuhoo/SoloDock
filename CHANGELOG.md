@@ -4,6 +4,12 @@
 
 ## [未发布]
 
+- 新增 Codex 首页订阅用量组件，支持统一的四档尺寸、长按换位与显隐设置，保留旧版卡片相对顺序。
+- 新增订阅配置：连接本机账号、手动或每 1 / 5 / 15 分钟同步、查看各周期额度；展示真实重置卡数量，缺失与过期数据明确保持未知。
+- 首页组件开关归入「设置 → 首页组件」；新增可单独开关的「重置资讯」页面，按月查看 AIHOT 公开历史记录与预告，首页卡片可直接进入。设置页两栏统一滚动。
+- 重置资讯只读固定公开 API，不保存账号凭据或自动使用重置卡。
+- macOS 独立读取已验证；Windows 仅支持 PATH 中的原生 Codex 可执行文件，npm 包装启动器暂不支持。
+
 ## [0.1.0] - 2026-09-16
 
 SoloDock 首次公开源码版本，基于 TO-DO Panel v1.1.2；版本从 0.1.0 独立编号。提供 macOS Apple Silicon DMG 与 Windows x64 NSIS 安装包，附 SHA-256 校验文件。
@@ -126,7 +132,8 @@ SoloDock 首次公开源码版本，基于 TO-DO Panel v1.1.2；版本从 0.1.0 
 
 - 首个稳定版本，建立固定命名的 Apple Silicon DMG 发布流程。
 
-[未发布]: https://github.com/xiaopu-ai/TO-DO-Panel/compare/v1.1.0...HEAD
+[未发布]: https://github.com/mrwuhoo/SoloDock/compare/v0.1.0...main
+[0.1.0]: https://github.com/mrwuhoo/SoloDock/releases/tag/v0.1.0
 [1.1.0]: https://github.com/xiaopu-ai/TO-DO-Panel/compare/v1.0.7...v1.1.0
 [1.0.7]: https://github.com/xiaopu-ai/TO-DO-Panel/compare/v1.0.6...v1.0.7
 [1.0.6]: https://github.com/xiaopu-ai/TO-DO-Panel/compare/v1.0.5...v1.0.6

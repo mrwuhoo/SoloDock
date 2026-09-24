@@ -56,7 +56,7 @@ test('settings exposes exactly one switch for every homepage widget', () => {
   const switches = [...html.matchAll(/data-settings-home-module="([^"]+)"/g)]
     .map((match) => match[1]);
   assert.deepEqual(switches, [
-    'music', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands',
+    'usage', 'music', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands',
   ]);
   assert.match(workspaceJs, /isRecordingActive/);
   assert.match(workspaceJs, /recording_active/);
@@ -67,9 +67,18 @@ test('settings exposes every panel tab as a possible default opening page', () =
   const select = html.match(/<select id="settings-default-tab"[\s\S]*?<\/select>/)?.[0] || '';
   const options = [...select.matchAll(/<option value="([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(options, [
-    'home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings',
+    'home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'resets', 'settings',
   ]);
   assert.match(workspaceJs, /setDefaultTab/);
+});
+
+test('usage belongs to home widgets while reset news is an independent feature', () => {
+  const featureList = html.match(/id="settings-feature-list"[\s\S]*?<\/div>/)?.[0] || '';
+  const homeList = html.match(/id="settings-home-module-list"[\s\S]*?<\/div>/)?.[0] || '';
+  assert.doesNotMatch(featureList, /data-settings-home-module="usage"/);
+  assert.match(homeList, /data-settings-home-module="usage"/);
+  assert.match(featureList, /data-settings-feature="resets"/);
+  assert.match(html, /id="tab-resets"/);
 });
 
 test('hidden visual widgets stop presentation-only background work', () => {

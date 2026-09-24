@@ -949,7 +949,7 @@
     if (settingsShortcutValue) settingsShortcutValue.textContent = summary.shortcut;
     if (settingsDefaultTab) {
       const visibleTabs = new Set(Domain.visiblePanelTabs(
-        ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings'],
+        ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'resets', 'settings'],
         settingsAppSettings?.features
       ));
       Array.from(settingsDefaultTab.options).forEach((option) => {
@@ -975,7 +975,7 @@
     const state = window.NotchHome?.getVisibility?.();
     const hidden = new Set(state?.hiddenIds || []);
     const recordingActive = window.NotchWorkspace?.isRecordingActive?.() ?? isRecordingActive();
-    settingsHomeModuleList?.querySelectorAll('input[data-settings-home-module]').forEach((input) => {
+    document.querySelectorAll('input[data-settings-home-module]').forEach((input) => {
       const moduleId = input.dataset.settingsHomeModule;
       const unavailable = state?.unavailableIds?.includes(moduleId) === true;
       input.closest('label').hidden = unavailable;
@@ -1681,7 +1681,7 @@
     renderSettingsPanel();
     setSettingsNote('显示功能已更新。');
   });
-  settingsHomeModuleList?.addEventListener('change', async (event) => {
+  document.getElementById('settings-page')?.addEventListener('change', async (event) => {
     const input = event.target.closest('input[data-settings-home-module]');
     if (!input || !window.NotchHome?.setModuleVisible) return;
     input.disabled = true;

@@ -504,8 +504,8 @@ function hoverSpacePollingPolicy({ shortcut, visible, mode } = {}) {
   };
 }
 
-const CONFIGURABLE_FEATURES = new Set(['todo', 'notes', 'links', 'recordings', 'credentials', 'clip']);
-const DEFAULT_PANEL_TABS = new Set(['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings']);
+const CONFIGURABLE_FEATURES = new Set(['todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'resets']);
+const DEFAULT_PANEL_TABS = new Set(['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'resets', 'settings']);
 
 function updateFeaturePreference(features, featureId, enabled) {
   if (!CONFIGURABLE_FEATURES.has(featureId) || typeof enabled !== 'boolean') return null;

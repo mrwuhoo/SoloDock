@@ -719,7 +719,7 @@ if (window.notchAPI && typeof window.notchAPI.onMetricsChanged === 'function') {
 
 // ============ Tab 切换 ============
 const TAB_KEY = 'notch-active-tab';
-const ALL_TABS = ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'settings'];
+const ALL_TABS = ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'resets', 'settings'];
 let TABS = ALL_TABS.filter((name) => name !== 'clip');
 let tabButtons = Array.from(document.querySelectorAll('.tab:not([hidden])'));
 const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
@@ -2417,18 +2417,19 @@ if (notePreview) {
 const HOME_ORDER_KEY = 'notch-home-order-v3';
 const HOME_SIZES_KEY = 'notch-home-widget-sizes-v2';
 const HOME_HIDDEN_MODULES_KEY = 'notch-home-hidden-modules-v1';
-const HOME_MODULE_REGISTRY = ['music', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands'];
+const HOME_MODULE_REGISTRY = ['music', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands', 'usage'];
 const unavailableHomeModules = window.NotchPlatform.capabilities(window.notchAPI?.platform || 'darwin').unavailableHomeModules;
 const effectiveHomeHidden = (hidden) => window.NotchPlatform.effectiveHiddenModules(hidden, HOME_MODULE_REGISTRY, unavailableHomeModules);
-const HOME_ORDER_DEFAULTS = ['music', 'pomodoro', 'windows', 'recorder', 'mirror', 'note', 'commands'];
+const HOME_ORDER_DEFAULTS = ['music', 'pomodoro', 'windows', 'recorder', 'mirror', 'note', 'commands', 'usage'];
 const HOME_SIZE_DEFAULTS = {
   music: 'medium',
-  windows: 'large',
+  windows: 'medium',
   recorder: 'small',
   mirror: 'medium',
   note: 'medium',
   commands: 'mini',
   pomodoro: 'mini',
+  usage: 'medium',
 };
 const HOME_SIZE_LABELS = { mini: '迷你', small: '小', medium: '中', large: '大' };
 const homeBento = document.getElementById('home-bento');
@@ -2444,10 +2445,10 @@ function loadHomeOrder() {
       : rawSaved;
     if (
       Array.isArray(saved)
-      && saved.length === HOME_ORDER_DEFAULTS.length
-      && new Set(saved).size === HOME_ORDER_DEFAULTS.length
+      && saved.length >= HOME_ORDER_DEFAULTS.length - 1
+      && new Set(saved).size === saved.length
       && saved.every((id) => HOME_ORDER_DEFAULTS.includes(id))
-    ) return saved;
+    ) return [...saved, ...HOME_ORDER_DEFAULTS.filter((id) => !saved.includes(id))];
 
     // 从旧固定槽位布局平滑迁移；原时钟 / 人物位置由音乐组件接管。
     const legacy = JSON.parse(localStorage.getItem('notch-home-layout-v2') || 'null');
@@ -2473,7 +2474,7 @@ function loadHomeSizes() {
       JSON.parse(localStorage.getItem(HOME_SIZES_KEY) || 'null'),
       HOME_SIZE_DEFAULTS,
       '',
-      48
+      hiddenHomeModules.length ? Infinity : 48
     );
   } catch (error) {
     return { ...HOME_SIZE_DEFAULTS };
@@ -2496,9 +2497,9 @@ function loadHiddenHomeModules() {
 }
 
 let homeOrder = loadHomeOrder();
-let homeSizes = loadHomeSizes();
 const loadedHomeVisibility = loadHiddenHomeModules();
 let hiddenHomeModules = loadedHomeVisibility.hiddenIds;
+let homeSizes = loadHomeSizes();
 let homeVisibilityPersisted = true;
 let homeLayoutReadOnly = false;
 let homeLayoutMotionGeneration = 0;
@@ -2611,12 +2612,18 @@ function applyHomeLayout(layout, { reason = 'initial' } = {}) {
     ? null
     : captureHomeLayoutVisualState();
   const automaticLayout = !homeLayoutReadOnly && effectiveHomeHidden(hiddenHomeModules).length > 0;
+  const canResize = !homeLayoutReadOnly && Object.keys(layout.placements).length >= 7;
   homeBento.dataset.layoutMode = homeLayoutReadOnly ? 'safe' : automaticLayout ? 'automatic' : 'preferred';
+  homeBento.dataset.resizeMode = canResize ? 'enabled' : 'disabled';
   homeTiles.forEach((tile) => {
     const moduleId = tile.dataset.homeModule;
     const orderIndex = Math.max(0, homeOrder.indexOf(moduleId));
-    const size = homeSizes[moduleId] || HOME_SIZE_DEFAULTS[moduleId];
     const placement = layout.placements[moduleId];
+    const placementSize = placement && placement.width === 2 && placement.height === 1 ? 'mini'
+      : placement && placement.width === 2 && placement.height === 2 ? 'small'
+        : placement && placement.width === 4 && placement.height === 2 ? 'medium'
+          : placement && placement.width === 4 && placement.height === 4 ? 'large' : null;
+    const size = canResize && placementSize ? placementSize : homeSizes[moduleId] || HOME_SIZE_DEFAULTS[moduleId];
     tile.style.order = String(orderIndex);
     tile.dataset.widgetSize = size;
     tile.style.setProperty('--bento-index', String(orderIndex));
@@ -2644,9 +2651,9 @@ function applyHomeLayout(layout, { reason = 'initial' } = {}) {
       sizeButton.dataset.currentSize = size;
       sizeButton.setAttribute('aria-label', `${HOME_SIZE_LABELS[size]}组件，点击切换尺寸`);
       sizeButton.title = `组件尺寸：${HOME_SIZE_LABELS[size]}`;
-      sizeButton.hidden = automaticLayout || homeLayoutReadOnly;
-      sizeButton.disabled = automaticLayout || homeLayoutReadOnly;
-      sizeButton.tabIndex = automaticLayout || homeLayoutReadOnly ? -1 : 0;
+      sizeButton.hidden = !canResize || !placement;
+      sizeButton.disabled = !canResize || !placement;
+      sizeButton.tabIndex = canResize && placement ? 0 : -1;
     }
   });
   animateCommittedHomeLayout(reason, beforeState);
@@ -2715,7 +2722,11 @@ function setHomeModuleVisible(moduleId, visible) {
     && window.NotchWorkspace?.isRecordingActive?.()) {
     return { ok: false, changed: false, error: 'recording_active', hiddenIds: current, persisted: homeVisibilityPersisted };
   }
-  const layout = resolveValidatedHomeLayout(next.hiddenIds);
+  const previousSizes = homeSizes;
+  const nextSizes = effectiveHomeHidden(next.hiddenIds).length === 0
+    ? window.NotchDomain.normalizeHomeWidgetSizes(homeSizes, HOME_SIZE_DEFAULTS, moduleId, 48)
+    : homeSizes;
+  const layout = resolveValidatedHomeLayout(next.hiddenIds, homeOrder, nextSizes);
   const currentLayout = resolveValidatedHomeLayout(current);
   if (!layout || !currentLayout) {
     return { ok: false, changed: false, error: 'layout_invalid', hiddenIds: current, persisted: homeVisibilityPersisted };
@@ -2726,13 +2737,16 @@ function setHomeModuleVisible(moduleId, visible) {
     const changingTile = homeTiles.find((tile) => tile.dataset.homeModule === moduleId);
     if (visible === false && changingTile?.contains(activeElement)) activeElement.blur();
     hiddenHomeModules = next.hiddenIds;
+    homeSizes = nextSizes;
     applyHomeLayout(layout, { reason: 'visibility' });
   } catch (error) {
     hiddenHomeModules = current;
+    homeSizes = previousSizes;
     try { applyHomeLayout(currentLayout, { reason: 'rollback' }); } catch (rollbackError) {}
     return { ok: false, changed: false, error: 'dom_apply_failed', hiddenIds: current, persisted: homeVisibilityPersisted };
   }
   const persisted = saveHiddenHomeModules();
+  if (nextSizes !== previousSizes) saveHomeLayout();
   const detail = visibilitySnapshot();
   document.dispatchEvent(new CustomEvent('notch:home-modules-changed', { detail }));
   return { ok: true, changed: true, hiddenIds: [...hiddenHomeModules], persisted };
@@ -2823,20 +2837,30 @@ if (homeBento) {
     if (!sizeButton) return;
     event.preventDefault();
     event.stopPropagation();
-    if (effectiveHomeHidden(hiddenHomeModules).length > 0 || homeLayoutReadOnly) return;
+    const visibleIds = visibilitySnapshot().visibleIds;
+    if (visibleIds.length < 7 || homeLayoutReadOnly) return;
     const moduleId = sizeButton.dataset.widgetSizeCycle;
     const sequence = ['mini', 'small', 'medium', 'large'];
-    const current = homeSizes[moduleId] || HOME_SIZE_DEFAULTS[moduleId];
+    const current = sizeButton.dataset.currentSize || homeSizes[moduleId] || HOME_SIZE_DEFAULTS[moduleId];
     const requested = sequence[(sequence.indexOf(current) + 1) % sequence.length];
-    homeSizes = window.NotchDomain.normalizeHomeWidgetSizes({
-      ...homeSizes,
+    const previousSizes = homeSizes;
+    const visibleSizes = Object.fromEntries(visibleIds.map((id) => [
+      id,
+      homeTiles.find((tile) => tile.dataset.homeModule === id)?.querySelector('[data-widget-size-cycle]')?.dataset.currentSize || homeSizes[id],
+    ]));
+    const fittedSizes = window.NotchDomain.normalizeHomeWidgetSizes({
+      ...visibleSizes,
       [moduleId]: requested,
-    }, HOME_SIZE_DEFAULTS, moduleId, 48);
+    }, visibleSizes, moduleId, 48);
+    homeSizes = { ...homeSizes, ...fittedSizes };
     const layout = resolveValidatedHomeLayout(hiddenHomeModules);
     if (layout) {
       applyHomeLayout(layout, { reason: 'size' });
       saveHomeLayout();
       showStatusToast(`${HOME_SIZE_LABELS[homeSizes[moduleId]]}组件 · 其他模块已自适应`);
+    } else {
+      homeSizes = previousSizes;
+      showStatusToast('当前布局无法使用这个尺寸，已保留原布局');
     }
   });
 

@@ -31,6 +31,8 @@
     "files": [
       "main.js",
       "main-services.js",
+      "codex-usage.js",
+      "reset-news.js",
       "platform.js",
       "build/solodock-icon.png",
       "preload.js",
