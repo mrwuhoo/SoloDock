@@ -184,6 +184,19 @@ window.NotchTodos = {
   items: () => data,
   categoryName: (priority) => todoCategoryNames[priority] || '',
   open: () => setActiveTab('todo'),
+  // 从搜索或提醒打开某一条：切到待办页，滚到那一条并闪一下。
+  async focus(id) {
+    await setActiveTab('todo');
+    requestAnimationFrame(() => {
+      const item = document.querySelector(`.todo-item[data-id="${CSS.escape(String(id))}"]`);
+      if (!item) return;
+      item.scrollIntoView({ block: 'nearest' });
+      item.classList.remove('flash');
+      void item.offsetWidth;
+      item.classList.add('flash');
+      setTimeout(() => item.classList.remove('flash'), 1300);
+    });
+  },
 };
 const todoSelections = Object.fromEntries(PRIORITIES.map((priority) => [priority, new Set()]));
 const todoSelectionAnchors = Object.fromEntries(PRIORITIES.map((priority) => [priority, null]));
@@ -766,6 +779,8 @@ panel.addEventListener('click', (e) => {
 // Escape 不会原生到达页面（被浏览器层吞掉），由主进程 before-input-event 转发
 if (window.notchAPI && typeof window.notchAPI.onEscape === 'function') {
   window.notchAPI.onEscape(() => {
+    // 浮层（⌘K 搜索等）先关自己，不收起面板。
+    if (window.NotchPalette?.close?.()) return;
     const el = document.activeElement;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
       el.blur();
@@ -2507,6 +2522,17 @@ function scheduleNotesEditorSave(editor) {
     if (pending) persistNotesEditor(pending);
   }, 220);
 }
+
+// 从搜索打开某条笔记。
+window.NotchNotes = {
+  list: () => loadNoteArchive(),
+  async open(id) {
+    await setActiveTab('notes');
+    window.NotchPromptLibrary?.setLibrary?.('notes', { remember: false });
+    selectedNoteId = String(id || '');
+    renderNotesLibrary();
+  },
+};
 
 function renderNotesLibrary() {
   if (!notesList) return;

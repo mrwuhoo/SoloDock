@@ -46,6 +46,9 @@
           <div class="tabs" id="tabs" role="tablist" aria-label="SoloDock 页面">
             <!-- 两组页签贴着物理刘海左右排开；中间留给刘海，点空白处收起面板。 -->
             <div class="tab-group tab-group-primary">
+              <button class="search-trigger" id="search-trigger" type="button" aria-haspopup="dialog" aria-controls="palette" title="搜索（⌘K）" aria-label="搜索（⌘K）">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
+              </button>
               <button class="tab" id="tab-button-home" type="button" data-tab="home" role="tab" aria-controls="tab-home" aria-selected="false" tabindex="-1">
                 <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M4 11.5 12 4l8 7.5" />
@@ -150,6 +153,21 @@
           <kbd id="shortcut-recorder-value">等待输入…</kbd>
           <small>可直接使用空格；其他按键建议搭配 ⌘ / ⌥ / ⌃ / ⇧</small>
           <button id="shortcut-recorder-cancel" type="button">取消</button>
+        </div>
+
+        <!-- ⌘K 搜索：在记下的东西里一处搜索（待办、笔记、提示词、链接、剪贴板、密钥名称）。 -->
+        <div class="palette" id="palette" hidden>
+          <div class="palette-backdrop" data-palette-close></div>
+          <div class="palette-box" role="dialog" aria-label="搜索" aria-modal="true">
+            <label class="palette-input">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg>
+              <input id="palette-input" type="text" placeholder="搜索待办、笔记、提示词、链接、剪贴板、密钥" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="palette-results" aria-autocomplete="list" />
+              <kbd>esc</kbd>
+            </label>
+            <div class="palette-filters" id="palette-filters" role="tablist" aria-label="按类型筛选"></div>
+            <div class="palette-results" id="palette-results" role="listbox" aria-label="搜索结果"></div>
+            <footer class="palette-foot"><span><kbd>↑</kbd><kbd>↓</kbd>选择</span><span><kbd>↩</kbd>打开 / 复制</span><span><kbd>⌘</kbd><kbd>↩</kbd>粘贴到前台应用</span><span><kbd>tab</kbd>按类型筛选</span></footer>
+          </div>
         </div>
 
         <div class="panels" id="panels">
@@ -927,6 +945,8 @@
     <script src="time-page.js"></script>
     <script src="life-domain.js"></script>
     <script src="life-page.js"></script>
+    <script src="search-domain.js"></script>
+    <script src="command-palette.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

@@ -420,5 +420,22 @@
   window.NotchPromptLibrary = {
     list: () => prompts.map((prompt) => ({ ...prompt })),
     setLibrary,
+    // 从搜索打开：切到提示词页并选中这一条（有变量要填时用这个）。
+    open(id) {
+      setLibrary('prompts', { remember: false });
+      activeGroup = '';
+      selectedId = String(id || '');
+      renderGroups();
+      renderList();
+    },
+    // 从搜索直接复制（没有要填的变量时）。
+    async copy(id) {
+      selectedId = String(id || '');
+      await copyPrompt(true);
+    },
+    needsInput: (id) => {
+      const prompt = prompts.find((item) => item.id === id);
+      return Boolean(prompt && Prompts.editableVariables(prompt.text).length);
+    },
   };
 })();

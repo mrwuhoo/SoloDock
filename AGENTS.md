@@ -68,6 +68,7 @@
 - 页面按原型逐页重做：每页完成后与原型截图并排对比，并逐条满足规范里的「验收」。
 - 数据结构变更必须附迁移与回滚；剪贴板页保持现有交互，只统一视觉。
 - 时间页（`worklog-store.js` + `renderer/worklog-domain.js` + `renderer/time-page.js`）：身体提醒每 30 秒读一次系统空闲时间时顺带记一段「在用电脑 / 专注」（空闲 ≥ 5 分钟、锁屏、休眠不计），存 `userData/worklog.json`，一天以 04:00 为界，保留 13 个月；另记当天完成待办数（`worklog:todo`）与 AI 任务数。**不记录应用名、窗口标题、网址或任何内容**。开关在 `body.worklog.enabled`（默认开，关掉立即停止），「设置 → 身体与作息」可清除全部记录。
+- ⌘K 搜索（`renderer/search-domain.js` + `renderer/command-palette.js`）：只在面板展开时响应 ⌘K（捕获阶段监听，不注册全局快捷键）；每次打开现读各模块数据（待办、`notch-note-archive-v1`、提示词、`notch-link-groups`、`notch-clip-history` 文本条目、`listCredentials`），不建索引、不另存副本。密钥条目只带名称、账号与网址，**永远不把密码放进搜索条目**；密钥只能 `copyCredential`，⌘↩ 粘贴对密钥无效。最近使用存 `notch-palette-recent-v1`（最多 8 条，只存类型、id 与标题）。Esc 由主进程转发，`onEscape` 先交给 `NotchPalette.close()`。
 - 生活页（`renderer/life-domain.js` + `renderer/life-page.js`）：习惯与记录只存 LocalStorage `notch-life-v1`（`{ habits, records }`，默认运动 / 冥想 / 阅读，最多 6 个习惯、3000 条记录），**与工作数据完全分开**：不进首页、时间统计与通知中心。目标按每周几次，连续 = 连续达标的周数（本周未达标不清零），一天以 04:00 为界。移除习惯会连同记录删除，需点两次确认。
 - 通知中心（`notice-store.js` + `renderer/notice-center.js`）：每条提醒入队时记录到 `userData/notices.json`（保留 7 天、最多 300 条；回执、护眼与专注汇总不记，补发的不重复记）。在卡片或通知中心里处理过即 `handled`（「稍后提醒」不算）；Claude 继续完成时自动处理对应的「需要你确认」；打开通知中心即全部已读。顶栏铃铛在右侧页签组末尾，琥珀徽章 = 需要你处理，蓝色 = 未读。
 - 今天时间线（`renderer/timeline-domain.js` + `renderer/today-strip.js`）：日程 `notch-events-v1`、稍后提醒 `notch-later-v1`、专注记录 `notch-focus-log-v1`（番茄钟每段写一条，保留 500 条）、显隐 `notch-home-strip-v1`。渲染层每次改动后把完整提醒队列交给主进程 `reminders:schedule`，由主进程定时（面板收起也会提醒，错过超过 5 分钟不补发），触发后回传 `reminder:fired`。日程与稍后提醒不进「最近完成」。
