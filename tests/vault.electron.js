@@ -193,6 +193,18 @@ app.whenReady().then(async () => {
   assert.equal(resetAndReveal.editType, 'password');
   assert.equal(resetAndReveal.editRevealed, 'text');
 
+  // A Mac whose Touch ID is unavailable (lid closed): the system sheet asks for the login password instead.
+  const macPassword = await win.webContents.executeJavaScript(`(async () => {
+    Object.assign(window.__vault, { enabled: true, locked: true, system: 'mac-password', password: null });
+    await window.NotchVault.refresh();
+    const out = { button: document.getElementById('vault-unlock-system').textContent, hidden: document.getElementById('vault-unlock-system').hidden };
+    window.__vault.locked = false;
+    await window.NotchVault.refresh();
+    out.method = document.getElementById('settings-vault-method').textContent;
+    return out;
+  })()`);
+  assert.deepEqual(macPassword, { button: '使用电脑登录密码解锁', hidden: false, method: '用电脑登录密码解锁，主密码可选' });
+
   // A computer without Touch ID / Windows Hello: turning the lock on asks for a master password first.
   const noSystem = await win.webContents.executeJavaScript(`(async () => {
     const settle = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));

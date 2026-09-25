@@ -66,8 +66,16 @@ app.on('web-contents-created', (_event, contents) => {
         out.wrong = await api.unlockVault('password', 'nope');
         out.right = await api.unlockVault('password', 'startup-pass');
         out.afterUnlock = (await api.listCredentials()).locked;
+        await api.lockVault();
+        out.system = await api.unlockVault('system');
+        out.afterSystem = (await api.listCredentials()).locked;
         return out;
       })()`);
+      const panel = require('electron').BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().endsWith('/renderer/index.html'));
+      assert.deepEqual(vault.system, { ok: true });
+      assert.equal(vault.afterSystem, false);
+      assert.deepEqual(touchIdPrompts, [{ reason: '解锁 SoloDock 密钥', onTop: false }], 'the panel drops below the Touch ID sheet');
+      assert.equal(panel.isAlwaysOnTop(), true, 'and returns to its layer afterwards');
       assert.equal(vault.initial.enabled, false, 'the lock is off until the user turns it on');
       assert.equal(vault.initial.locked, false);
       assert.equal(vault.openList, false);
@@ -83,4 +91,10 @@ app.on('web-contents-created', (_event, contents) => {
     } catch (error) { console.error(error); app.exit(1); }
   });
 });
+// Stand-in for the Touch ID sheet: record whether the panel still sat above system windows while it was up.
+const touchIdPrompts = [];
+require('electron').systemPreferences.promptTouchID = async (reason) => {
+  const panel = require('electron').BrowserWindow.getAllWindows().find((win) => win.webContents.getURL().endsWith('/renderer/index.html'));
+  touchIdPrompts.push({ reason, onTop: panel ? panel.isAlwaysOnTop() : null });
+};
 require('../main.js');

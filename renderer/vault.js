@@ -10,7 +10,7 @@
 
   const REVEAL_MS = 10_000;
   const TOUCH_THROTTLE_MS = 20_000;
-  const SYSTEM_NAMES = { touchid: 'Touch ID', hello: 'Windows Hello' };
+  const SYSTEM_NAMES = { touchid: 'Touch ID', 'mac-password': '电脑登录密码', hello: 'Windows Hello' };
   const els = {
     hint: get('vault-lock-hint'),
     system: get('vault-unlock-system'),
@@ -46,6 +46,8 @@
   let lastTouch = 0;
 
   const systemName = () => SYSTEM_NAMES[status?.system] || '';
+  // 中文里夹英文名称时两侧留空格，纯中文不留：「使用 Touch ID 解锁」「使用电脑登录密码解锁」。
+  const spaced = (name) => (/^[A-Za-z]/.test(name) ? ` ${name} ` : name);
 
   async function refresh() {
     const next = await api().getVaultStatus?.().catch(() => null);
@@ -73,7 +75,7 @@
     const name = systemName();
     els.hint.textContent = `${status.autoLockMinutes} 分钟未使用、锁屏或休眠后会自动锁定`;
     els.system.hidden = !name;
-    els.system.textContent = name ? `使用 ${name} 解锁` : '';
+    els.system.textContent = name ? `使用${spaced(name)}解锁` : '';
     els.passwordForm.hidden = !status.hasPassword;
     els.password.placeholder = name ? '或输入主密码' : '输入主密码';
     els.forgot.hidden = !status.hasPassword;
@@ -85,7 +87,7 @@
     // 首次引导：还没开锁、也没点过「以后再说」
     els.setup.hidden = locked || status.enabled || status.setupSeen;
     els.setupText.textContent = name
-      ? `${status.autoLockMinutes} 分钟未使用、锁屏或休眠后自动锁定，用 ${name} 解锁。`
+      ? `${status.autoLockMinutes} 分钟未使用、锁屏或休眠后自动锁定，用${spaced(name)}解锁。`
       : `${status.autoLockMinutes} 分钟未使用、锁屏或休眠后自动锁定。这台电脑没有 Touch ID / Windows Hello，需要先设一个主密码。`;
 
     // 列表头
@@ -98,7 +100,7 @@
     const methods = [name, status.hasPassword ? '主密码' : ''].filter(Boolean).join(' / ');
     els.settingsStatus.textContent = status.enabled ? `已开启 · ${methods || '无'}` : '未开启';
     els.settingsEnabled.checked = status.enabled;
-    els.settingsMethod.textContent = name ? `用 ${name} 解锁，主密码可选` : '这台电脑没有 Touch ID / Windows Hello，需要主密码';
+    els.settingsMethod.textContent = name ? `用${spaced(name)}解锁，主密码可选` : '这台电脑没有 Touch ID / Windows Hello，需要主密码';
     get('settings-vault-hint').textContent = `防的是别人趁你离开时打开密钥页；密钥本身始终由系统钥匙串加密。${forgotAdvice()}`;
     els.settingsAuto.value = String(status.autoLockMinutes);
     els.settingsPasswordState.textContent = status.hasPassword ? '已设置' : '未设置';
@@ -117,8 +119,9 @@
 
   function forgotAdvice() {
     const name = systemName();
+    const how = status?.system === 'touchid' ? 'Touch ID 或电脑登录密码' : name;
     return name
-      ? `忘记主密码可以用 ${name} 或电脑登录密码重置，不会丢失任何密钥。`
+      ? `忘记主密码可以用 ${how}重置，不会丢失任何密钥。`
       : `忘记主密码：退出 SoloDock，删除 ${status?.configFile || 'vault-lock.json'} 后重新打开即可重置，密钥不受影响。`;
   }
 
@@ -157,7 +160,7 @@
   // ---------------- 解锁 ----------------
   els.system.addEventListener('click', async () => {
     els.system.disabled = true;
-    els.error.textContent = `正在等待 ${systemName()}…`;
+    els.error.textContent = status?.system === 'touchid' ? '请按一下 Touch ID…' : `请在系统窗口里输入${systemName()}…`;
     const result = await api().unlockVault?.('system').catch(() => ({ ok: false, error: 'canceled' }));
     els.system.disabled = false;
     els.error.textContent = result?.ok ? '' : (ERRORS[result?.error] || ERRORS.canceled);

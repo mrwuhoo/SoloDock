@@ -2415,9 +2415,11 @@ function runWindowsHello(action, reason) {
   });
 }
 
+// macOS：promptTouchID 验证的是「设备主人」（kSecAccessControlUserPresence）——有指纹就用 Touch ID，
+// 合盖外接显示器等指纹不可用时，系统会改为要求输入电脑登录密码，所以系统验证在 macOS 上始终可用。
 const vaultSystemAuth = {
   async available() {
-    if (process.platform === 'darwin') return systemPreferences.canPromptTouchID() ? 'touchid' : null;
+    if (process.platform === 'darwin') return systemPreferences.canPromptTouchID() ? 'touchid' : 'mac-password';
     if (process.platform === 'win32') {
       if (!windowsHelloAvailability) {
         windowsHelloAvailability = runWindowsHello('check').then((result) => (result === 'Available' ? 'hello' : null));
@@ -2427,12 +2429,20 @@ const vaultSystemAuth = {
     return null;
   },
   prompt(reason) {
+    if (process.platform === 'darwin') {
+      // 面板在 screen-saver 层级会压住系统的 Touch ID / 密码面板：验证期间临时降到普通层并激活应用，
+      // 与摄像头、麦克风授权弹窗同一套处理；验证结束后恢复层级。
+      return mediaPermissionCoordinator.run({
+        owner: mainWindow,
+        activate: () => app.focus({ steal: true }),
+        track: updateTransientSystemInteraction,
+        request: async () => {
+          await systemPreferences.promptTouchID(reason);
+          return true;
+        },
+      });
+    }
     return withSystemInteraction(async () => {
-      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.focus();
-      if (process.platform === 'darwin') {
-        await systemPreferences.promptTouchID(reason);
-        return true;
-      }
       if (process.platform === 'win32') return (await runWindowsHello('verify', reason)) === 'Verified';
       return false;
     });
