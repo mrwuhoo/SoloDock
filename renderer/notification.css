@@ -1,82 +1,16 @@
+/*
+ * 统一提醒 · 冰蓝玻璃卡片（与展开面板同一套材质与变量，见 tokens.css）。
+ * 结构：36 图标（按类型着色）| 类型·时间 / 标题 / 说明 → 与文字左对齐的操作按钮。
+ * 主按钮永远是品牌冰蓝；类型只影响图标色调与类型字样。
+ */
 :root {
-  color-scheme: dark;
-
-  /* 画布与刘海安全区 */
-  --notification-width: 400px;
-  --notification-height: 96px;
-  --notification-collapsed-width: 200px;
-  --notch-safe-height: 31px;
-  --notification-side-inset: calc(
-    (var(--notification-width) - var(--notification-collapsed-width)) / 2
-  );
-  --notification-bottom-inset: calc(
-    var(--notification-height) - var(--notch-safe-height)
-  );
-
-  /* 颜色 */
-  --color-transparent: transparent;
-  --color-shell: #000000;
-  --color-shell-hover: #080808;
-  --color-surface: #191919;
-  --color-border: rgba(255, 255, 255, 0.09);
-  --color-border-strong: rgba(255, 255, 255, 0.13);
-  --color-text-primary: #f5f5f5;
-  --color-text-secondary: #a1a1a1;
-  --color-text-tertiary: #707070;
-  --color-success: #30d978;
-  --color-focus: rgba(255, 255, 255, 0.22);
-
-  /* 字体 */
-  --font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text',
-    'PingFang SC', sans-serif;
-  --font-size-title: 13.5px;
-  --font-size-detail: 11px;
-  --font-size-meta: 10.5px;
-  --font-weight-title: 600;
-  --font-weight-meta: 500;
-  --line-height-title: 18px;
-  --line-height-detail: 16px;
-  --letter-spacing-title: -0.08px;
-
-  /* 间距与尺寸 */
-  --space-1: 2px;
-  --space-2: 4px;
-  --space-3: 6px;
-  --space-4: 8px;
-  --space-5: 10px;
-  --space-6: 12px;
-  --space-7: 16px;
-  --content-padding-top: 8px;
-  --content-padding-bottom: 9px;
-  --content-padding-inline: 16px;
-  --logo-size: 28px;
-  --status-dot-size: 7px;
-  --status-dot-offset: -1px;
-  --source-height: 18px;
-  --source-max-width: 62px;
-  --source-padding-inline: 6px;
-  --queue-min-width: 26px;
-  --queue-height: 18px;
-  --queue-padding-inline: 6px;
-  --trailing-min-width: 32px;
-  --border-width: 1px;
-  --radius-notch: 10px;
-  --radius-shell: 16px;
-  --radius-logo: 8px;
-  --radius-pill: 999px;
-  --focus-inset: 3px;
-
-  /* 动效：黑色岛体始终以屏幕顶部中心为原点 */
-  --motion-enter-duration: 260ms;
-  --motion-content-duration: 150ms;
-  --motion-content-delay: 90ms;
-  --motion-exit-duration: 280ms;
-  --motion-exit-delay: 40ms;
-  --motion-content-exit-duration: 120ms;
-  --motion-content-offset: -4px;
-  --ease-island: cubic-bezier(0.22, 1, 0.36, 1);
-  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
-  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  color-scheme: light;
+  --card-max: 380px;
+  --card-min: 292px;
+  --icon: 36px;
+  --column-gap: 12px;
+  --tint: var(--sd-accent);
+  --ring: 97.39; /* 2π × 15.5 */
 }
 
 * {
@@ -89,87 +23,128 @@
 
 html,
 body {
-  width: var(--notification-width);
-  height: var(--notification-height);
+  width: 100%;
+  height: 100%;
   margin: 0;
-  padding: 0;
   overflow: hidden;
-  background: var(--color-transparent);
-  color: var(--color-text-primary);
-  font-family: var(--font-family);
+  background: transparent;
+  color: var(--sd-text-1);
+  font-family: var(--sd-font);
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
   user-select: none;
   -webkit-user-select: none;
-  -webkit-app-region: no-drag;
 }
 
+/* 窗口四周是阴影空间：上 7（与菜单栏的间距），左右 28，下 45。 */
 .notification-root {
-  position: relative;
-  width: var(--notification-width);
-  height: var(--notification-height);
-  overflow: hidden;
+  display: flex;
+  justify-content: center;
+  height: 100%;
+  padding: 7px 28px 0;
 }
 
+.notification-card {
+  position: relative;
+  width: max-content;
+  min-width: var(--card-min);
+  max-width: var(--card-max);
+  height: max-content;
+}
+
+/* ---------------- 卡片 ---------------- */
 .notification-shell {
-  --notification-accent: #30d978;
-  --notification-accent-rgb: 48, 217, 120;
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  padding: 13px 16px 14px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: var(--sd-radius-card);
+  /* 透明窗口里的 backdrop-filter 模糊不到桌面，半透明只会让背后的文字透出来：
+     底色不透明，玻璃感来自冰蓝渐变、顶部高光与白色描边。 */
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255, 255, 255, 0.8), transparent 55%),
+    linear-gradient(160deg, rgb(249, 252, 255), rgb(231, 240, 252));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(89, 115, 145, 0.08),
+    0 14px 36px rgba(28, 51, 77, 0.22),
+    0 2px 8px rgba(28, 51, 77, 0.1);
+  opacity: 0;
+  transform: translateY(-14px) scale(0.96);
+  transform-origin: 50% 0;
+  pointer-events: none;
+  transition:
+    opacity 200ms var(--sd-ease-out),
+    transform 360ms var(--sd-ease-spring);
+}
+
+.notification-shell.is-visible {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
+.notification-shell.is-hiding {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.98);
+  pointer-events: none;
+  transition:
+    opacity 180ms ease,
+    transform 220ms var(--sd-ease-out);
+}
+
+/* 冰晶：入场时一道光泽扫过一次。 */
+.notification-sheen {
   position: absolute;
   inset: 0;
-  width: var(--notification-width);
-  height: var(--notification-height);
-  margin: 0;
-  padding: 0;
-  overflow: hidden;
-  appearance: none;
-  -webkit-appearance: none;
-  border: 0;
-  border-radius: 0 0 var(--radius-shell) var(--radius-shell);
-  background:
-    radial-gradient(90% 180% at 50% -48%, rgba(var(--notification-accent-rgb), .22), transparent 65%),
-    linear-gradient(155deg, rgba(25,25,29,.985), rgba(6,6,8,.995));
-  box-shadow: inset 0 0 0 var(--border-width) rgba(255,255,255,.09), 0 18px 50px rgba(0,0,0,.52);
-  color: inherit;
-  font: inherit;
-  text-align: left;
+  z-index: 3;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 32%, rgba(255, 255, 255, 0.85) 48%, transparent 62%);
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  opacity: 0;
   pointer-events: none;
-  clip-path: inset(
-    0 var(--notification-side-inset) var(--notification-bottom-inset)
-      var(--notification-side-inset) round 0 0 var(--radius-notch) var(--radius-notch)
-  );
-  transition:
-    clip-path var(--motion-enter-duration) var(--ease-island),
-    background-color var(--motion-content-duration) var(--ease-out);
-  will-change: clip-path;
 }
 
-/* 每类提醒一种强调色：图标、来源标签、主按钮与顶部光晕都用它。 */
-.notification-shell[data-source='claude'] { --notification-accent: #e8916c; --notification-accent-rgb: 232, 145, 108; }
-.notification-shell[data-source='gpt'],
-.notification-shell[data-source='chatgpt'] { --notification-accent: #a988ff; --notification-accent-rgb: 169, 136, 255; }
-.notification-shell[data-source='todo'] { --notification-accent: #ff9f43; --notification-accent-rgb: 255, 159, 67; }
-.notification-shell[data-source='event'] { --notification-accent: #5aa2ff; --notification-accent-rgb: 90, 162, 255; }
-.notification-shell[data-source='reminder'] { --notification-accent: #f5c451; --notification-accent-rgb: 245, 196, 81; }
-.notification-shell[data-source='pomodoro'],
-.notification-shell[data-source='focus-summary'] { --notification-accent: #ff6b5b; --notification-accent-rgb: 255, 107, 91; }
-.notification-shell[data-source='pomodoro-break'] { --notification-accent: #4fd1a5; --notification-accent-rgb: 79, 209, 165; }
-.notification-shell[data-source='sit'] { --notification-accent: #34d3b9; --notification-accent-rgb: 52, 211, 185; }
-.notification-shell[data-source='eye'] { --notification-accent: #7cc8ff; --notification-accent-rgb: 124, 200, 255; }
-.notification-shell[data-source='offwork'] { --notification-accent: #9b8cff; --notification-accent-rgb: 155, 140, 255; }
-.notification-shell[data-source='info'] { --notification-accent: #a7b8cc; --notification-accent-rgb: 167, 184, 204; }
+.notification-shell.is-visible .notification-sheen {
+  animation: notification-sheen 1.3s var(--sd-ease-out) 0.18s both;
+}
 
-/* 上半部分（刘海下方的一行）整体可点击。 */
-.notification-body {
+@keyframes notification-sheen {
+  0% { background-position: 130% 0; opacity: 1; }
+  80% { opacity: 1; }
+  100% { background-position: -40% 0; opacity: 0; }
+}
+
+/* 还有排队的提醒：卡片下方露出一层。 */
+.notification-stack {
   position: absolute;
-  top: 0;
-  right: 0;
-  left: 0;
-  z-index: 3;
-  height: 96px;
+  right: 14px;
+  bottom: -6px;
+  left: 14px;
+  height: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-top: 0;
+  border-radius: 0 0 var(--sd-radius-control) var(--sd-radius-control);
+  background: linear-gradient(180deg, rgba(236, 244, 253, 0.9), rgba(224, 235, 249, 0.96));
+  box-shadow: 0 8px 18px rgba(28, 51, 77, 0.14);
+  opacity: 0;
+  transition: opacity 200ms var(--sd-ease-out) 120ms;
+}
+
+.notification-root[data-queued='true'] .notification-stack {
+  opacity: 1;
+}
+
+/* ---------------- 正文（整块可点） ---------------- */
+.notification-body {
+  display: grid;
+  grid-template-columns: var(--icon) minmax(0, 1fr);
+  column-gap: var(--column-gap);
+  align-items: start;
+  width: 100%;
   margin: 0;
   padding: 0;
-  appearance: none;
-  -webkit-appearance: none;
   border: 0;
   background: none;
   color: inherit;
@@ -177,82 +152,39 @@ body {
   text-align: left;
   cursor: pointer;
 }
+
 .notification-body:focus-visible {
-  outline: var(--border-width) solid var(--color-focus);
-  outline-offset: calc(var(--focus-inset) * -1);
+  outline: 2px solid var(--sd-accent);
+  outline-offset: 4px;
+  border-radius: var(--sd-radius-control);
 }
 
-.notification-shell::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  padding: 1px;
-  border-radius: inherit;
-  background: linear-gradient(110deg, rgba(var(--notification-accent-rgb), .35), var(--notification-accent), rgba(255,255,255,.32));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  clip-path: polygon(0 2px, 100% 2px, 100% 100%, 0 100%);
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 220ms var(--ease-out);
-}
-
-.notification-shell.is-visible::before { opacity: .72; }
-
-.notification-body:hover .notification-content {
-  filter: brightness(1.08);
-}
-
-.notification-content {
-  position: absolute;
-  top: var(--notch-safe-height);
-  right: 0;
-  left: 0;
-  height: calc(96px - var(--notch-safe-height));
-  display: grid;
-  grid-template-columns: var(--logo-size) minmax(0, 1fr) auto;
-  align-items: center;
-  column-gap: var(--space-6);
-  padding: var(--content-padding-top) var(--content-padding-inline)
-    var(--content-padding-bottom);
-  opacity: 0;
-  transform: translateY(var(--motion-content-offset));
-  transition:
-    opacity var(--motion-content-duration) var(--ease-out),
-    transform var(--motion-content-duration) var(--ease-out);
-  pointer-events: none;
-  z-index: 3;
-  will-change: opacity, transform;
-}
-
-.notification-logo-wrap {
+.notification-icon {
   position: relative;
-  display: block;
-  width: var(--logo-size);
-  height: var(--logo-size);
-  flex: none;
   display: grid;
   place-items: center;
-  overflow: hidden;
-  border-radius: var(--radius-logo);
-  background: linear-gradient(145deg, rgba(var(--notification-accent-rgb), .28), rgba(var(--notification-accent-rgb), .08));
-  color: var(--notification-accent);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), 0 5px 15px rgba(0,0,0,.36);
+  width: var(--icon);
+  height: var(--icon);
+  margin-top: 1px;
+  border-radius: var(--sd-radius-control);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--tint) 20%, white), color-mix(in srgb, var(--tint) 9%, white));
+  color: var(--tint);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.85),
+    inset 0 0 0 1px color-mix(in srgb, var(--tint) 14%, transparent),
+    0 1px 2px rgba(23, 50, 80, 0.08);
 }
 
 .notification-glyph {
   position: absolute;
-  width: 17px;
-  height: 17px;
+  width: 19px;
+  height: 19px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
   opacity: 0;
-  transform: scale(.75) rotate(-8deg);
-  transition: opacity 160ms var(--ease-out), transform 240ms var(--ease-out);
 }
 
 .notification-shell[data-glyph='check'] .notification-glyph[data-glyph='check'],
@@ -267,194 +199,217 @@ body {
 .notification-shell[data-glyph='moon'] .notification-glyph[data-glyph='moon'],
 .notification-shell[data-glyph='info'] .notification-glyph[data-glyph='info'] {
   opacity: 1;
-  transform: scale(1) rotate(0);
-}
-
-/* 安静样式（护眼）：环形倒计时代替图标底板，不带按钮，到点自己消失。 */
-.notification-ring { position: absolute; inset: -2px; display: none; width: 32px; height: 32px; transform: rotate(-90deg); }
-.notification-ring circle { fill: none; stroke-width: 2.4; }
-.notification-ring-track { stroke: rgba(255,255,255,.12); }
-.notification-ring-progress { stroke: var(--notification-accent); stroke-linecap: round; stroke-dasharray: 81.68; stroke-dashoffset: 0; }
-.notification-shell[data-style='quiet'] .notification-logo-wrap { overflow: visible; border-radius: 50%; background: none; box-shadow: none; }
-.notification-shell[data-style='quiet'] .notification-ring { display: block; }
-.notification-shell[data-style='quiet'] .notification-glyph { width: 15px; height: 15px; }
-.notification-shell[data-style='quiet'] .notification-status-dot { display: none; }
-.notification-shell.is-visible[data-style='quiet'] .notification-ring-progress { animation: notification-ring var(--ring-duration, 20s) linear forwards; }
-@keyframes notification-ring { to { stroke-dashoffset: 81.68; } }
-
-/* 操作按钮：主按钮在左、用强调色；最后是 ⌃⌥↩ 提示。 */
-.notification-actions {
-  position: absolute;
-  top: 98px;
-  right: var(--content-padding-inline);
-  left: calc(var(--content-padding-inline) + var(--logo-size) + var(--space-6));
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  opacity: 0;
-  transform: translateY(var(--motion-content-offset));
-  transition:
-    opacity var(--motion-content-duration) var(--ease-out),
-    transform var(--motion-content-duration) var(--ease-out);
-}
-.notification-shell.is-visible .notification-actions { opacity: 1; transform: none; transition-delay: calc(var(--motion-content-delay) + 40ms); }
-.notification-shell.is-hiding .notification-actions { opacity: 0; transition-duration: var(--motion-content-exit-duration); transition-delay: 0ms; }
-.notification-action {
-  height: 26px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--radius-pill);
-  background: rgba(255,255,255,.09);
-  color: #e8e8ea;
-  font: 500 12px var(--font-family);
-  white-space: nowrap;
-  cursor: pointer;
-  transition: background 140ms var(--ease-out), filter 140ms var(--ease-out);
-}
-.notification-action:hover { background: rgba(255,255,255,.16); }
-.notification-action.primary { background: var(--notification-accent); color: #0b0b0d; font-weight: 600; }
-.notification-action.primary:hover { filter: brightness(1.08); background: var(--notification-accent); }
-.notification-action:disabled { opacity: .5; cursor: default; }
-.notification-action:focus-visible { outline: 2px solid rgba(255,255,255,.5); outline-offset: 2px; }
-.notification-shortcut { margin-left: auto; color: var(--color-text-tertiary); font-size: 10.5px; letter-spacing: .5px; white-space: nowrap; }
-
-.notification-status-dot {
-  position: absolute;
-  right: var(--status-dot-offset);
-  bottom: var(--status-dot-offset);
-  width: var(--status-dot-size);
-  height: var(--status-dot-size);
-  border: var(--border-width) solid var(--color-shell);
-  border-radius: var(--radius-pill);
-  background: var(--notification-accent);
 }
 
 .notification-copy {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   min-width: 0;
-  row-gap: var(--space-1);
+}
+
+.notification-overline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 14px;
+  font-size: var(--sd-fs-caption);
+  line-height: 14px;
+}
+
+.notification-source {
+  color: var(--tint);
+  font-weight: var(--sd-fw-semibold);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.notification-queue {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--sd-text-3);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .notification-title,
-.notification-detail,
-.notification-source {
-  display: block;
-  min-width: 0;
+.notification-detail {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
-.notification-shell .notification-source {
-  border-color: rgba(var(--notification-accent-rgb), .26);
-  background: rgba(var(--notification-accent-rgb), .09);
-  color: var(--notification-accent);
-}
-
 .notification-title {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-title);
-  font-weight: var(--font-weight-title);
-  line-height: var(--line-height-title);
-  letter-spacing: var(--letter-spacing-title);
-}
-
-.notification-meta {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: var(--space-3);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-detail);
-  line-height: var(--line-height-detail);
-}
-
-.notification-source {
-  flex: none;
-  max-width: var(--source-max-width);
-  height: var(--source-height);
-  padding: 0 var(--source-padding-inline);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: rgba(255,255,255,.065);
-  color: var(--color-text-secondary);
-  font-size: var(--font-size-meta);
-  font-weight: var(--font-weight-meta);
-  line-height: calc(var(--source-height) - (var(--border-width) * 2));
+  margin-top: 3px;
+  color: var(--sd-text-1);
+  font-size: var(--sd-fs-body);
+  font-weight: var(--sd-fw-semibold);
+  line-height: 20px;
+  letter-spacing: -0.01em;
 }
 
 .notification-detail {
-  flex: 1 1 auto;
-  color: var(--color-text-secondary);
+  color: var(--sd-text-2);
+  font-size: var(--sd-fs-secondary);
+  line-height: 18px;
 }
 
-.notification-trailing {
+/* ---------------- 按钮：与文字左对齐 ---------------- */
+.notification-actions {
   display: flex;
-  min-width: var(--trailing-min-width);
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
-  gap: var(--space-2);
-  color: var(--color-text-tertiary);
-  font-size: var(--font-size-meta);
-  font-weight: var(--font-weight-meta);
-  line-height: var(--line-height-detail);
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  padding-left: calc(var(--icon) + var(--column-gap));
 }
 
-.notification-time {
+.notification-action {
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: var(--sd-radius-control);
+  background: rgba(255, 255, 255, 0.66);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), 0 1px 2px rgba(23, 50, 80, 0.07);
+  color: var(--sd-text-1);
+  font: var(--sd-fw-medium) var(--sd-fs-secondary) var(--sd-font);
   white-space: nowrap;
+  cursor: pointer;
+  transition: background var(--sd-duration-fast) var(--sd-ease-out), box-shadow var(--sd-duration-fast) var(--sd-ease-out);
 }
 
-.notification-queue {
-  min-width: var(--queue-min-width);
-  height: var(--queue-height);
-  padding: 0 var(--queue-padding-inline);
-  border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-pill);
-  background: rgba(255,255,255,.065);
-  color: var(--color-text-secondary);
-  line-height: calc(var(--queue-height) - (var(--border-width) * 2));
-  text-align: center;
-  white-space: nowrap;
+.notification-action:hover {
+  background: var(--sd-surface-selected);
 }
 
-.notification-shell.is-visible {
-  pointer-events: auto;
-  clip-path: inset(0 0 0 0 round 0 0 var(--radius-shell) var(--radius-shell));
+.notification-action.primary {
+  border-color: transparent;
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sd-accent) 86%, white), var(--sd-accent));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25), 0 2px 6px rgba(44, 105, 196, 0.32);
+  color: #fff;
+  font-weight: var(--sd-fw-semibold);
 }
 
-.notification-shell.is-visible .notification-content {
-  opacity: 1;
-  transform: translateY(0);
-  transition-delay: var(--motion-content-delay);
+.notification-action.primary:hover {
+  background: linear-gradient(180deg, var(--sd-accent), var(--sd-accent-strong));
 }
 
-.notification-shell.is-hiding {
-  pointer-events: none;
-  clip-path: inset(
-    0 var(--notification-side-inset) var(--notification-bottom-inset)
-      var(--notification-side-inset) round 0 0 var(--radius-notch) var(--radius-notch)
-  );
-  transition:
-    clip-path var(--motion-exit-duration) var(--ease-soft) var(--motion-exit-delay),
-    background-color var(--motion-content-duration) var(--ease-out);
+/* 第三个按钮（跳过、今天不再提醒）是次要的文字按钮。 */
+.notification-action.quiet {
+  padding: 0 8px;
+  border-color: transparent;
+  background: none;
+  box-shadow: none;
+  color: var(--sd-text-3);
 }
 
-.notification-shell.is-hiding .notification-content {
-  opacity: 0;
-  transform: translateY(var(--motion-content-offset));
-  transition-duration: var(--motion-content-exit-duration);
-  transition-delay: 0ms;
+.notification-action.quiet:hover {
+  background: rgba(23, 50, 80, 0.06);
+  color: var(--sd-text-1);
 }
 
+.notification-action:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.notification-action:focus-visible {
+  outline: 2px solid var(--sd-accent);
+  outline-offset: 2px;
+}
+
+/* ---------------- 类型色调：完成与健康为绿，待办到期为琥珀，收工为沉静的蓝灰 ---------------- */
+.notification-shell[data-source='codex'],
+.notification-shell[data-source='claude'],
+.notification-shell[data-source='gpt'],
+.notification-shell[data-source='chatgpt'],
+.notification-shell[data-source='task'],
+.notification-shell[data-source='pomodoro-break'],
+.notification-shell[data-source='sit'],
+.notification-shell[data-source='eye'] {
+  --tint: var(--sd-success);
+}
+
+.notification-shell[data-source='todo'] {
+  --tint: var(--sd-warning);
+}
+
+.notification-shell[data-source='offwork'] {
+  --tint: var(--sd-text-2);
+}
+
+.notification-shell[data-source='info'] {
+  --tint: var(--sd-text-3);
+}
+
+/* ---------------- 安静样式（护眼）：倒计时环 + 秒数，没有按钮 ---------------- */
+.notification-ring,
+.notification-countdown {
+  display: none;
+}
+
+.notification-shell[data-style='quiet'] .notification-icon {
+  background: none;
+  box-shadow: none;
+}
+
+.notification-shell[data-style='quiet'] .notification-glyph {
+  opacity: 0 !important;
+}
+
+.notification-shell[data-style='quiet'] .notification-ring {
+  position: absolute;
+  inset: 0;
+  display: block;
+  width: var(--icon);
+  height: var(--icon);
+  transform: rotate(-90deg);
+}
+
+.notification-ring circle {
+  fill: none;
+  stroke-width: 3;
+}
+
+.notification-ring-track {
+  stroke: rgba(23, 50, 80, 0.1);
+}
+
+.notification-ring-progress {
+  stroke: var(--tint);
+  stroke-linecap: round;
+  stroke-dasharray: var(--ring);
+  stroke-dashoffset: 0;
+}
+
+.notification-shell.is-visible[data-style='quiet'] .notification-ring-progress {
+  animation: notification-ring var(--ring-duration, 20s) linear forwards;
+}
+
+.notification-shell:hover .notification-ring-progress {
+  animation-play-state: paused;
+}
+
+@keyframes notification-ring {
+  to { stroke-dashoffset: var(--ring); }
+}
+
+.notification-shell[data-style='quiet'] .notification-countdown {
+  position: relative;
+  display: block;
+  color: var(--tint);
+  font-size: var(--sd-fs-caption);
+  font-weight: var(--sd-fw-semibold);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 减弱动态效果：只淡入淡出，没有位移、弹性和光泽。 */
 @media (prefers-reduced-motion: reduce) {
-  :root {
-    --motion-enter-duration: 1ms;
-    --motion-content-duration: 1ms;
-    --motion-content-delay: 0ms;
-    --motion-exit-duration: 1ms;
-    --motion-exit-delay: 0ms;
-    --motion-content-exit-duration: 1ms;
+  .notification-shell,
+  .notification-shell.is-hiding {
+    transform: none;
+    transition: opacity 160ms linear;
+  }
+
+  .notification-shell.is-visible .notification-sheen {
+    animation: none;
   }
 }

@@ -243,9 +243,11 @@ const LINK_FETCH_TIMEOUT_MS = 8000;
 const LINK_FETCH_MAX_BYTES = 512 * 1024;
 const LINK_FETCH_MAX_REDIRECTS = 3;
 
-const TASK_NOTIFICATION_WIDTH = 400;
-const TASK_NOTIFICATION_HEIGHT = 96;
-const TASK_NOTIFICATION_ACTIONS_HEIGHT = 132; // 带操作按钮时多一行
+// 冰蓝玻璃提醒卡片：出现在菜单栏正下方（不遮挡菜单栏），卡片最宽 380。
+// 窗口四周留出阴影空间：左右各 28、上 7（与菜单栏的间距）、下 45。
+const TASK_NOTIFICATION_WIDTH = 436;
+const TASK_NOTIFICATION_HEIGHT = 134; // 卡片 82：一行类型 + 标题 + 说明
+const TASK_NOTIFICATION_ACTIONS_HEIGHT = 172; // 卡片 120：多一行操作按钮
 const TASK_NOTIFICATION_PRIMARY_SHORTCUT = 'Control+Alt+Return';
 const TASK_NOTIFICATION_SCREEN_MARGIN = 12;
 const TASK_NOTIFICATION_VISIBLE_MS = 6000;
@@ -951,7 +953,8 @@ function getTaskNotificationBounds(display, notification = activeTaskNotificatio
   const height = notification && Array.isArray(notification.actions) && notification.actions.length
     ? TASK_NOTIFICATION_ACTIONS_HEIGHT
     : TASK_NOTIFICATION_HEIGHT;
-  return getCenteredBounds(width, height, d);
+  const bounds = getCenteredBounds(width, height, d);
+  return { ...bounds, y: d.bounds.y + getMenuBarHeight(d) };
 }
 
 function recoverClosedTaskNotificationWindow(targetWindow) {

@@ -111,7 +111,10 @@ app.on('web-contents-created', (_event, contents) => {
         reminder = await reminderWindow.webContents.executeJavaScript(`document.getElementById('notification-shell')?.classList.contains('is-visible') ? [...document.querySelectorAll('.notification-action')].map((button) => button.dataset.actionId) : null`).catch(() => null);
       }
       assert.deepEqual(reminder, ['break-5', 'focus-5', 'dismiss']);
-      assert.equal(reminderWindow.getBounds().height, 132);
+      const reminderBounds = reminderWindow.getBounds();
+      const reminderDisplay = require('electron').screen.getDisplayMatching(reminderBounds);
+      assert.deepEqual([reminderBounds.width, reminderBounds.height], [436, 172]);
+      assert.equal(reminderBounds.y, reminderDisplay.workArea.y, 'the card sits right below the menu bar, never over it');
       assert.equal(globalShortcut.isRegistered('Control+Alt+Return'), true, '⌃⌥↩ is live while the reminder is up');
       await reminderWindow.webContents.executeJavaScript(`document.querySelector('[data-action-id="focus-5"]').click()`);
       let pomodoro = null;

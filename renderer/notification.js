@@ -1,6 +1,6 @@
 'use strict';
 
-// 统一提醒浮窗：从刘海长出的黑色岛屿。上半部分点击打开对应位置；下面一行是按类型给出的按钮
+// 统一提醒浮窗：菜单栏下方的冰蓝玻璃卡片。上半部分点击打开对应位置；下面一行是按类型给出的按钮
 // （由主进程 reminder-rules.js 决定）；护眼这类安静提醒用环形倒计时代替图标、不带按钮。
 
 const root = document.getElementById('notification-root');
@@ -11,12 +11,11 @@ const sourceElement = document.getElementById('notification-source');
 const detailElement = document.getElementById('notification-detail');
 const queueElement = document.getElementById('notification-queue');
 const actionsElement = document.getElementById('notification-actions');
+const countdownElement = document.getElementById('notification-countdown');
 
 const api = window.notchAPI;
 const HIDE_FALLBACK_MS = 420;
 const MAX_QUEUE_COUNT = 99;
-const BASE_HEIGHT = 96;
-const ACTIONS_HEIGHT = 132;
 
 const SOURCE_NAMES = {
   codex: 'Codex',
@@ -59,6 +58,8 @@ let currentActions = [];
 let isVisible = false;
 let isHiding = false;
 let isHovering = false;
+let countdownTimer = null;
+let countdownLeft = 0;
 
 function firstText(values, fallback) {
   for (const value of values) {
@@ -112,11 +113,29 @@ function readQueueCount(value) {
   return Math.min(MAX_QUEUE_COUNT, Math.floor(count));
 }
 
+// 类型行右侧：平时写「刚刚」，还有排队的提醒时写「还有 N 条」，卡片下方同时露出一层。
 function setQueueCount(value) {
   const count = readQueueCount(value);
-  queueElement.textContent = `+${count}`;
-  queueElement.hidden = count === 0;
-  queueElement.title = count ? `还有 ${count} 条提醒` : '';
+  queueElement.textContent = count ? `还有 ${count} 条` : '刚刚';
+  root.dataset.queued = count ? 'true' : 'false';
+}
+
+function stopCountdown() {
+  if (countdownTimer) clearInterval(countdownTimer);
+  countdownTimer = null;
+}
+
+// 安静样式的秒数与环同步；鼠标停在卡片上时一起暂停（主进程也同时暂停自动消失）。
+function startCountdown(ms) {
+  stopCountdown();
+  countdownLeft = Math.max(1, Math.round(ms / 1000));
+  countdownElement.textContent = String(countdownLeft);
+  countdownTimer = setInterval(() => {
+    if (isHovering) return;
+    countdownLeft = Math.max(0, countdownLeft - 1);
+    countdownElement.textContent = String(countdownLeft);
+    if (!countdownLeft) stopCountdown();
+  }, 1000);
 }
 
 function clearHideFallback() {
@@ -131,23 +150,19 @@ function reportHover(hovering) {
   if (api && typeof api.taskNotificationHover === 'function') api.taskNotificationHover(hovering);
 }
 
+// 主按钮在左；第三个按钮（跳过、今天不再提醒）是次要的文字按钮。
 function renderActions(actions) {
   actionsElement.replaceChildren();
-  actions.forEach((item) => {
+  actions.forEach((item, index) => {
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = `notification-action${item.primary ? ' primary' : ''}`;
+    const quiet = !item.primary && (index === 2 || item.id === 'dismiss');
+    button.className = `notification-action${item.primary ? ' primary' : ''}${quiet ? ' quiet' : ''}`;
     button.dataset.actionId = item.id;
     button.textContent = item.label;
+    if (item.primary) button.title = '⌃⌥↩';
     actionsElement.append(button);
   });
-  if (actions.some((item) => item.primary)) {
-    const hint = document.createElement('span');
-    hint.className = 'notification-shortcut';
-    hint.textContent = '⌃⌥↩';
-    hint.title = '按 ⌃⌥↩ 执行第一个操作';
-    actionsElement.append(hint);
-  }
   actionsElement.hidden = actions.length === 0;
 }
 
@@ -167,8 +182,9 @@ function showNotification(payload) {
   shell.dataset.glyph = GLYPHS[notification.sourceKey] || 'check';
   shell.dataset.style = notification.style;
   shell.style.setProperty('--ring-duration', `${notification.visibleMs || 20000}ms`);
-  document.documentElement.style.setProperty('--notification-height', `${notification.actions.length ? ACTIONS_HEIGHT : BASE_HEIGHT}px`);
   renderActions(notification.actions);
+  if (notification.style === 'quiet') startCountdown(notification.visibleMs || 20000);
+  else stopCountdown();
   setQueueCount(notification.queueCount);
   body.setAttribute('aria-label', `${notification.source}：${notification.title}`);
 
@@ -191,6 +207,7 @@ function finishHide() {
 
   isVisible = false;
   isHiding = false;
+  stopCountdown();
   shell.classList.remove('is-visible', 'is-hiding');
   root.hidden = true;
 
@@ -239,7 +256,7 @@ body.addEventListener('click', async () => {
   hideNotification(currentEventId);
 });
 shell.addEventListener('transitionend', (event) => {
-  if (event.target !== shell || event.propertyName !== 'clip-path') return;
+  if (event.target !== shell || event.propertyName !== 'opacity') return;
   if (isHiding) finishHide();
 });
 
