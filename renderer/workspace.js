@@ -256,6 +256,7 @@
     context.fillRect(cssWidth * 0.08, centerY - 1.3 - activeLevel, cssWidth * 0.84, 2.6 + activeLevel * 2);
     context.restore();
     homeRecorder?.style.setProperty('--recording-level', strandsLevel.toFixed(3));
+    recordingDetail?.style.setProperty('--recording-level', Math.min(1, strandsLevel * 6).toFixed(3));
     strandsFrame = requestAnimationFrame(drawRecordingStrands);
   }
 
@@ -556,7 +557,9 @@
     const preview = row?.querySelector('[data-recording-preview]');
     const meta = row?.querySelector('[data-recording-meta]');
     if (preview) preview.textContent = text || currentRecordingFeedback();
-    if (meta) meta.textContent = `${recordingStatus === 'saving' ? '保存中' : recordingStatus === 'paused' ? '已暂停' : '录音中'} · ${formatClock(durationMs)}`;
+    if (meta) meta.textContent = formatClock(durationMs);
+    const rowTitle = row?.querySelector('.rec-row-top strong');
+    if (rowTitle) rowTitle.textContent = recordingStatus === 'saving' ? '正在保存…' : recordingStatus === 'paused' ? '已暂停' : '正在录音…';
     if (selectedRecordingId !== draft.id) return;
     const detailState = recordingDetail?.querySelector('[data-recording-live-state]');
     const detailDot = recordingDetail?.querySelector('[data-recording-live-dot]');
@@ -569,7 +572,18 @@
     if (detailState) detailState.textContent = recordingStatus === 'saving' ? '正在保存' : recordingStatus === 'paused' ? '已暂停' : '正在录音';
     if (detailDot) detailDot.dataset.state = recordingStatus;
     if (detailTime) detailTime.textContent = formatClock(durationMs);
-    if (detailTranscript && detailTranscript.value !== text) detailTranscript.value = text;
+    if (detailTranscript) {
+      if (typeof detailTranscript.value === 'string') { if (detailTranscript.value !== text) detailTranscript.value = text; }
+      else if (detailTranscript.textContent !== text) detailTranscript.textContent = text;
+    }
+    const detailTranscription = recordingDetail?.querySelector('[data-recording-live-transcription]');
+    if (detailTranscription) {
+      detailTranscription.textContent = !transcriptionConfig.configured || transcriptionConfig.asrNeedsReentry ? '未配置实时转写，音频仍会保存'
+        : transcriptionStatus === 'reconnecting' ? '实时转写 · 重连中'
+          : transcriptionStatus === 'connecting' ? '实时转写 · 连接中'
+            : transcriptionStatus === 'error' || transcriptionStatus === 'browser-error' ? '实时转写 · 连接失败'
+              : '实时转写 · 已连接';
+    }
     if (detailFeedback) detailFeedback.textContent = currentRecordingFeedback();
     if (detailConfigure) detailConfigure.hidden = transcriptionConfig.configured && !transcriptionConfig.asrNeedsReentry;
     if (detailPause) {
@@ -716,7 +730,10 @@
     if (recordStop) recordStop.disabled = !['recording', 'paused'].includes(recordingStatus);
     if (recordingNew) {
       recordingNew.disabled = recordingBusy;
-      recordingNew.textContent = recordingBusy ? '录制' : '录音';
+      const label = recordingNew.querySelector('span');
+      if (label) label.textContent = recordingBusy ? '录音中' : '录音';
+      else recordingNew.textContent = recordingBusy ? '录音中' : '录音';
+      recordingNew.dataset.state = recordingBusy ? 'recording' : '';
       recordingNew.setAttribute('aria-label', recordingStartTask.isPending()
         ? '正在请求麦克风权限'
         : recordingActive ? '录音进行中' : '开始录音');
@@ -1134,130 +1151,390 @@
   });
   window.notchAPI?.onWorkspaceChanged?.(() => refreshSettingsPanel());
 
+  // ---------------- 录音页：列表、播放器（圆形播放键 · 波形 · 倍速）、转写操作 ----------------
+  // 播放器是自己画的：音频解码后取 72 段响度画成波形，已播放的部分是主色；空格播放 / 暂停，←→ 快退快进 5 秒。
+  const WAVE_BARS = 72;
+  const SPEEDS = [1, 1.5, 2];
+  const REC_ICON = {
+    play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11l9-5.5Z"/></svg>',
+    pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7.5" y="6.5" width="3" height="11" rx="1"/><rect x="13.5" y="6.5" width="3" height="11" rx="1"/></svg>',
+    copy: COPY_ICON,
+    note: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="4.5" width="13" height="15" rx="2"/><path d="M8.5 9h7M8.5 12.5h7M8.5 16h4"/></svg>',
+    todo: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4.5 7h9M4.5 12h9M4.5 17h6"/><path d="m15.5 16 2 2 3.5-4"/></svg>',
+    folder: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7.5a2 2 0 0 1 2-2h3.6l2 2H18a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2Z"/></svg>',
+    trash: DELETE_ICON,
+  };
+  const wavePeaks = new Map();
+  const pendingRecordingDeletes = new Map();
+  let player = null; // { recordingId, audio, container }
+
+  function recordingWhen(timestamp) {
+    const date = new Date(timestamp);
+    const clock = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+    const startOf = (value) => { const day = new Date(value); day.setHours(0, 0, 0, 0); return day.getTime(); };
+    const days = Math.round((startOf(Date.now()) - startOf(timestamp)) / 86400000);
+    if (days === 0) return `今天 ${clock}`;
+    if (days === 1) return `昨天 ${clock}`;
+    return `${date.getMonth() + 1}/${date.getDate()} ${clock}`;
+  }
+
+  function playClock(seconds) {
+    const total = Math.max(0, Math.floor(Number(seconds) || 0));
+    return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+  }
+
+  async function computePeaks(bytes) {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext || !bytes) return null;
+    const view = bytes instanceof ArrayBuffer ? new Uint8Array(bytes) : new Uint8Array(bytes.buffer || bytes, bytes.byteOffset || 0, bytes.byteLength);
+    const copy = view.slice().buffer;
+    const context = new AudioContext();
+    try {
+      const buffer = await context.decodeAudioData(copy);
+      const data = buffer.getChannelData(0);
+      const step = Math.max(1, Math.floor(data.length / WAVE_BARS));
+      const peaks = [];
+      for (let bar = 0; bar < WAVE_BARS; bar += 1) {
+        let sum = 0;
+        const start = bar * step;
+        const end = Math.min(data.length, start + step);
+        for (let index = start; index < end; index += 16) sum += data[index] * data[index];
+        peaks.push(Math.sqrt(sum / Math.max(1, (end - start) / 16)));
+      }
+      const max = Math.max(...peaks, 0.0001);
+      return peaks.map((value) => Math.max(0.12, value / max));
+    } catch (error) {
+      return null;
+    } finally {
+      context.close().catch(() => {});
+    }
+  }
+
+  function drawWave(container, recordingId) {
+    const wave = container.querySelector('.rec-wave');
+    if (!wave) return;
+    const peaks = wavePeaks.get(recordingId);
+    const bars = wave.children.length === WAVE_BARS ? [...wave.children] : null;
+    if (!bars) {
+      wave.replaceChildren(...Array.from({ length: WAVE_BARS }, () => document.createElement('i')));
+    }
+    [...wave.children].forEach((bar, index) => {
+      bar.style.height = `${Math.round((peaks ? peaks[index] : 0.22) * 100)}%`;
+    });
+    wave.dataset.real = String(Boolean(peaks));
+  }
+
+  function totalSeconds(audio, recording) {
+    return Number.isFinite(audio.duration) && audio.duration > 0 ? audio.duration : (recording.durationMs || 0) / 1000;
+  }
+
+  function updatePlayer(container, recording) {
+    const audio = container.querySelector('audio');
+    const total = totalSeconds(audio, recording);
+    const progress = total ? Math.min(1, audio.currentTime / total) : 0;
+    container.querySelector('.rec-time').textContent = `${playClock(audio.currentTime)} / ${playClock(total)}`;
+    const played = Math.round(progress * WAVE_BARS);
+    [...container.querySelectorAll('.rec-wave i')].forEach((bar, index) => bar.classList.toggle('played', index < played));
+    const play = container.querySelector('.rec-play');
+    play.innerHTML = audio.paused ? REC_ICON.play : REC_ICON.pause;
+    play.setAttribute('aria-label', audio.paused ? '播放' : '暂停');
+  }
+
   async function loadRecordingAudio(recording, container) {
-    if (!window.notchAPI || !recording.audioPath) return;
+    const markMissing = () => {
+      container.dataset.state = 'missing';
+      container.querySelector('.rec-time').textContent = '音频文件不可用';
+    };
+    if (!window.notchAPI || !recording.audioPath) return markMissing();
     const result = await window.notchAPI.readRecording(recording.audioPath);
     if (!result || selectedRecordingId !== recording.id || !container.isConnected) {
-      container.textContent = '音频文件不可用';
+      if (container.isConnected) markMissing();
       return;
     }
     if (currentAudioUrl) URL.revokeObjectURL(currentAudioUrl);
     currentAudioUrl = URL.createObjectURL(new Blob([result.bytes], { type: result.mimeType }));
-    const audio = document.createElement('audio');
-    audio.controls = true;
-    audio.preload = 'metadata';
-    audio.src = currentAudioUrl;
-    container.replaceChildren(audio);
+    container.querySelector('audio').src = currentAudioUrl;
+    container.dataset.state = 'ready';
+    if (!wavePeaks.has(recording.id)) {
+      computePeaks(result.bytes).then((peaks) => {
+        if (!peaks) return;
+        wavePeaks.set(recording.id, peaks);
+        if (container.isConnected) { drawWave(container, recording.id); updatePlayer(container, recording); }
+      });
+    }
+  }
+
+  function buildPlayer(recording) {
+    const container = document.createElement('div');
+    container.className = 'rec-player';
+    container.dataset.state = 'loading';
+    container.innerHTML = `<button class="rec-play" type="button" data-action="play" aria-label="播放">${REC_ICON.play}</button><div class="rec-wave" role="slider" aria-label="播放进度，点一下跳到这里" tabindex="-1"></div><span class="rec-time">0:00 / ${playClock((recording.durationMs || 0) / 1000)}</span><button class="rec-speed" type="button" data-action="speed" aria-label="倍速">1×</button><audio preload="metadata" hidden></audio>`;
+    drawWave(container, recording.id);
+    const audio = container.querySelector('audio');
+    ['play', 'pause', 'timeupdate', 'loadedmetadata', 'ended'].forEach((name) => audio.addEventListener(name, () => updatePlayer(container, recording)));
+    container.addEventListener('click', (event) => {
+      const action = event.target.closest('[data-action]')?.dataset.action;
+      if (action === 'play') {
+        if (audio.paused) audio.play().catch(() => {});
+        else audio.pause();
+        return;
+      }
+      if (action === 'speed') {
+        const next = SPEEDS[(SPEEDS.indexOf(audio.playbackRate) + 1) % SPEEDS.length] || 1;
+        audio.playbackRate = next;
+        event.target.closest('[data-action]').textContent = `${next}×`;
+        return;
+      }
+      const wave = event.target.closest('.rec-wave');
+      if (wave) {
+        const rect = wave.getBoundingClientRect();
+        const fraction = Math.max(0, Math.min(1, (event.clientX - rect.left) / rect.width));
+        audio.currentTime = fraction * totalSeconds(audio, recording);
+        updatePlayer(container, recording);
+      }
+    });
+    player = { recordingId: recording.id, audio, container };
+    return container;
+  }
+
+  function seekPlayer(deltaSeconds) {
+    if (!player?.audio || !player.container.isConnected) return false;
+    const recording = recordings.find((item) => item.id === player.recordingId);
+    const total = recording ? totalSeconds(player.audio, recording) : player.audio.duration;
+    player.audio.currentTime = Math.max(0, Math.min(total || 0, player.audio.currentTime + deltaSeconds));
+    return true;
+  }
+
+  function playerWantsKeys(event) {
+    const target = event?.target instanceof Element ? event.target : null;
+    if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return false;
+    return Boolean(player?.container?.isConnected && document.getElementById('tab-recordings')?.classList.contains('active'));
+  }
+
+  // 空格播放 / 暂停，←→ 快退快进 5 秒（焦点不在输入框里时）。
+  document.addEventListener('keydown', (event) => {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.isComposing || !playerWantsKeys(event)) return;
+    if (event.code === 'Space') {
+      event.preventDefault();
+      if (player.audio.paused) player.audio.play().catch(() => {});
+      else player.audio.pause();
+    } else if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      seekPlayer(event.key === 'ArrowLeft' ? -5 : 5);
+    }
+  });
+
+  function closeTodoPicker() {
+    recordingDetail?.querySelector('.rec-todos')?.remove();
+  }
+
+  function openTodoPicker(recording, anchor) {
+    closeTodoPicker();
+    const candidates = window.NotchTodo?.extractTodoCandidates?.(recording.transcript, Date.now()) || [];
+    if (!candidates.length) {
+      if (typeof showStatusToast === 'function') showStatusToast('转写里没有带时间或动作的句子');
+      return;
+    }
+    const todos = window.NotchTodos;
+    const categories = todos?.categories?.() || [];
+    const category = window.NotchCapture?.lastUsedCategory?.(todos?.items?.(), categories.map((item) => item.id)) || categories[0]?.id;
+    const box = document.createElement('div');
+    box.className = 'rec-todos';
+    box.setAttribute('role', 'dialog');
+    box.setAttribute('aria-label', '提取待办');
+    const head = document.createElement('p');
+    head.className = 'rec-todos-head';
+    head.textContent = '勾选要加进待办的句子（原话照搬，不改写）';
+    const list = document.createElement('div');
+    list.className = 'rec-todos-list';
+    candidates.forEach((candidate, index) => {
+      const label = document.createElement('label');
+      label.className = 'rec-todos-item';
+      const check = document.createElement('input');
+      check.type = 'checkbox';
+      check.dataset.index = String(index);
+      const text = document.createElement('span');
+      text.textContent = candidate.text;
+      label.append(check, text);
+      if (candidate.label) {
+        const when = document.createElement('em');
+        when.textContent = candidate.label;
+        label.append(when);
+      }
+      list.append(label);
+    });
+    const foot = document.createElement('div');
+    foot.className = 'rec-todos-foot';
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'rec-ghost';
+    cancel.textContent = '取消';
+    const add = document.createElement('button');
+    add.type = 'button';
+    add.className = 'rec-primary';
+    add.disabled = true;
+    const categoryName = todos?.categoryName?.(category) || '待办';
+    add.textContent = `加入「${categoryName}」`;
+    foot.append(cancel, add);
+    box.append(head, list, foot);
+    list.addEventListener('change', () => {
+      const count = list.querySelectorAll('input:checked').length;
+      add.disabled = count === 0;
+      add.textContent = count ? `加入「${categoryName}」· ${count} 条` : `加入「${categoryName}」`;
+    });
+    cancel.addEventListener('click', closeTodoPicker);
+    add.addEventListener('click', () => {
+      const picked = [...list.querySelectorAll('input:checked')].map((input) => candidates[Number(input.dataset.index)]);
+      let added = 0;
+      picked.forEach((candidate) => {
+        const at = candidate.at || window.NotchTodo?.defaultDeadline?.(Date.now());
+        if (todos?.add?.(category, candidate.text, at)) added += 1;
+      });
+      closeTodoPicker();
+      if (typeof showStatusToast === 'function') {
+        showStatusToast(added ? `已加 ${added} 条待办到「${categoryName}」` : '没加上，请到待办页再试', added ? { actionLabel: '查看', duration: 5000, onAction: () => todos?.open?.() } : undefined);
+      }
+    });
+    recordingDetail.append(box);
+    const host = recordingDetail.getBoundingClientRect();
+    const rect = anchor.getBoundingClientRect();
+    box.style.top = `${Math.round(rect.bottom - host.top + 6)}px`;
+    box.style.right = `${Math.round(host.right - rect.right)}px`;
   }
 
   function renderRecordingDetail() {
     if (!recordingDetail) return;
     const recording = recordings.find((item) => item.id === selectedRecordingId);
+    if (player && (!recording || player.recordingId !== recording.id)) {
+      player.audio?.pause();
+      player = null;
+    }
     recordingDetail.replaceChildren();
     if (!recording) {
       const empty = document.createElement('div');
       empty.className = 'recording-detail-empty';
-      empty.textContent = '完成一次录音后，音频和转写文本会保存在这里。';
+      empty.innerHTML = '<strong>还没有录音</strong><p>点左上角的「录音」开始，结束后音频和转写都会保存在这里。</p>';
       recordingDetail.appendChild(empty);
       return;
     }
     if (recording.isDraft) {
-      const liveHeader = document.createElement('header');
-      liveHeader.className = 'recording-live-head';
-      const liveState = document.createElement('div');
-      liveState.className = 'recording-live-state';
-      const liveDot = document.createElement('span');
-      liveDot.className = 'recording-state-dot';
-      liveDot.dataset.recordingLiveDot = '';
-      liveDot.dataset.state = recordingStatus;
-      const liveLabel = document.createElement('strong');
-      liveLabel.dataset.recordingLiveState = '';
-      const liveTime = document.createElement('time');
-      liveTime.dataset.recordingLiveTime = '';
-      liveState.append(liveDot, liveLabel);
-      liveHeader.append(liveState, liveTime);
-
-      const liveAudio = document.createElement('div');
-      liveAudio.className = 'recording-live-audio';
-      const liveAudioTitle = document.createElement('strong');
-      liveAudioTitle.textContent = '音频正在本机录制';
-      const liveAudioHint = document.createElement('span');
-      liveAudioHint.textContent = '结束后会自动保存并出现播放器';
-      const liveControls = document.createElement('div');
-      liveControls.className = 'recording-live-controls';
+      const header = document.createElement('header');
+      header.className = 'rec-head';
+      header.innerHTML = '<div class="rec-heading"><h2 class="rec-live-title">新录音</h2><p class="rec-meta"><span data-recording-live-state></span> · <span data-recording-live-transcription></span></p></div>';
+      const card = document.createElement('div');
+      card.className = 'rec-live-card';
+      const dot = document.createElement('span');
+      dot.className = 'recording-state-dot';
+      dot.dataset.recordingLiveDot = '';
+      dot.dataset.state = recordingStatus;
+      dot.hidden = true;
+      const time = document.createElement('time');
+      time.className = 'rec-live-time';
+      time.dataset.recordingLiveTime = '';
+      const wave = document.createElement('div');
+      wave.className = 'rec-live-wave';
+      wave.setAttribute('aria-hidden', 'true');
+      wave.append(...Array.from({ length: 13 }, (_, index) => {
+        const bar = document.createElement('i');
+        bar.style.setProperty('--i', String(index));
+        // 每根条的起伏系数固定，音量越大整体越高。
+        bar.style.setProperty('--m', (0.45 + 0.55 * (((index * 37) % 11) / 10)).toFixed(2));
+        return bar;
+      }));
+      const controls = document.createElement('div');
+      controls.className = 'rec-live-controls';
       const pause = document.createElement('button');
       pause.type = 'button';
-      pause.className = 'workspace-button compact recording-live-pause';
+      pause.className = 'rec-secondary recording-live-pause';
       pause.textContent = recordingStatus === 'paused' ? '继续' : '暂停';
       pause.addEventListener('click', togglePauseRecording);
       const stop = document.createElement('button');
       stop.type = 'button';
-      stop.className = 'workspace-button compact primary recording-live-stop';
-      stop.textContent = '结束并保存';
+      stop.className = 'rec-stop recording-live-stop';
+      stop.innerHTML = '<i aria-hidden="true"></i>结束并保存';
       stop.addEventListener('click', stopRecording);
-      liveControls.append(pause, stop);
-      liveAudio.append(liveAudioTitle, liveAudioHint, liveControls);
-
-      const transcriptHead = document.createElement('div');
-      transcriptHead.className = 'recording-transcript-head';
-      const transcriptLabel = document.createElement('span');
-      transcriptLabel.className = 'tile-label';
-      transcriptLabel.textContent = '实时转写';
-      const configure = document.createElement('button');
-      configure.type = 'button';
-      configure.className = 'workspace-button compact recording-live-configure';
-      configure.dataset.action = 'configure-transcription';
-      configure.textContent = '配置 API';
-      configure.addEventListener('click', openTranscriptionSettings);
-      transcriptHead.append(transcriptLabel, configure);
-
-      const transcript = document.createElement('textarea');
-      transcript.className = 'recording-transcript-editor recording-live-transcript';
-      transcript.readOnly = true;
-      transcript.dataset.recordingLiveTranscript = '';
-      transcript.placeholder = '开始说话后，转写内容会出现在这里。';
-      transcript.setAttribute('aria-label', '实时转写文本');
+      controls.append(pause, stop);
+      card.append(dot, time, wave, controls);
+      const live = document.createElement('div');
+      live.className = 'rec-live-text';
+      const text = document.createElement('span');
+      text.dataset.recordingLiveTranscript = '';
+      const caret = document.createElement('i');
+      caret.className = 'rec-caret';
+      caret.setAttribute('aria-hidden', 'true');
+      live.append(text, caret);
+      const footer = document.createElement('div');
+      footer.className = 'rec-live-foot';
       const feedback = document.createElement('p');
       feedback.className = 'recording-live-feedback';
       feedback.dataset.recordingLiveFeedback = '';
       feedback.setAttribute('aria-live', 'polite');
-      recordingDetail.append(liveHeader, liveAudio, transcriptHead, transcript, feedback);
+      const configure = document.createElement('button');
+      configure.type = 'button';
+      configure.className = 'rec-link';
+      configure.dataset.action = 'configure-transcription';
+      configure.textContent = '去配置转写';
+      configure.addEventListener('click', openTranscriptionSettings);
+      footer.append(feedback, configure);
+      recordingDetail.append(header, card, live, footer);
       syncRecordingDraftUi();
       return;
     }
+
     const header = document.createElement('header');
-    header.className = 'recording-detail-head';
+    header.className = 'rec-head';
+    const heading = document.createElement('div');
+    heading.className = 'rec-heading';
     const title = document.createElement('input');
     title.className = 'recording-title-input';
     title.value = recording.title;
-    title.setAttribute('aria-label', '录音名称');
-    const meta = document.createElement('span');
-    meta.textContent = `${recording.category || '未分类'} · ${formatShortDate(recording.createdAt)} · ${formatClock(recording.durationMs)}`;
-    header.append(title, meta);
+    title.maxLength = 60;
+    title.setAttribute('aria-label', '录音名称，可直接修改');
+    const meta = document.createElement('p');
+    meta.className = 'rec-meta';
+    const category = document.createElement('input');
+    category.className = 'rec-category';
+    category.value = recording.category === '未分类' ? '' : recording.category;
+    category.placeholder = '分类';
+    category.maxLength = 12;
+    category.setAttribute('aria-label', '分类');
+    const when = document.createElement('span');
+    when.textContent = `${recordingWhen(recording.createdAt)} · ${formatClock(recording.durationMs)}`;
+    meta.append(category, when);
+    heading.append(title, meta);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'rec-icon';
+    remove.dataset.action = 'delete-recording';
+    remove.setAttribute('aria-label', '删除录音');
+    remove.title = '删除录音';
+    remove.innerHTML = REC_ICON.trash;
+    header.append(heading, remove);
 
-    const audioWrap = document.createElement('div');
-    audioWrap.className = 'recording-audio';
-    audioWrap.textContent = '正在读取音频…';
+    const playerEl = buildPlayer(recording);
 
     const transcriptHead = document.createElement('div');
-    transcriptHead.className = 'recording-transcript-head';
-    const label = document.createElement('span');
-    label.className = 'tile-label';
-    label.textContent = '转写文本';
-    const actions = document.createElement('div');
-    actions.append(
-      createIconButton('copy-recording', '复制转写文本', COPY_ICON),
-      createIconButton('reveal-recording', '在文件夹中显示', OPEN_ICON),
-      createIconButton('delete-recording', '删除录音', DELETE_ICON, true)
-    );
-    transcriptHead.append(label, actions);
+    transcriptHead.className = 'rec-transcript-head';
+    transcriptHead.innerHTML = `<b>转写</b><span class="rec-flex"></span>
+      <button class="rec-action" type="button" data-action="copy-recording">${REC_ICON.copy}<span>复制</span></button>
+      <button class="rec-action" type="button" data-action="save-note">${REC_ICON.note}<span>存为笔记</span></button>
+      <button class="rec-action" type="button" data-action="extract-todos">${REC_ICON.todo}<span>提取待办</span></button>
+      <button class="rec-icon" type="button" data-action="reveal-recording" aria-label="在文件夹中显示" title="在文件夹中显示">${REC_ICON.folder}</button>`;
+    const hasText = Boolean(String(recording.transcript || '').trim());
+    transcriptHead.querySelectorAll('[data-action="copy-recording"], [data-action="save-note"], [data-action="extract-todos"]').forEach((button) => { button.disabled = !hasText; });
 
     const transcript = document.createElement('textarea');
     transcript.className = 'recording-transcript-editor';
     transcript.value = recording.transcript;
-    transcript.placeholder = '当前环境没有生成实时转写。你仍可播放音频，或在这里补充文字。';
+    transcript.placeholder = transcriptionConfig.configured ? '这段录音没有转写文字，可以在这里补充。' : '还没有配置转写服务，可以在这里手动补充文字。';
     transcript.setAttribute('aria-label', '录音转写文本');
-    recordingDetail.append(header, audioWrap, transcriptHead, transcript);
+    recordingDetail.append(header, playerEl, transcriptHead, transcript);
+    if (!hasText && !transcriptionConfig.configured) {
+      const hint = document.createElement('p');
+      hint.className = 'rec-empty-hint';
+      hint.innerHTML = '转写服务还没配置 · <button class="rec-link" type="button" data-action="configure-transcription">去配置</button>';
+      recordingDetail.append(hint);
+    }
 
     title.addEventListener('change', () => {
       if (title.value.trim()) recording.title = title.value.trim();
@@ -1265,44 +1542,77 @@
       persistRecordings();
       renderRecordingList();
     });
+    category.addEventListener('change', () => {
+      recording.category = category.value.replace(/\s+/g, ' ').trim().slice(0, 12) || '未分类';
+      persistRecordings();
+      renderRecordingList();
+    });
+    [title, category].forEach((input) => input.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.isComposing) input.blur();
+    }));
     transcript.addEventListener('input', () => {
       recording.transcript = transcript.value;
       persistRecordings();
+      const has = Boolean(transcript.value.trim());
+      transcriptHead.querySelectorAll('[data-action="copy-recording"], [data-action="save-note"], [data-action="extract-todos"]').forEach((button) => { button.disabled = !has; });
     });
-    actions.addEventListener('click', async (event) => {
+    recordingDetail.onclick = async (event) => {
       const action = event.target.closest('[data-action]');
-      if (!action) return;
-      if (action.dataset.action === 'copy-recording' && window.notchAPI && recording.transcript) {
+      if (!action || action.closest('.rec-player, .rec-todos')) return;
+      const name = action.dataset.action;
+      if (name === 'copy-recording' && window.notchAPI && recording.transcript) {
         await window.notchAPI.writeClipboard({ type: 'text', text: recording.transcript });
-      }
-      if (action.dataset.action === 'reveal-recording' && window.notchAPI && recording.audioPath) {
+        if (typeof showStatusToast === 'function') showStatusToast('已复制转写');
+      } else if (name === 'save-note' && recording.transcript) {
+        const id = window.NotchNotes?.createFrom?.({ title: recording.title, content: recording.transcript });
+        if (typeof showStatusToast === 'function') {
+          showStatusToast(id ? '已存为笔记' : '没存上，请稍后再试', id ? { actionLabel: '打开', duration: 5000, onAction: () => window.NotchNotes?.open?.(id) } : undefined);
+        }
+      } else if (name === 'extract-todos') {
+        openTodoPicker(recording, action);
+      } else if (name === 'reveal-recording' && window.notchAPI && recording.audioPath) {
         await window.notchAPI.revealRecording(recording.audioPath);
+      } else if (name === 'delete-recording') {
+        deleteSingleRecording(recording.id);
+      } else if (name === 'configure-transcription') {
+        openTranscriptionSettings();
       }
-      if (action.dataset.action === 'delete-recording') {
-        await deleteSingleRecording(recording.id);
-      }
-    });
-    loadRecordingAudio(recording, audioWrap);
+    };
+    loadRecordingAudio(recording, playerEl);
   }
 
-  async function deleteSingleRecording(recordingId) {
-    const recording = recordings.find((item) => item.id === recordingId);
-    if (!recording) return;
-    if (window.notchAPI && recording.audioPath) {
-      await window.notchAPI.deleteRecording(recording.audioPath).catch(() => false);
-    }
-    const next = Domain.removeRecordingState(
-      recordings,
-      recording.id,
-      [...recordingSelection],
-      selectedRecordingId
-    );
+  // 删除：先从列表拿掉，5 秒内可撤销；撤销时间过了才删音频文件。
+  function deleteSingleRecording(recordingId) {
+    const index = recordings.findIndex((item) => item.id === recordingId);
+    const recording = recordings[index];
+    if (!recording || recording.isDraft) return;
+    const next = Domain.removeRecordingState(recordings, recording.id, [...recordingSelection], selectedRecordingId);
     recordings = next.recordings;
     recordingSelection = new Set(next.selection);
     selectedRecordingId = next.selectedId;
     recordingSelectionAnchor = selectedRecordingId || null;
     persistRecordings();
     renderRecordings();
+    const timer = setTimeout(() => {
+      pendingRecordingDeletes.delete(recording.id);
+      if (window.notchAPI && recording.audioPath) window.notchAPI.deleteRecording(recording.audioPath).catch(() => false);
+    }, 5600);
+    pendingRecordingDeletes.set(recording.id, timer);
+    if (typeof showStatusToast === 'function') {
+      showStatusToast(`已删除「${recording.title}」`, {
+        actionLabel: '撤销',
+        duration: 5000,
+        onAction: () => {
+          clearTimeout(pendingRecordingDeletes.get(recording.id));
+          pendingRecordingDeletes.delete(recording.id);
+          if (recordings.some((item) => item.id === recording.id)) return;
+          recordings.splice(Math.min(index, recordings.length), 0, recording);
+          selectedRecordingId = recording.id;
+          persistRecordings();
+          renderRecordings();
+        },
+      });
+    }
   }
 
   function renderRecordingList() {
@@ -1311,9 +1621,7 @@
     if (recordingBulkDelete) {
       recordingBulkDelete.hidden = recordingSelection.size === 0;
       recordingBulkDelete.textContent = '删除';
-      recordingBulkDelete.setAttribute('aria-label', recordingSelection.size
-        ? `删除 ${recordingSelection.size} 项`
-        : '删除所选');
+      recordingBulkDelete.setAttribute('aria-label', recordingSelection.size ? `删除 ${recordingSelection.size} 项` : '删除所选');
     }
     if (!recordings.length) {
       const empty = document.createElement('div');
@@ -1330,17 +1638,35 @@
       button.type = 'button';
       button.className = 'recording-item-main';
       button.setAttribute('aria-label', `打开录音：${recording.title}`);
+      const top = document.createElement('span');
+      top.className = 'rec-row-top';
       const title = document.createElement('strong');
-      title.textContent = recording.title;
-      const preview = document.createElement('span');
-      preview.dataset.recordingPreview = '';
-      preview.textContent = recording.isDraft ? (currentRecordingText() || currentRecordingFeedback()) : (recording.transcript || '仅音频 · 暂无转写');
       const meta = document.createElement('time');
       meta.dataset.recordingMeta = '';
-      meta.textContent = recording.isDraft
-        ? `${recordingStatus === 'saving' ? '保存中' : recordingStatus === 'paused' ? '已暂停' : '录音中'} · ${formatClock(recording.durationMs)}`
-        : `${formatShortDate(recording.createdAt)} · ${formatClock(recording.durationMs)}`;
-      button.append(title, preview, meta);
+      if (recording.isDraft) {
+        title.textContent = recordingStatus === 'saving' ? '正在保存…' : recordingStatus === 'paused' ? '已暂停' : '正在录音…';
+        meta.className = 'rec-row-live-time';
+        meta.textContent = formatClock(recording.durationMs);
+        top.append(title, meta);
+      } else {
+        title.textContent = recording.title;
+        top.append(title);
+        if (recording.category && recording.category !== '未分类') {
+          const chip = document.createElement('em');
+          chip.className = 'rec-chip';
+          chip.textContent = recording.category;
+          top.append(chip);
+        }
+        meta.className = 'rec-row-meta';
+        meta.textContent = `${recordingWhen(recording.createdAt)} · ${formatClock(recording.durationMs)}`;
+      }
+      const preview = document.createElement('span');
+      preview.className = 'rec-row-excerpt';
+      preview.dataset.recordingPreview = '';
+      preview.textContent = recording.isDraft ? (currentRecordingText() || currentRecordingFeedback()) : (recording.transcript || '仅音频 · 暂无转写');
+      button.append(top);
+      if (!recording.isDraft) button.append(meta);
+      button.append(preview);
       row.append(button);
       if (!recording.isDraft) {
         const remove = createIconButton('delete-recording-item', `删除录音：${recording.title}`, DELETE_ICON, true);
@@ -1364,7 +1690,7 @@
         event.preventDefault();
         event.stopPropagation();
         const row = remove.closest('.recording-item[data-id]');
-        if (row) await deleteSingleRecording(row.dataset.id);
+        if (row) deleteSingleRecording(row.dataset.id);
         return;
       }
       const item = event.target.closest('.recording-item[data-id]');
@@ -2115,5 +2441,7 @@
     stopRecording,
     isRecordingActive: isRecordingBusy,
     recordingState: () => ({ status: recordingStatus, durationMs: isRecordingActive() ? currentDuration() : 0 }),
+    // 录音页的播放器要用空格和方向键时，面板不要把空格当成「收起」。
+    playerWantsKeys,
   };
 })();

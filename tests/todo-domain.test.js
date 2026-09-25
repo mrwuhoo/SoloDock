@@ -98,3 +98,17 @@ test('the add row reads dates from the text; otherwise today 23:30 (tomorrow onc
   assert.equal(grid.length % 7, 0);
   assert.deepEqual([grid[0].date.getDate(), grid[0].outside, grid[1].date.getDate(), grid.at(-1).date.getDate()], [31, true, 1, 4], 'Sept 2026 starts on Tuesday');
 });
+
+test('extracting todos from a transcript lists only sentences with a time or an action, unchanged', () => {
+  const transcript = '王总：合同第 4 条的交付时间，我们这边希望改到 11 月 20 日。我：可以。王总：报价单麻烦今天发一版给财务，按基础版走。我：好的，下午 5 点前发过去。天气不错';
+  const candidates = todo.extractTodoCandidates(transcript, now);
+  assert.deepEqual(candidates.map((item) => item.text), [
+    '合同第 4 条的交付时间，我们这边希望改到 11 月 20 日',
+    '报价单麻烦今天发一版给财务，按基础版走',
+    '好的，下午 5 点前发过去',
+  ]);
+  assert.equal(candidates[0].at, at(2026, 11, 20, 23, 30));
+  assert.equal(candidates[2].at, at(2026, 9, 25, 17));
+  assert.equal(candidates[1].at, null, '"今天" alone is not a deadline');
+  assert.deepEqual(todo.extractTodoCandidates('', now), []);
+});

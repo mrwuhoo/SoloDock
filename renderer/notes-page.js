@@ -627,6 +627,15 @@
       render();
       return note.id;
     },
+    // 从别处存成一篇笔记（如录音转写）：返回新笔记 id。
+    createFrom({ title = '', content = '' } = {}) {
+      flush();
+      const now = Date.now();
+      const id = uid();
+      if (!store([{ id, title: String(title).slice(0, 80), titleSource: title ? 'user' : '', content: String(content), createdAt: now, updatedAt: now }, ...load()])) return '';
+      render();
+      return id;
+    },
     syncHomeNote,
     rollHomeNote,
     flush,

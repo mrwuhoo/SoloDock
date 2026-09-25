@@ -466,18 +466,18 @@
 
           <section id="tab-recordings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-recordings" aria-hidden="true" inert>
             <div class="recordings-page">
-              <aside class="recording-library">
+              <aside class="recording-library tile">
                 <div class="recording-library-head">
-                  <div><span class="tile-label">录音资料库</span><strong id="recording-count">0 条</strong></div>
+                  <div class="rec-title"><b>录音</b><span id="recording-count">0 条</span></div>
                   <div class="recording-library-actions">
-                    <button class="workspace-button compact" id="recording-configure" type="button">API 配置</button>
-                    <button class="workspace-button compact primary" id="recording-new" type="button">录音</button>
+                    <button class="rec-record" id="recording-new" type="button"><i aria-hidden="true"></i><span>录音</span></button>
+                    <button class="rec-icon" id="recording-configure" type="button" aria-label="转写设置" title="转写设置"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="6.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="17.5" cy="12" r="1.3"/></svg></button>
                   </div>
                   <button class="bulk-delete" id="recording-bulk-delete" type="button" hidden>删除</button>
                 </div>
                 <div class="recording-list" id="recording-list"></div>
               </aside>
-              <section class="recording-detail" id="recording-detail">
+              <section class="recording-detail tile" id="recording-detail">
                 <div class="recording-detail-empty">完成一次录音后，音频和转写文本会保存在这里。</div>
               </section>
             </div>

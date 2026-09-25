@@ -298,7 +298,26 @@
     return cells;
   }
 
+  // 录音转写里「提取待办」：只列出带时间或带动作的句子作为候选，由用户勾选后写入；不总结、不改写。
+  const ACTION_WORDS = /(发给|发一版|发过去|提交|交付|交稿|回复|回电话|打电话|联系|约|安排|准备|整理|确认|改到|修改|更新|完成|跟进|对接|报价|付款|开票|寄|预约|记得|别忘)/;
+  function extractTodoCandidates(text, now = Date.now()) {
+    const sentences = String(text || '')
+      .split(/[。！？!?；;\n]+/)
+      .map((sentence) => sentence.replace(/^[^：:]{1,8}[：:]\s*/, '').trim())
+      .filter((sentence) => Array.from(sentence).length >= 4 && Array.from(sentence).length <= 80);
+    const seen = new Set();
+    return sentences.map((sentence) => {
+      const when = Capture ? Capture.parseWhen(sentence, now) : { at: null };
+      const timed = Boolean(when.at && when.at > Number(now) && !when.vague);
+      if (!timed && !ACTION_WORDS.test(sentence)) return null;
+      if (seen.has(sentence)) return null;
+      seen.add(sentence);
+      return { text: sentence, at: timed ? when.at : null, label: timed ? shortDate(when.at, now) : '' };
+    }).filter(Boolean).slice(0, 12);
+  }
+
   return {
+    extractTodoCandidates,
     COLORS,
     MAX_CATEGORIES,
     DEFAULT_CATEGORIES,

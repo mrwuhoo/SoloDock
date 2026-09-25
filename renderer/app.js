@@ -400,6 +400,8 @@ notch.addEventListener('keydown', (e) => {
 });
 
 document.addEventListener('keydown', (event) => {
+  // 录音页的播放器用空格播放 / 暂停。
+  if (event.code === 'Space' && window.NotchWorkspace?.playerWantsKeys?.(event)) return;
   const target = event.target instanceof Element ? event.target : null;
   const editable = Boolean(target && target.closest(
     'input, textarea, select, [contenteditable]:not([contenteditable="false"]), audio, video'
