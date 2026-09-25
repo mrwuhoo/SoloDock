@@ -520,7 +520,36 @@ function updateDefaultTabPreference(settings, defaultTab) {
   return { ...source, defaultTab: normalized };
 }
 
+// Claude Code 状态栏输入里的额度窗口（仅 Pro/Max 订阅、首个响应之后才会出现，窗口可能单独缺失）。
+// 只保留两个窗口的已用百分比与重置时间；会话、路径、模型等其余字段一律丢弃。
+function normalizeClaudeRateLimits(payload, now = Date.now()) {
+  const source = payload && typeof payload === 'object' ? (payload.rate_limits || payload.rateLimits) : null;
+  if (!source || typeof source !== 'object') return null;
+  const toTime = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value) && value > 0) return value < 1e12 ? value * 1000 : value;
+    if (typeof value === 'string' && value.trim()) {
+      const parsed = Date.parse(value);
+      return Number.isFinite(parsed) ? parsed : null;
+    }
+    return null;
+  };
+  const window = (raw) => {
+    if (!raw || typeof raw !== 'object') return null;
+    const used = Number(raw.used_percentage ?? raw.usedPercentage);
+    if (!Number.isFinite(used)) return null;
+    return {
+      usedPercent: Math.max(0, Math.min(100, used)),
+      resetsAt: toTime(raw.resets_at ?? raw.resetsAt),
+    };
+  };
+  const fiveHour = window(source.five_hour || source.fiveHour);
+  const sevenDay = window(source.seven_day || source.sevenDay);
+  if (!fiveHour && !sevenDay) return null;
+  return { fiveHour, sevenDay, receivedAt: Number(now) };
+}
+
 module.exports = {
+  normalizeClaudeRateLimits,
   isPrivateAddress,
   decodeHtmlEntities,
   extractPageTitle,

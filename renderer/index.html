@@ -206,16 +206,22 @@
                 <ul class="today-list" id="home-today-list" aria-live="polite"></ul>
               </section>
 
-              <section class="tile home-usage" id="home-usage" data-state="empty" data-home-module="usage" data-widget-size="medium" aria-label="Codex 订阅用量">
-                <div class="usage-widget-heading"><h2>Codex</h2><button class="icon-button usage-configure" type="button" aria-label="订阅配置" title="订阅配置"></button></div>
-                <div class="usage-widget-body">
-                  <div class="usage-widget-value"><strong id="usage-remaining">—</strong><span id="usage-period">剩余额度</span></div>
-                  <progress id="usage-meter" max="100" value="0" aria-label="Codex 剩余额度" hidden></progress>
-                  <p id="usage-reset">连接后查看重置时间</p>
-                  <div id="usage-empty"><button class="workspace-button compact" id="usage-connect" type="button">连接 Codex</button></div>
-                  <p id="usage-secondary" hidden></p>
+              <section class="tile home-usage" id="home-usage" data-state="empty" data-count="1" data-home-module="usage" data-widget-size="medium" aria-label="AI 用量">
+                <div class="usage-widget-heading"><h2>AI 用量</h2><span class="usage-meta" id="usage-meta"></span><button class="icon-button usage-configure" type="button" aria-label="AI 用量设置" title="AI 用量设置"></button></div>
+                <!-- 每个订阅一栏：Codex 这一栏的元素由 codex-usage.js 更新；Claude 与手动订阅由 ai-usage.js 渲染。 -->
+                <div class="usage-columns" id="usage-columns">
+                  <div class="usage-col usage-col-codex" data-provider="codex">
+                    <div class="usage-col-head"><span class="usage-mark" data-kind="codex">Cx</span><b>Codex</b><span class="usage-plan" data-plan-for="codex" hidden></span></div>
+                    <div class="usage-widget-body">
+                      <div class="usage-widget-value"><strong id="usage-remaining">—</strong><span id="usage-period">剩余额度</span></div>
+                      <progress id="usage-meter" max="100" value="0" aria-label="Codex 剩余额度" hidden></progress>
+                      <p id="usage-reset">连接后查看重置时间</p>
+                      <div id="usage-empty"><button class="workspace-button compact" id="usage-connect" type="button">连接 Codex</button></div>
+                      <p id="usage-secondary" hidden></p>
+                    </div>
+                    <div class="usage-widget-footer"><span id="usage-credits">重置卡 —</span><span class="usage-renewal" data-renewal-for="codex" hidden></span><button id="usage-news" class="usage-text-button" type="button">重置资讯 <span aria-hidden="true">›</span></button></div>
+                  </div>
                 </div>
-                <div class="usage-widget-footer"><span id="usage-credits">重置卡 —</span><button id="usage-news" class="usage-text-button" type="button">重置资讯 <span aria-hidden="true">›</span></button></div>
               </section>
 
 
@@ -476,8 +482,20 @@
               </div>
 
               <div class="settings-column settings-column-secondary">
+                <section class="tile settings-card settings-ai-card" id="settings-ai-card" aria-labelledby="settings-ai-title">
+                  <div class="settings-card-heading"><div><span class="tile-label">AI 用量</span><strong id="settings-ai-title">订阅</strong></div><small>首页最多显示 3 个 · 用箭头调整顺序</small></div>
+                  <div class="ai-sub-list" id="ai-sub-list"></div>
+                  <form class="ai-sub-add" id="ai-sub-add" autocomplete="off">
+                    <input id="ai-sub-name" maxlength="16" placeholder="添加订阅，如 Grok" aria-label="订阅名称" />
+                    <input id="ai-sub-plan" maxlength="16" placeholder="套餐（可选）" aria-label="套餐" />
+                    <select id="ai-sub-day" aria-label="每月续费日"></select>
+                    <button class="workspace-button compact" type="submit">添加</button>
+                  </form>
+                  <p class="ai-sub-note">Codex 自动读取本机登录账号；Claude 通过 Claude Code 状态栏上报；其他订阅没有可读取的额度接口，只显示套餐和续费倒计时。</p>
+                </section>
+
                 <section class="tile settings-card settings-usage-card" id="settings-usage-card" tabindex="-1" aria-labelledby="settings-usage-title">
-                  <div class="settings-card-heading"><div><span class="tile-label">订阅</span><strong id="settings-usage-title">订阅配置</strong></div><button class="workspace-button compact" id="codex-usage-refresh" type="button">连接并读取</button></div>
+                  <div class="settings-card-heading"><div><span class="tile-label">订阅</span><strong id="settings-usage-title">Codex 连接</strong></div><button class="workspace-button compact" id="codex-usage-refresh" type="button">连接并读取</button></div>
                   <div class="usage-setting-row"><span>已连接账号</span><span id="usage-account">Codex · 未连接</span></div>
                   <label class="usage-setting-row" for="usage-sync"><span>自动同步</span><select id="usage-sync"><option value="0">仅手动</option><option value="1">每 1 分钟</option><option value="5">每 5 分钟</option><option value="15">每 15 分钟</option></select></label>
                   <div class="usage-setting-row"><span>公开动态源</span><button class="usage-text-button" id="usage-source" type="button">AIHOT · Tibo公开动态 <span aria-hidden="true">↗</span></button></div>
@@ -621,7 +639,9 @@
     <script src="workspace.js"></script>
     <script src="prompts.js"></script>
     <script src="reset-news.js"></script>
+    <script src="ai-usage-domain.js"></script>
     <script src="codex-usage.js"></script>
+    <script src="ai-usage.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

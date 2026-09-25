@@ -55,6 +55,7 @@ const {
   normalizeDefaultTabPreference,
   updateDefaultTabPreference,
   createForegroundMediaPermissionCoordinator,
+  normalizeClaudeRateLimits,
 } = require('./main-services');
 
 // Keep the glass edition isolated from the official app so both builds can be
@@ -865,6 +866,22 @@ function sendTaskNotificationResponse(response, statusCode, body) {
   response.end(json);
 }
 
+// 最近一次由 Claude Code 状态栏上报的额度；只在内存里，退出即清空。
+let claudeUsageSnapshot = null;
+ipcMain.handle('claude:usage', () => (claudeUsageSnapshot
+  ? { ok: true, ...claudeUsageSnapshot }
+  : { ok: false, error: 'not_connected' }));
+// 生成 ~/.claude/settings.json 里的状态栏配置。用 SoloDock 自带的运行时执行脚本，
+// 这样即使电脑上没有单独安装 Node.js 也能工作。只返回文本，由用户自己粘贴。
+ipcMain.handle('claude:statusline-setup', () => {
+  const script = path.join(__dirname, 'scripts', 'claude-statusline.js');
+  const command = `ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${script}"`;
+  return {
+    command,
+    snippet: `"statusLine": ${JSON.stringify({ type: 'command', command }, null, 2)}`,
+  };
+});
+
 function startTaskNotificationServer() {
   if (notificationServer) return;
   const server = http.createServer((request, response) => {
@@ -883,7 +900,9 @@ function startTaskNotificationServer() {
     const sourceMatch = /^\/notify\/([a-z0-9-]{1,32})$/i.exec(requestUrl.pathname);
     const requestedSource = sourceMatch ? sourceMatch[1].toLowerCase() : '';
     const source = TASK_NOTIFICATION_SOURCES.has(requestedSource) ? requestedSource : null;
-    if (request.method !== 'POST' || !source) {
+    // Claude Code 状态栏脚本上报额度：只接受额度字段，保存在内存里供首页 AI 用量读取。
+    const claudeUsage = requestUrl.pathname === '/usage/claude';
+    if (request.method !== 'POST' || (!source && !claudeUsage)) {
       sendTaskNotificationResponse(response, 404, { ok: false, error: 'not_found' });
       return;
     }
@@ -926,6 +945,16 @@ function startTaskNotificationServer() {
       }
       if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
         sendTaskNotificationResponse(response, 400, { ok: false, error: 'invalid_payload' });
+        return;
+      }
+      if (claudeUsage) {
+        const usage = normalizeClaudeRateLimits(payload);
+        if (!usage) {
+          sendTaskNotificationResponse(response, 422, { ok: false, error: 'rate_limits_missing' });
+          return;
+        }
+        claudeUsageSnapshot = usage;
+        sendTaskNotificationResponse(response, 202, { ok: true });
         return;
       }
       const result = enqueueTaskNotification(normalizeTaskNotification(payload, source));

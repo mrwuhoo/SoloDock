@@ -552,3 +552,44 @@ test('default panel tab accepts visible tabs and falls back to home safely', () 
   });
   assert.equal(updateDefaultTabPreference({ features }, 'notes'), null);
 });
+
+test('Claude Code status-line rate limits keep only the two quota windows', () => {
+  const { normalizeClaudeRateLimits } = require('../main-services');
+  const now = 1_790_000_000_000;
+  const result = normalizeClaudeRateLimits({
+    session_id: 'secret-session',
+    transcript_path: '/Users/me/.claude/projects/x.jsonl',
+    model: { display_name: 'Opus' },
+    rate_limits: {
+      five_hour: { used_percentage: 82.5, resets_at: 1_790_003_600 },
+      seven_day: { used_percentage: 46, resets_at: '2026-09-27T01:00:00Z' },
+    },
+  }, now);
+  assert.deepEqual(result, {
+    fiveHour: { usedPercent: 82.5, resetsAt: 1_790_003_600_000 },
+    sevenDay: { usedPercent: 46, resetsAt: Date.parse('2026-09-27T01:00:00Z') },
+    receivedAt: now,
+  });
+  assert.ok(!JSON.stringify(result).includes('secret'));
+  assert.deepEqual(normalizeClaudeRateLimits({ rate_limits: { seven_day: { used_percentage: 130 } } }, now).sevenDay, { usedPercent: 100, resetsAt: null });
+  assert.equal(normalizeClaudeRateLimits({ rate_limits: {} }, now), null);
+  assert.equal(normalizeClaudeRateLimits({ model: 'x' }, now), null);
+});
+
+test('the Claude status-line script forwards only quota fields and prints remaining percentages', () => {
+  const { pickRateLimits, ownStatusLine } = require('../scripts/claude-statusline');
+  const input = {
+    session_id: 'secret', cwd: '/Users/me/work',
+    model: { display_name: 'Opus' },
+    rate_limits: { five_hour: { used_percentage: 82, resets_at: 1790003600 }, seven_day: { used_percentage: 46.4, resets_at: 1790200000 } },
+  };
+  const picked = pickRateLimits(input);
+  assert.deepEqual(picked, {
+    five_hour: { used_percentage: 82, resets_at: 1790003600 },
+    seven_day: { used_percentage: 46.4, resets_at: 1790200000 },
+  });
+  assert.ok(!JSON.stringify(picked).includes('secret'));
+  assert.equal(ownStatusLine(input, picked), 'Opus · 5h 剩 18% · 周 剩 54%');
+  assert.equal(pickRateLimits({ model: {} }), null);
+  assert.equal(ownStatusLine({}, null), 'SoloDock');
+});

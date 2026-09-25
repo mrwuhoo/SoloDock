@@ -10,6 +10,8 @@ function subscribe(channel, handler) {
 contextBridge.exposeInMainWorld('notchAPI', {
   platform: process.platform,
   getCodexUsage: () => ipcRenderer.invoke('codex:usage'),
+  getClaudeUsage: () => ipcRenderer.invoke('claude:usage'),
+  getClaudeStatuslineSetup: () => ipcRenderer.invoke('claude:statusline-setup'),
   getResetNews: (force = false) => ipcRenderer.invoke('resets:read', force === true),
   setMode: (mode) => ipcRenderer.invoke('window:set-mode', mode),
   beginCollapse: () => ipcRenderer.invoke('window:begin-collapse'),

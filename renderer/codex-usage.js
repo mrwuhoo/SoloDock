@@ -56,7 +56,8 @@
   function visible() {
     return document.visibilityState !== 'hidden'
       && get('app')?.classList.contains('expanded')
-      && ((get('tab-home')?.classList.contains('active') && !tile.hidden)
+      && ((get('tab-home')?.classList.contains('active') && !tile.hidden
+          && window.NotchAiUsageState?.isOnHome('codex') !== false)
         || get('tab-settings')?.classList.contains('active'));
   }
   function node(tag, text, className) {
@@ -186,7 +187,7 @@
   refresh.addEventListener('click', manualRead);
   connect.addEventListener('click', manualRead);
   sync.addEventListener('change', () => { firstConnection = false; savePreference(); maybeRefresh(); });
-  for (const event of ['notch:tabchange', 'notch:modechange', 'notch:home-modules-changed', 'visibilitychange']) document.addEventListener(event, maybeRefresh);
+  for (const event of ['notch:tabchange', 'notch:modechange', 'notch:home-modules-changed', 'notch:ai-subscriptions-changed', 'visibilitychange']) document.addEventListener(event, maybeRefresh);
   const timer = setInterval(maybeRefresh, 30000);
   window.addEventListener('pagehide', () => clearInterval(timer), { once: true });
   maybeRefresh();
