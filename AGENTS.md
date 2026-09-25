@@ -64,6 +64,7 @@
 - **禁止在 styles.css 末尾追加覆盖规则**：改组件就改组件自己的那段样式；页面重做时删除旧段落。
 - 页面按原型逐页重做：每页完成后与原型截图并排对比，并逐条满足规范里的「验收」。
 - 数据结构变更必须附迁移与回滚；剪贴板页保持现有交互，只统一视觉。
+- 今天时间线（`renderer/timeline-domain.js` + `renderer/today-strip.js`）：日程 `notch-events-v1`、稍后提醒 `notch-later-v1`、专注记录 `notch-focus-log-v1`（番茄钟每段写一条，保留 500 条）、显隐 `notch-home-strip-v1`。渲染层每次改动后把完整提醒队列交给主进程 `reminders:schedule`，由主进程定时（面板收起也会提醒，错过超过 5 分钟不补发），触发后回传 `reminder:fired`。日程与稍后提醒不进「最近完成」。
 
 ## 代码规范
 

@@ -108,6 +108,38 @@
 
         <div class="panels" id="panels">
           <section id="tab-home" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-home" aria-hidden="true" inert>
+            <!-- 今天时间线：08:00–24:00 的日程、截止、专注与 AI 完成；右侧新建日程与稍后提醒。 -->
+            <div class="today-strip" id="today-strip">
+              <div class="today-date"><b id="today-date-title">今天</b><span id="today-date-summary"></span></div>
+              <div class="today-line" id="today-line" role="group" aria-label="今天 08:00 到 24:00 的安排"></div>
+              <div class="today-actions">
+                <button class="today-action" id="today-add-event" type="button" aria-haspopup="dialog" aria-controls="event-pop">+ 日程</button>
+                <button class="today-action" id="today-add-later" type="button" aria-haspopup="dialog" aria-controls="later-pop">稍后提醒</button>
+              </div>
+              <div class="today-pop" id="event-pop" role="dialog" aria-labelledby="event-pop-title" hidden>
+                <strong id="event-pop-title">新建日程</strong>
+                <input class="today-pop-quick" id="event-quick" placeholder="快速输入，如：3点 客户电话 30分钟" autocomplete="off" spellcheck="false" />
+                <div class="today-pop-grid">
+                  <label class="wide">标题<input id="event-title" maxlength="40" autocomplete="off" /></label>
+                  <label>日期<select id="event-day"><option value="0">今天</option><option value="1">明天</option><option value="2">后天</option></select></label>
+                  <label>时间<input id="event-time" type="time" /></label>
+                  <label>时长<select id="event-duration"><option value="15">15 分钟</option><option value="30" selected>30 分钟</option><option value="45">45 分钟</option><option value="60">1 小时</option><option value="90">1.5 小时</option><option value="120">2 小时</option></select></label>
+                  <label>提醒<select id="event-remind"><option value="0">准时</option><option value="5">提前 5 分钟</option><option value="10" selected>提前 10 分钟</option><option value="15">提前 15 分钟</option><option value="30">提前 30 分钟</option></select></label>
+                </div>
+                <p class="today-pop-error" id="event-error" role="status"></p>
+                <div class="today-pop-actions"><button class="workspace-button compact danger" id="event-delete" type="button" hidden>删除</button><span></span><button class="workspace-button compact" id="event-cancel" type="button">取消</button><button class="workspace-button compact primary" id="event-save" type="button">保存</button></div>
+              </div>
+              <div class="today-pop later-pop" id="later-pop" role="dialog" aria-labelledby="later-pop-title" hidden>
+                <strong id="later-pop-title">稍后提醒我</strong>
+                <input class="today-pop-quick" id="later-note" maxlength="60" placeholder="提醒我什么（可选），如：看导出进度" autocomplete="off" />
+                <div class="later-presets">
+                  <button type="button" data-later="10">10 分钟后</button>
+                  <button type="button" data-later="30">30 分钟后</button>
+                  <button type="button" data-later="60">1 小时后</button>
+                  <button type="button" data-later="evening">今晚 8 点</button>
+                </div>
+              </div>
+            </div>
             <div class="home-bento" id="home-bento" aria-label="可长按拖动调整的首页布局">
 
               <section class="tile home-pomodoro" id="home-pomodoro" data-home-module="pomodoro" data-widget-size="mini" aria-label="番茄钟">
@@ -469,11 +501,12 @@
                     <div><span class="tile-label">首页</span><strong>首页组件</strong></div>
                     <small id="settings-home-module-status">隐藏后自动填充 · 至少保留一个</small>
                   </div>
+                  <label class="settings-strip-toggle"><span><b>今天时间线</b><small>首页顶部的日程、截止、专注与 AI 完成</small></span><input type="checkbox" id="settings-today-strip" aria-label="显示今天时间线" /><i aria-hidden="true"></i></label>
                   <div class="settings-home-module-grid" id="settings-home-module-list">
                     <label><span><b>随笔记</b><small>首页快速记录</small></span><input type="checkbox" data-settings-home-module="note" aria-label="显示随笔记" /><i aria-hidden="true"></i></label>
                     <label><span><b>今天</b><small>今天到期的待办</small></span><input type="checkbox" data-settings-home-module="today" aria-label="显示今天的待办" /><i aria-hidden="true"></i></label>
                     <label><span><b>番茄钟</b><small>专注计时</small></span><input type="checkbox" data-settings-home-module="pomodoro" aria-label="显示番茄钟" /><i aria-hidden="true"></i></label>
-                    <label><span><b>订阅用量</b><small>Codex 额度卡片</small></span><input type="checkbox" data-settings-home-module="usage" aria-label="显示订阅用量" /><i aria-hidden="true"></i></label>
+                    <label><span><b>订阅用量</b><small>AI 订阅额度与续费</small></span><input type="checkbox" data-settings-home-module="usage" aria-label="显示订阅用量" /><i aria-hidden="true"></i></label>
                     <label><span><b>相框</b><small>你喜欢的照片</small></span><input type="checkbox" data-settings-home-module="mirror" aria-label="显示相框" /><i aria-hidden="true"></i></label>
                     <label><span><b>快速录音</b><small data-home-module-setting-note="recorder">默认隐藏 · 录音与转写</small></span><input type="checkbox" data-settings-home-module="recorder" aria-label="显示快速录音" /><i aria-hidden="true"></i></label>
                     <label><span><b>当前窗口</b><small>默认隐藏 · 使用时才申请权限</small></span><input type="checkbox" data-settings-home-module="windows" aria-label="显示当前窗口" /><i aria-hidden="true"></i></label>
@@ -642,6 +675,8 @@
     <script src="ai-usage-domain.js"></script>
     <script src="codex-usage.js"></script>
     <script src="ai-usage.js"></script>
+    <script src="timeline-domain.js"></script>
+    <script src="today-strip.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

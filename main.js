@@ -570,7 +570,8 @@ function enqueueTaskNotification(notification) {
   if (lastSeenAt && now - lastSeenAt <= TASK_NOTIFICATION_DEDUPE_MS) return 'duplicate';
   recentTaskNotifications.set(dedupeKey, now);
 
-  if (notification.source !== 'todo') {
+  // 完成记录只收 AI 与任务完成，不收待办到期、日程和稍后提醒。
+  if (!['todo', 'event', 'reminder'].includes(notification.source)) {
     taskCompletionHistory.unshift(notification);
     if (taskCompletionHistory.length > 20) taskCompletionHistory.length = 20;
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -663,6 +664,63 @@ ipcMain.handle('todos:schedule-reminders', (event, items) => {
     : [];
   scheduleNextTodoReminder();
   return { ok: true, count: scheduledTodoReminders.length };
+});
+
+// 日程与「稍后提醒」：渲染层交来一份按时间排序的提醒清单，到点后走统一通知浮窗。
+// 应用没在运行时错过的提醒，超过 5 分钟就不再补发。
+const TIMED_REMINDER_GRACE_MS = 5 * 60 * 1000;
+let scheduledTimedReminders = [];
+let timedReminderTimer = null;
+const firedTimedReminders = new Set();
+
+function scheduleNextTimedReminder() {
+  if (timedReminderTimer) clearTimeout(timedReminderTimer);
+  timedReminderTimer = null;
+  const now = Date.now();
+  let nextDelay = Infinity;
+  for (const item of scheduledTimedReminders) {
+    const key = `${item.id}@${item.at}`;
+    if (firedTimedReminders.has(key)) continue;
+    if (item.at <= now) {
+      firedTimedReminders.add(key);
+      if (now - item.at > TIMED_REMINDER_GRACE_MS) continue;
+      enqueueTaskNotification({
+        eventId: `timed-${key}`,
+        taskId: item.id,
+        source: item.kind === 'event' ? 'event' : 'reminder',
+        project: '',
+        title: item.title,
+        detail: item.detail,
+        completedAt: now,
+      });
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('reminder:fired', { id: item.id, kind: item.kind, at: item.at, firedAt: now });
+      }
+      continue;
+    }
+    nextDelay = Math.min(nextDelay, item.at - now);
+  }
+  if (Number.isFinite(nextDelay)) {
+    timedReminderTimer = setTimeout(scheduleNextTimedReminder, todoReminderTimerDelay(nextDelay));
+  }
+}
+
+ipcMain.handle('reminders:schedule', (event, items) => {
+  scheduledTimedReminders = Array.isArray(items)
+    ? items
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        id: String(item.id || '').slice(0, 120),
+        kind: item.kind === 'event' ? 'event' : 'later',
+        title: String(item.title || '').trim().slice(0, 80) || '到时间了',
+        detail: String(item.detail || '').trim().slice(0, 80),
+        at: Number(item.at),
+      }))
+      .filter((item) => item.id && Number.isFinite(item.at) && item.at > 0)
+      .slice(0, 400)
+    : [];
+  scheduleNextTimedReminder();
+  return { ok: true, count: scheduledTimedReminders.length };
 });
 
 ipcMain.handle('pomodoro:notify', (event, minutes) => {
@@ -3305,6 +3363,7 @@ app.on('will-quit', () => {
   codexUsage.dispose();
   cancelCollapseWatchdog();
   clearTodoReminderTimer();
+  if (timedReminderTimer) clearTimeout(timedReminderTimer);
   stopHoverSpaceShortcut();
   clearTaskNotificationTimers();
   stopTaskNotificationServer();

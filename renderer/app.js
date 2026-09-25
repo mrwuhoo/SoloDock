@@ -170,6 +170,7 @@ function saveData(data) {
     // ignore quota errors
   }
   if (typeof renderTodayCard === 'function') renderTodayCard();
+  document.dispatchEvent(new CustomEvent('notch:todos-changed'));
   if (window.notchAPI && typeof window.notchAPI.scheduleTodoReminders === 'function') {
     const reminders = PRIORITIES.flatMap((priority) => data[priority] || []);
     window.notchAPI.scheduleTodoReminders(reminders).catch(() => {});
@@ -178,6 +179,12 @@ function saveData(data) {
 
 let data = loadData();
 let todoCategoryNames = loadTodoCategoryNames();
+// 其他模块（首页时间线）只读访问待办，不直接修改。
+window.NotchTodos = {
+  items: () => data,
+  categoryName: (priority) => todoCategoryNames[priority] || '',
+  open: () => setActiveTab('todo'),
+};
 const todoSelections = Object.fromEntries(PRIORITIES.map((priority) => [priority, new Set()]));
 const todoSelectionAnchors = Object.fromEntries(PRIORITIES.map((priority) => [priority, null]));
 let editingTodo = null;
@@ -1492,6 +1499,21 @@ function formatPomodoroEndTime(seconds) {
   return `${pad2(target.getHours())}:${pad2(target.getMinutes())}`;
 }
 
+// 完成的专注时段记在本机，供首页时间线和之后的「时间」页使用（只保留最近 500 条）。
+const FOCUS_LOG_KEY = 'notch-focus-log-v1';
+function recordFocusSession(seconds) {
+  const end = Date.now();
+  const minutes = Math.max(1, Math.round(Number(seconds) / 60));
+  try {
+    const log = JSON.parse(localStorage.getItem(FOCUS_LOG_KEY) || '[]');
+    const next = [...(Array.isArray(log) ? log : []), { start: end - minutes * 60000, end, minutes }].slice(-500);
+    localStorage.setItem(FOCUS_LOG_KEY, JSON.stringify(next));
+  } catch (error) {
+    // 存储不可用时只影响统计，不影响计时本身。
+  }
+  document.dispatchEvent(new CustomEvent('notch:focus-logged'));
+}
+
 function renderPomodoro() {
   setPomodoroInputs(pomodoroStarted ? secondsToParts(pomodoroRemaining) : savedPomodoroParts);
   if (pomodoroEndTime) {
@@ -1571,6 +1593,7 @@ pomodoroToggle?.addEventListener('click', () => {
         pomodoroTimer = null;
         showStatusToast(`${completedMinutes} 分钟专注完成`);
         window.notchAPI?.notifyPomodoro?.(completedMinutes).catch(() => {});
+        recordFocusSession(pomodoroConfiguredSeconds);
       }
       renderPomodoro();
     }, 1000);

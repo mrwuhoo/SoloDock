@@ -41,6 +41,8 @@ contextBridge.exposeInMainWorld('notchAPI', {
   finishTranscription: () => ipcRenderer.invoke('transcription:finish'),
   onTranscriptionEvent: (cb) => subscribe('transcription:event', (event, payload) => cb(payload)),
   listTaskCompletions: () => ipcRenderer.invoke('tasks:recent'),
+  scheduleReminders: (items) => ipcRenderer.invoke('reminders:schedule', items),
+  onReminderFired: (cb) => subscribe('reminder:fired', (event, payload) => cb(payload)),
   scheduleTodoReminders: (items) => ipcRenderer.invoke('todos:schedule-reminders', items),
   notifyPomodoro: (minutes) => ipcRenderer.invoke('pomodoro:notify', minutes),
   onTodoReminder: (cb) => subscribe('todo:reminded', (event, payload) => cb(payload)),

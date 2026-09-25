@@ -40,6 +40,9 @@ function normalizeNotification(payload) {
     chatgpt: 'GPT',
     task: '任务',
     todo: '待办',
+    event: '日程',
+    reminder: '提醒',
+    pomodoro: '专注',
   };
   const project = firstText([data.project, data.projectName, data.workspace], '');
 
