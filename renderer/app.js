@@ -433,6 +433,7 @@ if (window.notchAPI && typeof window.notchAPI.onEscape === 'function') {
     // 浮层（⌘K 搜索等）先关自己，不收起面板。
     if (window.NotchPalette?.close?.()) return;
     if (window.NotchTodoPage?.escape?.()) return;
+    if (window.NotchLinks?.escape?.()) return;
     const el = document.activeElement;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
       el.blur();

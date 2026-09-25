@@ -430,15 +430,37 @@
           </section>
 
           <section id="tab-links" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-links" aria-hidden="true" inert>
-            <div class="links-page">
-              <div class="links-toolbar">
-                <div class="link-add-wrap">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8" /><path d="M9 12h6M12 9v6" /></svg>
-                  <input id="link-add" type="text" placeholder="粘贴网址并回车，自动读取标题与分类…" autocomplete="off" spellcheck="false" />
+            <!-- 链接：左栏分组，右侧添加 / 搜索、剪贴板建议和两列链接。 -->
+            <div class="links-page" id="links-page">
+              <aside class="links-side tile">
+                <header class="links-side-head"><b>链接</b><span id="links-total">0</span></header>
+                <nav class="links-nav" id="links-nav" aria-label="链接分组"></nav>
+                <form class="links-new-group" id="links-new-group" autocomplete="off" hidden>
+                  <input id="links-new-group-name" maxlength="20" placeholder="分组名称，回车创建" aria-label="新分组名称" />
+                </form>
+                <button class="links-add-group" id="links-add-group" type="button">+ 新分组</button>
+              </aside>
+              <section class="links-main tile">
+                <div class="links-toolbar">
+                  <label class="links-add">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>
+                    <input id="link-add" type="text" placeholder="粘贴网址，回车保存到「未分组」" autocomplete="off" spellcheck="false" />
+                    <kbd aria-hidden="true">⌘V</kbd>
+                  </label>
+                  <label class="links-search">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m15.5 15.5 4 4"/></svg>
+                    <input id="links-search" type="search" placeholder="搜索标题和网址" aria-label="搜索链接" autocomplete="off" spellcheck="false" />
+                  </label>
                 </div>
-                <button class="bulk-delete" id="link-bulk-delete" type="button" hidden>删除</button>
-              </div>
-              <div class="link-groups" id="link-groups"></div>
+                <div class="links-suggest" id="links-suggest" hidden>
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6.5" y="5" width="11" height="15" rx="2"/><path d="M9.5 5V4a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v1"/></svg>
+                  <span>剪贴板里有一个网址：<b id="links-suggest-url"></b></span>
+                  <button class="links-primary" id="links-suggest-save" type="button">保存</button>
+                  <button class="links-ghost" id="links-suggest-dismiss" type="button">忽略</button>
+                </div>
+                <div class="links-body" id="links-body"></div>
+              </section>
+              <div class="links-menu" id="links-menu" role="menu" hidden></div>
             </div>
           </section>
 
@@ -897,6 +919,8 @@
     <script src="todo-page.js"></script>
     <script src="notes-domain.js"></script>
     <script src="notes-page.js"></script>
+    <script src="links-domain.js"></script>
+    <script src="links-page.js"></script>
     <script src="workspace.js"></script>
     <script src="prompts.js"></script>
     <script src="reset-news.js"></script>

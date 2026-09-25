@@ -21,7 +21,7 @@
       return id ? { tab: 'todo', open: () => window.NotchTodos.focus(id) } : null;
     }
     if (result.type === 'link') {
-      const outcome = window.NotchWorkspace?.addLink?.(result.url, result.title);
+      const outcome = window.NotchLinks?.add?.(result.url, result.title);
       if (outcome === 'duplicate') return { tab: 'links', message: '这个链接已经收藏过了', open: () => setActiveTab('links') };
       return outcome === 'saved' ? { tab: 'links', open: () => setActiveTab('links') } : null;
     }

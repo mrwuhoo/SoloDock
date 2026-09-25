@@ -4,9 +4,6 @@ const assert = require('node:assert/strict');
 const domain = require('../renderer/domain');
 const {
   normalizeHttpUrl,
-  classifyLink,
-  addLinkToGroups,
-  renameGroup,
   createCommand,
   createRecording,
   removeRecordingState,
@@ -134,34 +131,7 @@ test('normalizeHttpUrl rejects non-web and local URLs', () => {
   assert.equal(normalizeHttpUrl('http://127.0.0.1/private'), null);
 });
 
-test('classifyLink maps familiar services and falls back to 其他', () => {
-  assert.equal(classifyLink('https://github.com/openai', 'OpenAI repository'), '开发');
-  assert.equal(classifyLink('https://www.feishu.cn/', '飞书'), '工作');
-  assert.equal(classifyLink('https://www.bilibili.com/video/1', '视频'), '影音');
-  assert.equal(classifyLink('https://example.com/', 'Example Domain'), '其他');
-});
-
-test('addLinkToGroups reuses a matching group and creates a missing group', () => {
-  const initial = [{ id: 'g1', name: '开发', collapsed: false, links: [] }];
-  const first = addLinkToGroups(initial, {
-    id: 'l1',
-    url: 'https://github.com/',
-    title: 'GitHub',
-  }, '开发');
-  assert.equal(first.length, 1);
-  assert.deepEqual(first[0].links.map((link) => link.id), ['l1']);
-
-  const second = addLinkToGroups(first, {
-    id: 'l2',
-    url: 'https://example.com/',
-    title: 'Example',
-  }, '其他');
-  assert.equal(second.length, 2);
-  assert.equal(second[1].name, '其他');
-  assert.equal(second[1].links[0].id, 'l2');
-});
-
-test('same-site links reuse an existing group before automatic classification', () => {
+test('same-site links reuse an existing group', () => {
   const groups = [
     { id: 'product', name: 'Lollipop', links: [{ id: 'home', url: 'https://lollipop.plus/' }] },
     { id: 'work', name: '工作', links: [{ id: 'docs', url: 'https://docs.example.com/' }] },
@@ -235,12 +205,6 @@ test('moveLinkToPosition inserts at an exact slot when crossing groups', () => {
   // 未知链接或未知分组一律原样返回。
   assert.deepEqual(layout(moveLinkToPosition(groups, 'nope', 'target', 0)), layout(groups));
   assert.deepEqual(layout(moveLinkToPosition(groups, 'x', 'nope', 0)), layout(groups));
-});
-
-test('renameGroup trims names but never creates an empty name', () => {
-  const groups = [{ id: 'g1', name: '开发', collapsed: false, links: [] }];
-  assert.equal(renameGroup(groups, 'g1', '  资料  ')[0].name, '资料');
-  assert.equal(renameGroup(groups, 'g1', '   ')[0].name, '开发');
 });
 
 test('createCommand and createRecording normalize user-authored metadata', () => {

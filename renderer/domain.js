@@ -3,14 +3,6 @@
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.NotchDomain = api;
 })(typeof window !== 'undefined' ? window : globalThis, function createNotchDomain() {
-  const CATEGORY_RULES = [
-    ['开发', /github|gitlab|gitee|stackoverflow|developer|docs\.|npmjs|vercel|cloudflare|code|openai|anthropic/i],
-    ['工作', /feishu|larksuite|notion|slack|trello|asana|figma|miro|office|docs\.google/i],
-    ['学习', /wikipedia|coursera|udemy|edx|medium|juejin|zhihu|yuque|book|learn/i],
-    ['影音', /bilibili|youtube|youku|iqiyi|netflix|spotify|music|video/i],
-    ['社交', /weibo|twitter|x\.com|facebook|instagram|reddit|discord|wechat/i],
-    ['购物', /taobao|tmall|jd\.com|amazon|shop|mall/i],
-  ];
   const NESTED_PUBLIC_SUFFIXES = new Set([
     'co.uk', 'org.uk', 'ac.uk', 'com.cn', 'net.cn', 'org.cn', 'com.au', 'net.au',
     'co.jp', 'co.kr', 'co.nz', 'github.io', 'gitlab.io', 'vercel.app', 'pages.dev',
@@ -50,29 +42,6 @@
     } catch (error) {
       return null;
     }
-  }
-
-  function classifyLink(url, title) {
-    const haystack = `${url || ''} ${title || ''}`;
-    const matched = CATEGORY_RULES.find(([, pattern]) => pattern.test(haystack));
-    return matched ? matched[0] : '其他';
-  }
-
-  function addLinkToGroups(groups, link, category) {
-    const source = Array.isArray(groups) ? groups : [];
-    const groupName = String(category || '').trim() || '其他';
-    const index = source.findIndex((group) => group && group.name === groupName);
-    if (index >= 0) {
-      return source.map((group, groupIndex) => groupIndex === index
-        ? { ...group, links: [...(Array.isArray(group.links) ? group.links : []), link] }
-        : group);
-    }
-    return [...source, {
-      id: `group-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
-      name: groupName,
-      collapsed: false,
-      links: [link],
-    }];
   }
 
   function linkHostname(value) {
@@ -164,13 +133,6 @@
       return cloneLinkGroups(source);
     }
     return moveLinkToPosition(groups, linkId, targetGroupId, null);
-  }
-
-  function renameGroup(groups, groupId, name) {
-    const nextName = String(name || '').trim();
-    return (Array.isArray(groups) ? groups : []).map((group) => (
-      group && group.id === groupId && nextName ? { ...group, name: nextName } : group
-    ));
   }
 
   function prependClipboardHistory(history, entry, maxEntries = 100) {
@@ -910,12 +872,9 @@
 
   return {
     normalizeHttpUrl,
-    classifyLink,
-    addLinkToGroups,
     preferredLinkGroupId,
     moveLinkToGroup,
     moveLinkToPosition,
-    renameGroup,
     prependClipboardHistory,
     createExclusiveAsyncTask,
     createCommand,
