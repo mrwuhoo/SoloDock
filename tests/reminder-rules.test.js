@@ -160,3 +160,34 @@ test('pausing reminders keeps them out of sight, counts them, and sums them up o
   assert.equal(createReminderPause(now - 1, now).paused(now), false, 'an expired stored pause is ignored');
   assert.equal(createReminderPause(now + 60_000, now).until(), now + 60_000, 'a stored pause survives a restart');
 });
+
+test('AI quota reminders fire once per window per cycle, below 20%', () => {
+  const { createQuotaWatch, quotaWindows, quotaResetLabel } = require('../reminder-rules');
+  const at = (text) => new Date(text).getTime();
+  const now = at('2026-09-24T14:00:00'); // Thursday
+  const claude = quotaWindows('claude', { fiveHour: { usedPercent: 85, resetsAt: at('2026-09-24T16:40:00') }, sevenDay: { usedPercent: 40, resetsAt: at('2026-09-26T09:00:00') } });
+  assert.deepEqual(claude.map((window) => [window.key, window.label, window.remaining]), [['sevenDay', '本周', 60], ['fiveHour', '5 小时', 15]]);
+  const codex = quotaWindows('codex', { buckets: [{ id: 'codex', name: 'codex', windows: [
+    { key: 'primary', remainingPercent: 70, durationMinutes: 300, resetsAt: at('2026-09-24T18:00:00') },
+    { key: 'secondary', remainingPercent: 18, durationMinutes: 10080, resetsAt: at('2026-09-26T09:00:00') },
+  ] }] });
+  assert.deepEqual(codex.map((window) => window.label), ['本周', '5 小时'], 'weekly first');
+  assert.equal(quotaResetLabel(at('2026-09-24T16:40:00'), now), '今天 16:40');
+  assert.equal(quotaResetLabel(at('2026-09-25T09:00:00'), now), '明天 09:00');
+  assert.equal(quotaResetLabel(at('2026-09-26T09:00:00'), now), '周六 09:00');
+
+  const watch = createQuotaWatch();
+  const first = watch.check('codex', codex, { now, resetCredits: 1 });
+  assert.deepEqual([first.title, first.detail, first.source, first.taskId], ['Codex 本周额度剩余 18%', '周六 09:00 重置 · 还有 1 张重置卡', 'quota', 'codex']);
+  assert.equal(watch.check('codex', codex, { now: now + 60_000 }), null, 'same cycle: only once');
+  assert.equal(watch.check('claude', claude, { now }).title, 'Claude 5 小时额度剩余 15%');
+  // A new cycle (new reset time) can remind again; 本周期不再提醒 silences the provider until then.
+  const nextCycle = quotaWindows('claude', { fiveHour: { usedPercent: 90, resetsAt: at('2026-09-24T21:40:00') } });
+  watch.mute('claude', at('2026-09-24T16:40:00'));
+  assert.equal(watch.check('claude', nextCycle, { now: now + 60_000 }), null);
+  assert.equal(watch.check('claude', nextCycle, { now: at('2026-09-24T17:00:00') }).title, 'Claude 5 小时额度剩余 10%');
+  // Plenty left, expired windows and unknown numbers never remind.
+  assert.equal(createQuotaWatch().check('claude', quotaWindows('claude', { fiveHour: { usedPercent: 50, resetsAt: now + 1 } }), { now }), null);
+  assert.equal(createQuotaWatch().check('claude', quotaWindows('claude', { fiveHour: { usedPercent: 99, resetsAt: now - 1 } }), { now }), null);
+  assert.deepEqual(quotaWindows('claude', null), []);
+});

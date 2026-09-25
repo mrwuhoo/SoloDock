@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('notchAPI', {
   scheduleHabitReminders: (items) => ipcRenderer.invoke('habits:schedule', items),
   exportLifeCsv: (csv) => ipcRenderer.invoke('life:export', csv),
   onLogHabit: (cb) => subscribe('app:log-habit', (event, payload) => cb(payload || {})),
+  onOpenUsage: (cb) => subscribe('app:open-usage', (event, payload) => cb(payload || {})),
   onReminderFired: (cb) => subscribe('reminder:fired', (event, payload) => cb(payload)),
   scheduleTodoReminders: (items) => ipcRenderer.invoke('todos:schedule-reminders', items),
   notifyPomodoro: (payload) => ipcRenderer.invoke('pomodoro:notify', payload),

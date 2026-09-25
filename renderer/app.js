@@ -776,6 +776,12 @@ window.notchAPI?.onOpenSettings?.(async () => {
   await setMode(true);
   setActiveTab('settings');
 });
+// 额度提醒上的「查看用量」：打开设置里对应服务的用量卡片。
+window.notchAPI?.onOpenUsage?.(async ({ provider }) => {
+  await setMode(true);
+  await setActiveTab('settings');
+  window.NotchSettings?.reveal?.(provider === 'codex' ? 'settings-usage-card' : 'settings-ai-card');
+});
 document.addEventListener('notch:record-shortcut', openShortcutRecorder);
 
 if (collapseBtn) {

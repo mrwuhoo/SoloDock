@@ -29,6 +29,7 @@
     sit: ['久坐', 'walk'],
     offwork: ['收工', 'moon'],
     habit: ['习惯', 'leaf'],
+    quota: ['额度', 'alert'],
   };
   const GLYPHS = {
     check: '<path d="m6.5 12.5 3.5 3.5 7.5-8"/>',

@@ -27,6 +27,8 @@ function reminderPresentation(source) {
       return { visibleMs: 20_000, style: 'quiet', actions: [] };
     case 'offwork':
       return { visibleMs: 0, actions: [action('move-tomorrow', '待办挪到明天', true), action('body-snooze-30', '再工作 30 分钟')] };
+    case 'quota':
+      return { visibleMs: 10_000, actions: [action('open-usage', '查看用量', true), action('quota-mute', '本周期不再提醒')] };
     case 'habit':
       return { visibleMs: 15_000, actions: [action('habit-log', '记一笔', true), action('dismiss', '今天先不了')] };
     case 'needs-you':
@@ -201,6 +203,89 @@ function createFocusHold() {
   };
 }
 
+// ============ AI 额度提醒 ============
+// Codex / Claude 某个额度窗口剩余不到 20% 时提醒一次；同一周期（同一个重置时刻）不重复，
+// 「本周期不再提醒」在这一周期结束前不再提醒这家服务。只看数字，不替你做任何操作。
+const QUOTA_THRESHOLD = 20;
+const QUOTA_NAMES = { codex: 'Codex', claude: 'Claude' };
+
+function quotaDurationLabel(minutes) {
+  if (!Number.isFinite(minutes) || minutes <= 0) return '';
+  if (minutes >= 10080 - 60) return '本周';
+  if (minutes >= 1440) return `${Math.round(minutes / 1440)} 天`;
+  return `${Math.round(minutes / 60)} 小时`;
+}
+
+// 两家的数据统一成 { key, label, remaining, resetsAt, order }，按窗口时长排序（每周在前）。
+function quotaWindows(provider, data) {
+  if (!data || typeof data !== 'object') return [];
+  if (provider === 'claude') {
+    return [['sevenDay', '本周', 10080], ['fiveHour', '5 小时', 300]]
+      .map(([key, label, order]) => {
+        const raw = data[key];
+        if (!raw || !Number.isFinite(raw.usedPercent)) return null;
+        return { key, label, remaining: Math.max(0, 100 - raw.usedPercent), resetsAt: raw.resetsAt || null, order };
+      })
+      .filter(Boolean);
+  }
+  if (provider === 'codex') {
+    return (Array.isArray(data.buckets) ? data.buckets : []).flatMap((bucket) => (Array.isArray(bucket.windows) ? bucket.windows : [])
+      .filter((window) => Number.isFinite(window.remainingPercent))
+      .map((window) => {
+        const duration = quotaDurationLabel(window.durationMinutes) || (window.key === 'secondary' ? '本周' : '5 小时');
+        const prefix = bucket.name && !/^codex$/i.test(bucket.name) ? `${bucket.name} · ` : '';
+        return { key: `${bucket.id || 'codex'}:${window.key}`, label: `${prefix}${duration}`, remaining: window.remainingPercent, resetsAt: window.resetsAt || null, order: window.durationMinutes || 0 };
+      }))
+      .sort((left, right) => right.order - left.order);
+  }
+  return [];
+}
+
+// 「今天 16:40」/「明天 09:00」/「周六 09:00」
+function quotaResetLabel(resetsAt, now = Date.now()) {
+  if (!resetsAt) return '';
+  const date = new Date(resetsAt);
+  const clock = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  const start = (value) => { const day = new Date(value); day.setHours(0, 0, 0, 0); return day.getTime(); };
+  const days = Math.round((start(resetsAt) - start(now)) / 86400000);
+  if (days === 0) return `今天 ${clock}`;
+  if (days === 1) return `明天 ${clock}`;
+  return `周${'日一二三四五六'[date.getDay()]} ${clock}`;
+}
+
+function createQuotaWatch({ threshold = QUOTA_THRESHOLD } = {}) {
+  const notified = new Map();
+  const mutedUntil = new Map();
+  return {
+    // 返回要弹出的一条提醒（剩余最少的那个窗口），没有就是 null。
+    check(provider, windows, { now = Date.now(), resetCredits = null } = {}) {
+      if ((mutedUntil.get(provider) || 0) > now) return null;
+      const due = (Array.isArray(windows) ? windows : []).filter((window) => Number.isFinite(window.remaining)
+        && window.remaining <= threshold
+        && !(window.resetsAt && window.resetsAt <= now)
+        && notified.get(`${provider}:${window.key}`) !== (window.resetsAt || 'open'));
+      if (!due.length) return null;
+      due.forEach((window) => notified.set(`${provider}:${window.key}`, window.resetsAt || 'open'));
+      const window = due.reduce((low, item) => (item.remaining < low.remaining ? item : low));
+      const reset = quotaResetLabel(window.resetsAt, now);
+      const credits = provider === 'codex' && Number.isInteger(resetCredits) && resetCredits > 0 ? `还有 ${resetCredits} 张重置卡` : '';
+      return {
+        eventId: `quota-${provider}-${window.key}-${window.resetsAt || now}`,
+        taskId: provider,
+        source: 'quota',
+        project: '',
+        title: `${QUOTA_NAMES[provider] || provider} ${window.label}额度剩余 ${Math.round(window.remaining)}%`,
+        detail: [reset ? `${reset} 重置` : '', credits].filter(Boolean).join(' · ') || '留意一下用量',
+        resetsAt: window.resetsAt || 0,
+        completedAt: now,
+      };
+    },
+    mute(provider, until) {
+      mutedUntil.set(provider, Number(until) || 0);
+    },
+  };
+}
+
 // ============ 暂停提醒 ============
 // 开会、录课或想安静一会儿时，所有弹出提醒先不弹，照常记进通知中心；恢复时汇总成一句。
 // 「今天不再提醒」到次日 04:00（和随手记、笔记的「一天」同一条分界线）。
@@ -269,6 +354,10 @@ function createReminderPause(initialUntil = 0, now = Date.now()) {
 }
 
 module.exports = {
+  createQuotaWatch,
+  quotaWindows,
+  quotaResetLabel,
+  QUOTA_THRESHOLD,
   createReminderPause,
   pauseUntil,
   pauseResumeLabel,

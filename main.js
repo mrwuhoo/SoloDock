@@ -66,7 +66,7 @@ const {
   normalizeCaptureEntry,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
-const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES } = require('./reminder-rules');
+const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES, createQuotaWatch, quotaWindows } = require('./reminder-rules');
 const { createNoticeStore } = require('./notice-store');
 const { createWorklogStore } = require('./worklog-store');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
@@ -713,6 +713,12 @@ async function handleTaskNotificationAction(eventId, actionId) {
       break;
     case 'habit-log':
       openRendererPanel('app:log-habit', { habitId: notification.taskId || '' });
+      break;
+    case 'open-usage':
+      openRendererPanel('app:open-usage', { provider: notification.taskId || '' });
+      break;
+    case 'quota-mute':
+      quotaWatch.mute(notification.taskId, notification.resetsAt || now + 7 * 86400000);
       break;
     case 'todo-done':
     case 'focus-5':
@@ -1367,6 +1373,12 @@ function sendTaskNotificationResponse(response, statusCode, body) {
 
 // 最近一次由 Claude Code 状态栏上报的额度；只在内存里，退出即清空。
 let claudeUsageSnapshot = null;
+// AI 额度剩余不到 20% 时提醒一次（同一周期不重复）；Claude 随状态栏上报检查，Codex 在面板读取用量时检查。
+const quotaWatch = createQuotaWatch();
+function checkQuota(provider, data) {
+  const notification = quotaWatch.check(provider, quotaWindows(provider, data), { resetCredits: data && data.resetCredits });
+  if (notification) enqueueTaskNotification(notification);
+}
 ipcMain.handle('claude:usage', () => (claudeUsageSnapshot
   ? { ok: true, ...claudeUsageSnapshot }
   : { ok: false, error: 'not_connected' }));
@@ -1481,6 +1493,7 @@ function startTaskNotificationServer() {
           return;
         }
         claudeUsageSnapshot = usage;
+        checkQuota('claude', usage);
         sendTaskNotificationResponse(response, 202, { ok: true });
         return;
       }
@@ -2270,11 +2283,13 @@ ipcMain.handle('notch:menu', (event, context) => {
   return true;
 });
 
-ipcMain.handle('codex:usage', (event) => {
+ipcMain.handle('codex:usage', async (event) => {
   if (!mainWindow || event.sender !== mainWindow.webContents || event.senderFrame !== mainWindow.webContents.mainFrame) {
     return { ok: false, error: 'unavailable' };
   }
-  return codexUsage.read();
+  const result = await codexUsage.read();
+  if (result && result.ok) checkQuota('codex', result);
+  return result;
 });
 
 ipcMain.handle('resets:read', (event, force) => {
