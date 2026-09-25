@@ -179,6 +179,37 @@ app.on('web-contents-created', (_event, contents) => {
       assert.equal((await contents.executeJavaScript('window.notchAPI.getAppSettings()')).captureShortcut, '', 'off stays off');
       const restored = await contents.executeJavaScript(`window.notchAPI.setCaptureShortcut('Alt+Shift+N')`);
       assert.equal(restored.ok, captureSettings.captureShortcutRegistered);
+
+      // 暂停提醒: reminders still land in the notice center but don't pop up; the pause survives other
+      // settings writes; resuming sums up what was missed in one line.
+      const noticeCount = async () => (await contents.executeJavaScript('window.notchAPI.listNotices()')).items.length;
+      const shownTitle = async () => {
+        const win = Windows.getAllWindows().find((item) => !item.isDestroyed() && item.webContents.getURL().endsWith('/renderer/notification.html'));
+        if (!win) return '';
+        return win.webContents.executeJavaScript(`document.getElementById('notification-shell')?.classList.contains('is-visible') ? document.getElementById('notification-title').textContent : ''`).catch(() => '');
+      };
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      assert.deepEqual(await contents.executeJavaScript(`window.notchAPI.pauseReminders('forever')`), { ok: false, error: 'invalid' });
+      const paused = await contents.executeJavaScript(`window.notchAPI.pauseReminders('30m')`);
+      assert.equal(paused.ok, true);
+      assert.ok(Math.abs(paused.until - Date.now() - 30 * 60000) < 5000);
+      const beforeNotices = await noticeCount();
+      await contents.executeJavaScript(`window.notchAPI.notifyPomodoro({ minutes: 25, mode: 'focus' })`);
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      assert.equal(await shownTitle(), '', 'nothing pops up while paused');
+      assert.equal(await noticeCount(), beforeNotices + 1, 'but it is kept in the notice center');
+      await contents.executeJavaScript(`window.notchAPI.setFeature('resets', false).then(() => window.notchAPI.setFeature('resets', true))`);
+      assert.equal((await contents.executeJavaScript('window.notchAPI.getAppSettings()')).remindersPausedUntil, paused.until, 'other settings writes keep the pause');
+      assert.equal(JSON.parse(fs.readFileSync(path.join(profile, 'app-settings.json'), 'utf8')).remindersPausedUntil, paused.until);
+      assert.deepEqual(await contents.executeJavaScript('window.notchAPI.resumeReminders()'), { ok: true });
+      let summaryTitle = '';
+      for (let attempt = 0; attempt < 20 && !summaryTitle; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        summaryTitle = await shownTitle();
+      }
+      assert.equal(summaryTitle, '暂停期间有 1 条提醒');
+      assert.equal(await noticeCount(), beforeNotices + 1, 'the summary is not another notice');
+      assert.equal((await contents.executeJavaScript('window.notchAPI.getAppSettings()')).remindersPausedUntil, 0);
       assert.deepEqual(errors, []);
       console.log('Production workspace recovery checks passed');
       app.quit();

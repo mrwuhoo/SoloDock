@@ -66,7 +66,7 @@ const {
   normalizeCaptureEntry,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
-const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold } = require('./reminder-rules');
+const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES } = require('./reminder-rules');
 const { createNoticeStore } = require('./notice-store');
 const { createWorklogStore } = require('./worklog-store');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
@@ -855,6 +855,7 @@ ipcMain.handle('settings:set-body', (event, patch) => {
 function enqueueTaskNotification(notification) {
   if (!notification) return 'ignored';
   const now = Date.now();
+  checkReminderPauseExpiry(now);
   for (const [key, seenAt] of recentTaskNotifications) {
     if (now - seenAt > TASK_NOTIFICATION_DEDUPE_MS) recentTaskNotifications.delete(key);
   }
@@ -874,7 +875,7 @@ function enqueueTaskNotification(notification) {
     style: notification.style || presentation.style || 'standard',
   };
 
-  getNoticeStore().add(notification);
+  if (notification.record !== false) getNoticeStore().add(notification);
 
   // 完成记录只收 AI 任务完成（首页时间线的绿点），不收待办、日程、番茄钟与身体提醒。
   if (isAiSource(notification.source)) {
@@ -887,6 +888,9 @@ function enqueueTaskNotification(notification) {
     // 番茄钟专注期间：AI 完成只计数不弹出，专注结束后汇总为一条。
     if (focusHold.hold(notification, now)) return 'held';
   }
+
+  // 暂停提醒：照常记进通知中心，只是不弹出；恢复时汇总成一句。
+  if (getReminderPause().hold(notification, now)) return 'paused';
 
   const last = taskNotificationQueue[taskNotificationQueue.length - 1];
   if (taskNotificationQueue.length < TASK_NOTIFICATION_MAX_QUEUE || !isAiSource(notification.source) || !last || !isAiSource(last.source)) {
@@ -914,6 +918,64 @@ function enqueueTaskNotification(notification) {
   }
   return 'queued';
 }
+
+// ============ 暂停提醒 ============
+// 托盘或通知中心里选时长；暂停状态写进设置文件，重启后继续生效。
+let reminderPause = null;
+let reminderPauseTimer = null;
+
+function getReminderPause() {
+  if (!reminderPause) reminderPause = createReminderPause(readAppSettings().remindersPausedUntil);
+  return reminderPause;
+}
+
+function saveReminderPause() {
+  const next = readAppSettings();
+  next.remindersPausedUntil = getReminderPause().until();
+  saveAppSettings(next);
+}
+
+function scheduleReminderResume() {
+  if (reminderPauseTimer) clearTimeout(reminderPauseTimer);
+  reminderPauseTimer = null;
+  const until = getReminderPause().until();
+  if (!until) return;
+  reminderPauseTimer = setTimeout(() => checkReminderPauseExpiry(), Math.max(1000, until - Date.now() + 250));
+  reminderPauseTimer.unref?.();
+}
+
+function publishReminderPause() {
+  refreshTrayMenu();
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', publicAppSettings());
+}
+
+function pauseReminders(choice) {
+  const until = pauseUntil(choice);
+  if (!until) return { ok: false, error: 'invalid' };
+  getReminderPause().start(until);
+  saveReminderPause();
+  scheduleReminderResume();
+  publishReminderPause();
+  return { ok: true, until };
+}
+
+function resumeReminders() {
+  const summary = getReminderPause().resume();
+  saveReminderPause();
+  scheduleReminderResume();
+  publishReminderPause();
+  if (summary) enqueueTaskNotification(summary);
+  return { ok: true };
+}
+
+// 计时器在休眠期间不走，醒来、弹出新提醒前都再核对一次。
+function checkReminderPauseExpiry(now = Date.now()) {
+  const pause = getReminderPause();
+  if (pause.until() && !pause.paused(now)) resumeReminders();
+}
+
+ipcMain.handle('reminders:pause', (event, choice) => pauseReminders(String(choice || '')));
+ipcMain.handle('reminders:resume', () => resumeReminders());
 
 function clearTodoReminderTimer() {
   if (todoReminderTimer) clearTimeout(todoReminderTimer);
@@ -1593,6 +1655,7 @@ function readAppSettings() {
     shortcut: isValidPanelShortcut(stored.shortcut) ? stored.shortcut : 'Space',
     captureShortcut: normalizeCaptureShortcut(stored.captureShortcut),
     defaultTab: normalizeDefaultTabPreference(stored.defaultTab, features),
+    remindersPausedUntil: Number(stored.remindersPausedUntil) > 0 ? Number(stored.remindersPausedUntil) : 0,
   };
 }
 
@@ -1602,6 +1665,7 @@ function publicAppSettings() {
     autoLaunch: isAutoLaunchEnabled(),
     body: readStoredBodySettings(),
     captureShortcutRegistered: captureShortcutRegistered,
+    remindersPausedUntil: getReminderPause().until(),
     version: app.getVersion(),
   };
 }
@@ -2010,90 +2074,26 @@ async function addFramePhotos() {
   return { ok: true, canceled: false, ...frameStore.importFiles(files), limit: FRAME_MAX_PHOTOS };
 }
 
+// 托盘只留最常用的入口；其余都在面板的「设置」里。
 function refreshTrayMenu() {
   if (!tray) return;
-  const autoLaunch = isAutoLaunchEnabled();
   const settings = readAppSettings();
-  const featureLabels = { todo: '待办', notes: '笔记', links: '链接', recordings: '录制', credentials: '密钥', clip: '剪贴板', resets: '重置资讯', time: '时间', life: '生活' };
+  const pause = getReminderPause();
+  const pauseItem = pause.paused()
+    ? { label: `恢复提醒 · 已暂停，${pauseResumeLabel(pause.until())}`, click: () => resumeReminders() }
+    : { label: '暂停提醒', submenu: PAUSE_CHOICES.map((choice) => ({ label: choice.label, click: () => pauseReminders(choice.id) })) };
   const menu = Menu.buildFromTemplate([
+    { label: '展开面板', click: () => openRendererPanel('app:expand') },
     {
-      label: 'API 配置…',
-      click: () => openRendererPanel('app:open-api-settings'),
-    },
-    {
-      label: '添加相框照片…',
-      click: async () => {
-        const result = await addFramePhotos();
-        if (result.added && result.added.length && mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('frame:changed', { added: result.added });
-        }
-      },
-    },
-    {
-      label: '显示功能',
-      submenu: Object.entries(featureLabels).map(([id, label]) => ({
-        label,
-        type: 'checkbox',
-        checked: settings.features[id] !== false,
-        click: (item) => {
-          const next = readAppSettings();
-          next.features[id] = item.checked;
-          saveAppSettings(next);
-          applyAppSettings();
-          refreshTrayMenu();
-        },
-      })),
-    },
-    {
-      label: `设置快捷键…  当前：${settings.shortcut}`,
-      click: () => openRendererPanel('app:record-shortcut'),
-    },
-    {
-      label: settings.captureShortcut ? `随手记  ${settings.captureShortcut}` : '随手记',
+      label: '随手记',
+      ...(settings.captureShortcut ? { accelerator: settings.captureShortcut, registerAccelerator: false } : {}),
       click: () => showCaptureWindow(),
     },
-    {
-      label: '数据文件夹',
-      submenu: [
-        { label: '打开文件夹', click: () => shell.openPath(workspaceRoot()) },
-        { label: '更换文件夹…', click: chooseWorkspaceFolder },
-      ],
-    },
+    pauseItem,
     { type: 'separator' },
-    {
-      label: '开机自动启动',
-      type: 'checkbox',
-      checked: autoLaunch,
-      click: (item) => {
-        setAutoLaunch(item.checked);
-        refreshTrayMenu();
-      },
-    },
+    { label: '设置…', click: () => openRendererPanel('app:open-settings') },
     { type: 'separator' },
-    {
-      label: '关于',
-      click: () => {
-        dialog.showMessageBox({
-          type: 'info',
-          title: '关于 SoloDock',
-          message: 'SoloDock',
-          detail:
-            `版本 ${app.getVersion()}\n\n一人公司的桌面效率工作台。工作区数据默认保存在本机；账号密码与 API Key 由系统安全存储加密。\n\n基于 xiaopu-ai/TO-DO-Panel 开发\nMIT License`,
-          buttons: ['查看 SoloDock 项目', '好'],
-          defaultId: 1,
-          cancelId: 1,
-          noLink: true,
-        }).then(({ response }) => {
-          if (response === 0) shell.openExternal('https://github.com/mrwuhoo/SoloDock');
-        });
-      },
-    },
-    { type: 'separator' },
-    {
-      label: '退出',
-      accelerator: 'CommandOrControl+Q',
-      click: () => app.quit(),
-    },
+    { label: '退出 SoloDock', accelerator: 'CommandOrControl+Q', click: () => app.quit() },
   ]);
   tray.setContextMenu(menu);
 }
@@ -4162,6 +4162,7 @@ app.whenReady().then(() => {
   ensureClipImagesDir();
   ensureRecordingsDir();
   applyAppSettings();
+  scheduleReminderResume();
   startTaskNotificationServer();
   // 锁屏或休眠时锁上密钥，并清掉仍在剪贴板上的密码。
   for (const eventName of ['lock-screen', 'suspend']) {
@@ -4172,6 +4173,7 @@ app.whenReady().then(() => {
       if (worklogStore) worklogStore.pause();
     });
   }
+  for (const eventName of ['resume', 'unlock-screen']) powerMonitor.on(eventName, () => checkReminderPauseExpiry());
   startBodyTracking();
   // 随手记窗口提前建好并隐藏，按下快捷键立刻出现。
   setTimeout(() => {

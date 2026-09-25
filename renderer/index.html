@@ -130,7 +130,7 @@
               </button>
               <!-- 通知中心：找回错过的提醒；琥珀徽章表示有「需要你确认」的事。 -->
               <button class="notice-bell" id="notice-bell" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="notice-center" aria-label="通知中心">
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 16.5V11a5 5 0 0 1 10 0v5.5l1.5 1.5h-13Z"/><path d="M10.2 20.2a2 2 0 0 0 3.6 0"/></svg>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 16.5V11a5 5 0 0 1 10 0v5.5l1.5 1.5h-13Z"/><path d="M10.2 20.2a2 2 0 0 0 3.6 0"/><path class="notice-bell-slash" d="M4.5 4.5 19.5 19.5"/></svg>
                 <span class="notice-badge" id="notice-badge" hidden></span>
               </button>
             </div>
@@ -143,8 +143,17 @@
               <button class="notice-center-link" id="notice-read-all" type="button">全部已读</button>
               <button class="notice-center-link" id="notice-clear" type="button">清空</button>
             </header>
+            <!-- 暂停提醒：弹出提醒先不弹，照常记在这里；到点或点「现在恢复」后汇总成一句。 -->
+            <div class="notice-pause" id="notice-pause" hidden>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5Z"/></svg>
+              <span><b>提醒已暂停</b><small id="notice-pause-text">15:30 恢复</small></span>
+              <button type="button" id="notice-pause-resume">现在恢复</button>
+            </div>
             <div class="notice-center-list" id="notice-center-list"></div>
-            <footer class="notice-center-foot">保留 7 天 · 错过的提醒都在这里</footer>
+            <footer class="notice-center-foot">
+              <span>保留 7 天 · 错过的提醒都在这里</span>
+              <span class="notice-pause-choices" id="notice-pause-choices">暂停提醒<button type="button" data-pause="1h">1 小时</button><button type="button" data-pause="today">今天</button></span>
+            </footer>
           </section>
 
         </header>

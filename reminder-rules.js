@@ -199,7 +199,78 @@ function createFocusHold() {
   };
 }
 
+// ============ 暂停提醒 ============
+// 开会、录课或想安静一会儿时，所有弹出提醒先不弹，照常记进通知中心；恢复时汇总成一句。
+// 「今天不再提醒」到次日 04:00（和随手记、笔记的「一天」同一条分界线）。
+const PAUSE_CHOICES = [
+  { id: '30m', label: '30 分钟' },
+  { id: '1h', label: '1 小时' },
+  { id: '2h', label: '2 小时' },
+  { id: 'today', label: '今天不再提醒' },
+];
+const DAY_BOUNDARY_HOUR = 4;
+
+function pauseUntil(choice, now = Date.now()) {
+  const minutes = { '30m': 30, '1h': 60, '2h': 120 }[choice];
+  if (minutes) return now + minutes * 60_000;
+  if (choice !== 'today') return 0;
+  const end = new Date(now);
+  if (end.getHours() >= DAY_BOUNDARY_HOUR) end.setDate(end.getDate() + 1);
+  end.setHours(DAY_BOUNDARY_HOUR, 0, 0, 0);
+  return end.getTime();
+}
+
+// 「15:30 恢复」/「明天 04:00 恢复」
+function pauseResumeLabel(until, now = Date.now()) {
+  const date = new Date(until);
+  const clock = `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+  const sameDay = new Date(now).toDateString() === date.toDateString();
+  return `${sameDay ? '' : '明天 '}${clock} 恢复`;
+}
+
+function createReminderPause(initialUntil = 0, now = Date.now()) {
+  let until = Number(initialUntil) > now ? Number(initialUntil) : 0;
+  let missed = 0;
+  return {
+    until: () => until,
+    paused: (at = Date.now()) => until > at,
+    start(nextUntil, at = Date.now()) {
+      if (!(until > at)) missed = 0;
+      until = Number(nextUntil) > at ? Number(nextUntil) : 0;
+      return until;
+    },
+    // 返回 true 表示暂停中：已记进通知中心，不要弹出。
+    hold(notification, at = Date.now()) {
+      if (!(until > at) || !notification) return false;
+      missed += 1;
+      return true;
+    },
+    // 到点或手动恢复：返回要弹出的一条汇总（没错过就是 null）。
+    resume(at = Date.now()) {
+      const count = missed;
+      until = 0;
+      missed = 0;
+      if (!count) return null;
+      return {
+        eventId: `pause-summary-${at}`,
+        taskId: `pause-summary-${at}`,
+        source: 'info',
+        project: '',
+        title: `暂停期间有 ${count} 条提醒`,
+        detail: '都在通知中心里，点顶栏的铃铛查看',
+        completedAt: at,
+        record: false,
+      };
+    },
+    missed: () => missed,
+  };
+}
+
 module.exports = {
+  createReminderPause,
+  pauseUntil,
+  pauseResumeLabel,
+  PAUSE_CHOICES,
   createFocusHold,
   BREAK_IDLE_MS,
   ACTIVE_IDLE_MS,

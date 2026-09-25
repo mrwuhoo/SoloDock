@@ -46,6 +46,7 @@
   let items = [];
   let summary = { unread: 0, needsYou: 0 };
   let highlight = '';
+  let pausedUntil = 0;
 
   const pad = (value) => String(value).padStart(2, '0');
   function timeLabel(at, now = Date.now()) {
@@ -64,9 +65,10 @@
     badge.textContent = count > 99 ? '99+' : String(count);
     badge.dataset.tone = summary.needsYou ? 'needs' : 'unread';
     bell.dataset.tone = summary.needsYou ? 'needs' : '';
-    bell.setAttribute('aria-label', summary.needsYou
+    const label = summary.needsYou
       ? `通知中心：${summary.needsYou} 件需要你处理`
-      : summary.unread ? `通知中心：${summary.unread} 条未读` : '通知中心');
+      : summary.unread ? `通知中心：${summary.unread} 条未读` : '通知中心';
+    bell.setAttribute('aria-label', pausedUntil > Date.now() ? `${label}（提醒已暂停）` : label);
   }
 
   function row(item) {
@@ -232,6 +234,48 @@
     if (!event.detail?.expanded) close();
   });
 
+  // ---------------- 暂停提醒 ----------------
+  const pauseStrip = get('notice-pause');
+  const pauseChoices = get('notice-pause-choices');
+  let pauseTimer = null;
+  function resumeLabel(until) {
+    const date = new Date(until);
+    const clock = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return `${new Date().toDateString() === date.toDateString() ? '' : '明天 '}${clock} 恢复`;
+  }
+  function renderPause() {
+    const paused = pausedUntil > Date.now();
+    pauseStrip.hidden = !paused;
+    pauseChoices.hidden = paused;
+    bell.dataset.paused = String(paused);
+    renderBadge();
+    if (paused) get('notice-pause-text').textContent = resumeLabel(pausedUntil);
+    clearTimeout(pauseTimer);
+    // 主进程到点会广播；这里兜底，免得页面一直显示「已暂停」。
+    if (paused) pauseTimer = setTimeout(renderPause, Math.min(pausedUntil - Date.now() + 500, 2 ** 31 - 1));
+  }
+  function applyPause(settings) {
+    pausedUntil = Number(settings?.remindersPausedUntil) || 0;
+    renderPause();
+  }
+  pauseChoices.addEventListener('click', async (event) => {
+    const button = event.target.closest('[data-pause]');
+    if (!button) return;
+    const result = await api().pauseReminders?.(button.dataset.pause)?.catch?.(() => null);
+    if (!result?.ok) { toast('暂停没有生效，请再试一次'); return; }
+    pausedUntil = result.until;
+    renderPause();
+    toast(`提醒已暂停，${resumeLabel(result.until)}`);
+  });
+  get('notice-pause-resume').addEventListener('click', async () => {
+    const result = await api().resumeReminders?.()?.catch?.(() => null);
+    if (!result?.ok) return;
+    pausedUntil = 0;
+    renderPause();
+  });
+  api().onAppSettingsChanged?.(applyPause);
+  Promise.resolve(api().getAppSettings?.()).then(applyPause).catch(() => {});
+
   api().onNoticesChanged?.((next) => {
     summary = next || summary;
     renderBadge();
@@ -239,5 +283,5 @@
   });
   load();
 
-  window.NotchNoticeCenter = { open, close, load, state: () => ({ items: items.map((item) => ({ ...item })), summary: { ...summary } }) };
+  window.NotchNoticeCenter = { open, close, load, state: () => ({ items: items.map((item) => ({ ...item })), summary: { ...summary }, pausedUntil }) };
 })();

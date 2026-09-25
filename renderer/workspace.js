@@ -1048,12 +1048,6 @@
       if (event.target === transcriptionSettingsBackdrop) closeTranscriptionSettings();
     });
   }
-  if (window.notchAPI && typeof window.notchAPI.onOpenApiSettings === 'function') {
-    window.notchAPI.onOpenApiSettings(async () => {
-      if (!document.getElementById('app')?.classList.contains('expanded')) await setMode(true);
-      openTranscriptionSettings();
-    });
-  }
   settingsFeatureList?.addEventListener('change', async (event) => {
     const input = event.target.closest('input[data-settings-feature]');
     if (!input || !window.notchAPI?.setFeature) return;

@@ -1324,7 +1324,22 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
 .notice-done { color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
 .notice-empty { display: grid; gap: 6px; padding: 42px 24px; color: var(--sd-text-3); font-size: var(--sd-fs-caption); text-align: center; }
 .notice-empty b { color: var(--sd-text-2); font-size: var(--sd-fs-secondary); }
-.notice-center-foot { padding: 8px 16px 10px; border-top: 1px solid var(--sd-divider); color: var(--sd-text-4); font-size: var(--sd-fs-caption); text-align: center; }
+.notice-center-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px 10px 16px; border-top: 1px solid var(--sd-divider); color: var(--sd-text-4); font-size: var(--sd-fs-caption); }
+.notice-pause-choices { display: inline-flex; align-items: center; gap: 2px; color: var(--sd-text-3); white-space: nowrap; }
+.notice-pause-choices[hidden] { display: none; }
+.notice-pause-choices button { height: 24px; margin-left: 4px; padding: 0 8px; border: 0; border-radius: var(--sd-radius-pill); background: rgba(23, 50, 80, 0.06); color: var(--sd-text-2); font: var(--sd-fw-medium) var(--sd-fs-caption) var(--sd-font); cursor: pointer; }
+.notice-pause-choices button:hover { background: var(--sd-accent-soft); color: var(--sd-accent-strong); }
+.notice-pause { display: flex; align-items: center; gap: 10px; margin: 8px 12px 2px; padding: 8px 8px 8px 12px; border-radius: var(--sd-radius-control); background: var(--sd-accent-tint); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--sd-accent) 16%, transparent); }
+.notice-pause[hidden] { display: none; }
+.notice-pause > svg { flex: none; width: 16px; height: 16px; fill: none; stroke: var(--sd-accent-strong); stroke-width: 1.8; stroke-linejoin: round; }
+.notice-pause > span { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 8px; }
+.notice-pause b { color: var(--sd-text-1); font-size: var(--sd-fs-secondary); font-weight: var(--sd-fw-semibold); }
+.notice-pause small { color: var(--sd-text-3); font-size: var(--sd-fs-caption); font-variant-numeric: tabular-nums; }
+.notice-pause button { flex: none; height: 26px; padding: 0 10px; border: 0; border-radius: var(--sd-radius-pill); background: var(--sd-accent); color: #fff; font: var(--sd-fw-medium) var(--sd-fs-caption) var(--sd-font); cursor: pointer; }
+.notice-pause button:hover { background: var(--sd-accent-strong); }
+.notice-bell .notice-bell-slash { display: none; }
+.notice-bell[data-paused='true'] .notice-bell-slash { display: inline; }
+.notice-bell[data-paused='true'] { color: var(--sd-text-3); }
 
 /* 空间不够时（窄屏），页签只显示图标，名称留给无障碍标签。 */
 .tabs.is-compact .tab { padding: 0 9px; }

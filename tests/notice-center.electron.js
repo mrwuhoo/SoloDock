@@ -93,6 +93,36 @@ app.whenReady().then(async () => {
   assert.deepEqual(result.highlight, ['n2']);
   assert.deepEqual(result.cleared, ['没有错过的提醒', true]);
 
+  // Pausing reminders from the footer: the strip shows when they resume, the bell is muted, 现在恢复 ends it.
+  const pause = await win.webContents.executeJavaScript(`(async () => {
+    const settle = (ms = 80) => new Promise((resolve) => setTimeout(resolve, ms));
+    const $ = (id) => document.getElementById(id);
+    const visible = (el) => !el.hidden && getComputedStyle(el).display !== 'none';
+    window.__pause = [];
+    window.notchAPI.pauseReminders = async (choice) => { window.__pause.push(choice); return { ok: true, until: new Date(new Date().setHours(23, 59, 0, 0)).getTime() }; };
+    window.notchAPI.resumeReminders = async () => { window.__pause.push('resume'); return { ok: true }; };
+    if ($('notice-center').hidden) $('notice-bell').click();
+    await settle();
+    const out = { before: [visible($('notice-pause')), visible($('notice-pause-choices')), $('notice-bell').dataset.paused] };
+    document.querySelector('#notice-pause-choices [data-pause="1h"]').click();
+    await settle();
+    out.paused = [visible($('notice-pause')), visible($('notice-pause-choices')), $('notice-pause-text').textContent, $('notice-bell').dataset.paused, $('notice-bell').getAttribute('aria-label').endsWith('（提醒已暂停）'), getComputedStyle(document.querySelector('.notice-bell-slash')).display, $('status-toast-message').textContent];
+    $('notice-pause-resume').click();
+    await settle();
+    out.resumed = [visible($('notice-pause')), $('notice-bell').dataset.paused, window.__pause.slice(), getComputedStyle(document.querySelector('.notice-bell-slash')).display];
+    // A pause started from the tray arrives as a settings broadcast.
+    window.__handlers.onAppSettingsChanged.forEach((callback) => callback({ remindersPausedUntil: Date.now() + 3600000 }));
+    await settle();
+    out.broadcast = window.NotchNoticeCenter.state().pausedUntil > Date.now() && visible($('notice-pause'));
+    window.__handlers.onAppSettingsChanged.forEach((callback) => callback({ remindersPausedUntil: 0 }));
+    await settle();
+    return out;
+  })()`);
+  assert.deepEqual(pause.before, [false, true, 'false']);
+  assert.deepEqual(pause.paused, [true, false, '23:59 恢复', 'true', true, 'inline', '提醒已暂停，23:59 恢复']);
+  assert.deepEqual(pause.resumed, [false, 'false', ['1h', 'resume'], 'none']);
+  assert.equal(pause.broadcast, true);
+
   if (process.env.SOLODOCK_NOTICE_SCREENSHOT_DIR) {
     await win.webContents.executeJavaScript(`(async () => {
       const now = Date.now();

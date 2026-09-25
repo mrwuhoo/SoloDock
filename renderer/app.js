@@ -769,7 +769,12 @@ function openShortcutRecorder(event) {
   shortcutRecorderValue.textContent = '等待输入…';
   requestAnimationFrame(() => shortcutRecorder.focus({ preventScroll: true }));
 }
-window.notchAPI?.onRecordShortcut?.(() => openShortcutRecorder());
+// 托盘菜单：「展开面板」「设置…」
+window.notchAPI?.onExpandPanel?.(() => setMode(true));
+window.notchAPI?.onOpenSettings?.(async () => {
+  await setMode(true);
+  setActiveTab('settings');
+});
 document.addEventListener('notch:record-shortcut', openShortcutRecorder);
 
 if (collapseBtn) {

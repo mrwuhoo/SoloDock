@@ -130,3 +130,33 @@ test('AI completions during a focus session are held, then delivered as one or s
   hold.setFocus({ running: true, mode: 'break', endsAt: now + 5 * MIN });
   assert.equal(hold.hold(ai('d', 'y'), now), false, 'a break is not focus');
 });
+
+test('pausing reminders keeps them out of sight, counts them, and sums them up on resume', () => {
+  const { createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES } = require('../reminder-rules');
+  const at = (text) => new Date(text).getTime();
+  const now = at('2026-09-25T14:30:00');
+  assert.deepEqual(PAUSE_CHOICES.map((choice) => choice.id), ['30m', '1h', '2h', 'today']);
+  assert.equal(pauseUntil('1h', now), at('2026-09-25T15:30:00'));
+  assert.equal(pauseUntil('today', now), at('2026-09-26T04:00:00'));
+  assert.equal(pauseUntil('today', at('2026-09-26T01:30:00')), at('2026-09-26T04:00:00'), 'after midnight "today" still ends at 04:00');
+  assert.equal(pauseUntil('forever', now), 0);
+  assert.equal(pauseResumeLabel(at('2026-09-25T15:30:00'), now), '15:30 恢复');
+  assert.equal(pauseResumeLabel(at('2026-09-26T04:00:00'), now), '明天 04:00 恢复');
+
+  const pause = createReminderPause(0, now);
+  assert.equal(pause.paused(now), false);
+  assert.equal(pause.hold({ source: 'todo' }, now), false, 'not paused: pop up as usual');
+  pause.start(pauseUntil('30m', now), now);
+  assert.equal(pause.paused(now + 60_000), true);
+  assert.equal(pause.hold({ source: 'todo' }, now + 60_000), true);
+  assert.equal(pause.hold({ source: 'sit' }, now + 120_000), true);
+  pause.start(pauseUntil('2h', now), now + 180_000);
+  assert.equal(pause.missed(), 2, 'extending a pause keeps the count');
+  const summary = pause.resume(now + 200_000);
+  assert.equal(summary.title, '暂停期间有 2 条提醒');
+  assert.equal(summary.record, false, 'the summary itself is not another notice');
+  assert.equal(pause.paused(now + 200_000), false);
+  assert.equal(pause.resume(now + 300_000), null, 'nothing missed, nothing to say');
+  assert.equal(createReminderPause(now - 1, now).paused(now), false, 'an expired stored pause is ignored');
+  assert.equal(createReminderPause(now + 60_000, now).until(), now + 60_000, 'a stored pause survives a restart');
+});
