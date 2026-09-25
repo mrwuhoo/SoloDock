@@ -3870,8 +3870,9 @@ ipcMain.handle('clipboard:paste', async (event, entry) => {
 });
 
 function ensureFirstRunAutoLaunch() {
-  // 首次运行时默认开启开机自启；之后尊重用户在托盘菜单的选择
-  if (process.platform !== 'darwin') return;
+  // 首次运行时默认开启开机自启；之后尊重用户在托盘菜单的选择。
+  // 只对打包后的应用：源码运行与测试每次用新的数据文件夹，不能把开发用的 Electron 加进登录项。
+  if (process.platform !== 'darwin' || !app.isPackaged) return;
   const marker = path.join(app.getPath('userData'), '.first-run-done');
   if (fs.existsSync(marker)) return;
   try {
