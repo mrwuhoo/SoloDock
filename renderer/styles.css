@@ -38,12 +38,8 @@
   --clip-text: rgba(255, 255, 255, 0.18);   /* 文字：中性微亮，几乎无色 */
   --clip-url: var(--accent-blue);
   --clip-image: var(--accent-orange);
-  --clip-border-text: rgba(255, 255, 255, 0.10);
-  --clip-border-url: rgba(67, 140, 255, 0.22);
-  --clip-border-image: rgba(255, 147, 82, 0.20);
-  --clip-card-h: 152px;
-  --clip-thumb-h: 120px;
-  --clip-meta-h: 30px;
+  --clip-card-h: 222px;
+  --clip-meta-h: 40px;
 
   /* ============ 圆角 ============ */
   --r-notch: 10px;
@@ -2535,92 +2531,23 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   min-height: 0;
   height: 100%;
 }
-
 .clip-panel {
   display: flex;
   flex-direction: column;
   height: 100%;
   min-height: 0;
-  gap: var(--s-2);
+  gap: var(--sd-space-3);
 }
-
-/* — 工具栏 — */
-.clip-toolbar {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: var(--s-1);
-  flex-shrink: 0;
-}
-
-.clip-filter {
-  min-height: 28px;
-  padding: 4px 10px;
-  border-radius: var(--r-pill);
-  background: var(--surface-1);
-  border: 1px solid var(--hairline-soft);
-  color: var(--text-3);
-  font-size: 11px;
-  font-family: var(--font);
-  font-weight: 400;
-  letter-spacing: 0.1px;
-  cursor: pointer;
-  transition:
-    background var(--d-fast) var(--ease),
-    color var(--d-fast) var(--ease),
-    border-color var(--d-fast) var(--ease);
-  -webkit-app-region: no-drag;
-}
-
-.clip-filter:hover {
-  color: var(--text-2);
-}
-
-.clip-filter.active {
-  background: var(--surface-2);
-  border-color: var(--hairline);
-  color: var(--text-1);
-}
-
-.clip-clear-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  background: var(--surface-1);
-  border: 1px solid var(--hairline-soft);
-  border-radius: var(--r-squircle);
-  color: var(--text-3);
-  cursor: pointer;
-  margin-left: auto;
-  transition:
-    background var(--d-fast) var(--ease),
-    color var(--d-fast) var(--ease),
-    transform var(--d-1) var(--ease-out);
-  -webkit-app-region: no-drag;
-}
-
-.clip-clear-btn:hover {
-  background: var(--surface-2);
-  color: var(--p0);
-}
-
-.clip-clear-btn.confirming {
-  background: var(--surface-3);
-  color: var(--p0);
-}
-
-.clip-clear-btn:active {
-  transform: scale(0.86);
-}
-
-.clip-clear-btn svg {
-  width: 13px;
-  height: 13px;
-}
-
+/* — 工具栏：胶囊类型标签（选中白底 + 1.5px 主色描边）+ 右侧圆形「清空」 — */
+.clip-toolbar { display: flex; align-items: center; gap: var(--sd-space-2); flex-shrink: 0; height: 40px; }
+.clip-filter { height: 36px; padding: 0 18px; border: 1.5px solid transparent; border-radius: var(--sd-radius-pill); background: rgba(255, 255, 255, 0.55); box-shadow: inset 0 0 0 1px var(--sd-hairline); color: var(--sd-text-2); font: var(--sd-fw-medium) var(--sd-fs-body) var(--sd-font); cursor: pointer; transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease; -webkit-app-region: no-drag; }
+.clip-filter:hover { background: rgba(255, 255, 255, 0.8); color: var(--sd-text-1); }
+.clip-filter.active { border-color: var(--sd-accent); background: var(--sd-surface-selected); box-shadow: none; color: var(--sd-text-1); }
+.clip-clear-btn { display: grid; place-items: center; width: 34px; height: 34px; margin-left: auto; padding: 0; border: 0; border-radius: 50%; background: var(--sd-surface-card); box-shadow: inset 0 0 0 1px var(--sd-hairline); color: var(--sd-text-3); cursor: pointer; transition: background-color 160ms ease, color 160ms ease, transform 120ms ease; -webkit-app-region: no-drag; }
+.clip-clear-btn:hover { background: var(--sd-surface-selected); color: var(--sd-danger); }
+.clip-clear-btn.confirming { background: var(--sd-danger-soft); color: var(--sd-danger); }
+.clip-clear-btn:active { transform: scale(0.9); }
+.clip-clear-btn svg { width: 15px; height: 15px; }
 /* — 列表（1120px 画布自然排成 5 列，所有卡片与图片参考卡同高） — */
 .clip-list {
   flex: 1;
@@ -2628,29 +2555,24 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   overflow-y: auto;
   overflow-x: hidden;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(196px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   grid-auto-rows: var(--clip-card-h);
-  gap: var(--s-3);
+  gap: var(--sd-space-3);
   align-content: start;
 }
-
 .clip-list::-webkit-scrollbar {
   width: 3px;
 }
-
 .clip-list::-webkit-scrollbar-track {
   background: transparent;
 }
-
 .clip-list::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
   border-radius: 2px;
 }
-
 .clip-list::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
-
 /* — 空态（跨满全部列居中） — */
 .clip-empty {
   grid-column: 1 / -1;
@@ -2658,11 +2580,9 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   align-items: center;
   justify-content: center;
   min-height: 80px;
-  font-size: 12.5px;
-  font-weight: 400;
-  color: var(--text-3);
+  font-size: var(--sd-fs-secondary);
+  color: var(--sd-text-3);
 }
-
 /* — 条目基础 — */
 .clip-item {
   position: relative;
@@ -2670,9 +2590,10 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   align-self: stretch;
   gap: var(--s-2);
   padding: var(--s-2) var(--s-3);
-  border-radius: var(--r-tile);
-  background: var(--surface-1);
-  border: 1px solid var(--clip-border-text);
+  border-radius: var(--sd-radius-card);
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid var(--sd-hairline);
+  box-shadow: 0 1px 2px rgba(23, 50, 80, 0.04);
   height: 100%;
   min-height: 0;
   overflow: hidden;
@@ -2684,7 +2605,6 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
     transform var(--d-1) var(--ease-out);
   -webkit-app-region: no-drag;
 }
-
 .clip-copy-target {
   width: 100%;
   height: 100%;
@@ -2699,63 +2619,47 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   text-align: left;
   cursor: pointer;
 }
-
 .clip-item-text .clip-copy-target,
 .clip-item-image .clip-copy-target {
   flex-direction: column;
 }
-
 .clip-item-text .clip-copy-target {
   gap: 0;
 }
-
-.clip-item.clip-type-url {
-  border-color: var(--clip-border-url);
-}
-
-.clip-item.clip-type-image {
-  border-color: var(--clip-border-image);
-}
-
 .clip-item:hover {
-  background: var(--surface-2);
+  background: rgba(255, 255, 255, 0.86);
 }
-
 .clip-item:active {
   transform: scale(0.99);
 }
-
-/* “已复制”反馈：卡片短暂提亮，不打断类型描边。 */
+/* “已复制”反馈：卡片短暂提亮。 */
 .clip-item.copied {
-  background: var(--surface-3);
+  background: var(--sd-accent-tint);
   box-shadow: none;
   transition:
     background var(--d-base) var(--ease),
     transform var(--d-1) var(--ease-out);
 }
-
 /* — 文字条目 — */
 .clip-item-text {
   flex-direction: column;
   padding: 0;
 }
-
 .clip-item-text .clip-copy-target {
   flex: none;
   padding: 0;
   border-radius: inherit;
 }
-
 .clip-text {
   flex: 1;
   width: 100%;
   min-height: 0;
   margin: 0;
-  padding: var(--s-3) var(--s-4);
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--text-1);
-  line-height: 1.6;
+  padding: 16px 18px 0;
+  font-size: var(--sd-fs-body);
+  font-weight: var(--sd-fw-regular);
+  color: var(--sd-text-1);
+  line-height: 1.65;
   display: -webkit-box;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
@@ -2766,7 +2670,6 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   -webkit-user-select: text;
   pointer-events: auto;
 }
-
 /* — 图片条目（卡片式：缩略图占满列宽，元信息在下方） — */
 .clip-item-image {
   flex-direction: column;
@@ -2775,34 +2678,31 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   gap: 0;
   overflow: hidden;
 }
-
 /* 图片卡片内：thumb-wrap 上方，meta 下方 */
 .clip-item-image .clip-thumb-wrap {
-  flex-shrink: 0;
+  position: absolute;
+  inset: 0;
   width: 100%;
-  height: var(--clip-thumb-h);
+  height: 100%;
   border-radius: 0;
   overflow: hidden;
-  background: var(--surface-2);
+  background: var(--sd-surface-inset);
   display: flex;
   align-items: center;
   justify-content: center;
 }
-
 .clip-thumb {
   width: 100%;
   height: 100%;
   object-fit: cover;
   pointer-events: none;
 }
-
 .clip-thumb-placeholder {
-  font-size: 11px;
-  color: var(--text-4);
+  font-size: var(--sd-fs-caption);
+  color: var(--sd-text-4);
   text-align: center;
   pointer-events: none;
 }
-
 /* — 时间行 — */
 .clip-meta {
   width: 100%;
@@ -2811,32 +2711,38 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   flex-direction: row;
   align-items: center;
   flex: 0 0 var(--clip-meta-h);
-  margin-top: 0;
-  padding: 0 var(--s-4);
+  margin-top: auto;
+  padding: 0 18px 4px;
 }
-
 .clip-time {
-  font-size: 10.5px;
-  font-weight: 400;
-  color: var(--text-3);
+  font-size: var(--sd-fs-caption);
+  color: var(--sd-text-3);
   font-variant-numeric: tabular-nums;
 }
-
+.clip-item-image .clip-meta {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(transparent, rgba(23, 50, 80, 0.38));
+}
+.clip-item-image .clip-time { color: rgba(255, 255, 255, 0.92); }
 /* — 浮出操作按钮（收藏 / 删除） — */
 .clip-fav-btn,
 .clip-del-btn {
   position: absolute;
-  top: var(--s-2);
-  width: 24px;
-  height: 24px;
+  bottom: 10px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  background: var(--tooltip-bg);
-  border: 1px solid var(--hairline);
-  border-radius: 50%;
-  color: var(--text-2);
+  background: rgba(255, 255, 255, 0.9);
+  border: 0;
+  border-radius: var(--sd-radius-small);
+  box-shadow: 0 1px 3px rgba(23, 50, 80, 0.12);
+  color: var(--sd-text-2);
   cursor: pointer;
   opacity: 0;
   transition:
@@ -2845,44 +2751,41 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
     transform var(--d-1) var(--ease-out);
   -webkit-app-region: no-drag;
 }
-
 .clip-del-btn {
-  right: var(--s-2);
+  right: 12px;
 }
-
 .clip-fav-btn {
-  right: 28px;
+  right: 44px;
 }
-
 .clip-item:hover .clip-fav-btn,
 .clip-item:hover .clip-del-btn,
 .clip-item:focus-within .clip-fav-btn,
 .clip-item:focus-within .clip-del-btn {
   opacity: 1;
 }
-
 .clip-fav-btn.faved {
   opacity: 1;
-  color: var(--text-1);
+  color: var(--sd-cat-6);
 }
-
+.clip-item:not(:hover):not(:focus-within) .clip-fav-btn.faved {
+  right: 12px;
+  background: transparent;
+  box-shadow: none;
+}
 .clip-fav-btn:hover {
-  color: var(--text-1);
+  color: var(--sd-text-1);
 }
-
 .clip-del-btn:hover {
-  color: var(--p0);
+  color: var(--sd-danger);
 }
-
 .clip-fav-btn:active,
 .clip-del-btn:active {
   transform: scale(0.8);
 }
-
 .clip-fav-btn svg,
 .clip-del-btn svg {
-  width: 11px;
-  height: 11px;
+  width: 14px;
+  height: 14px;
   pointer-events: none;
 }
 
