@@ -2335,7 +2335,10 @@
     }
     if (action.type === 'copy') {
       const copied = await window.notchAPI.copyCredential(row.dataset.id, action.field).catch(() => false);
-      if (credentialsNote) credentialsNote.textContent = copied ? `${copyField === 'password' ? '密码' : '账号'}已复制` : '复制失败';
+      if (credentialsNote) {
+        credentialsNote.textContent = !copied ? '复制失败'
+          : copyField === 'password' ? '密码已复制 · 不进剪贴板历史，60 秒后自动清除' : '账号已复制';
+      }
       return;
     }
     if (action.type === 'edit') {

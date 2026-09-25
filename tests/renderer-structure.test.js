@@ -111,3 +111,11 @@ test('tabs sit in two groups on either side of the notch, ordered by weight', ()
   assert.deepEqual(ids(secondary), ['recordings', 'resets', 'settings']);
   assert.doesNotMatch(appJs, /is-split|tab-split-start/);
 });
+
+test('Electron 44 clipboard reads are awaited and vault copies are marked concealed', () => {
+  // clipboard.readText() returns a Promise in Electron 44; wrapping it in String() yielded "[object Promise]".
+  assert.doesNotMatch(mainJs, /String\(clipboard\.readText\(\)/);
+  assert.match(mainJs, /if \(field === 'password'\) await writeSecretToClipboard\(value\)/);
+  assert.match(mainJs, /secretClipboard\.matches\(text\)\) return;/, 'the history poller skips a just-copied password');
+  assert.match(mainJs, /powerMonitor\.on\(eventName, \(\) => \{ void clearSecretFromClipboard\(\); \}\)/);
+});

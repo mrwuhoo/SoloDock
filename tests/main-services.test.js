@@ -28,6 +28,8 @@ const {
   hoverSpacePollingPolicy,
   reduceClipboardObservation,
   createForegroundMediaPermissionCoordinator,
+  concealedClipboardFormats,
+  createSecretClipboardTracker,
 } = require('../main-services');
 
 test('media permission prompts temporarily leave the screen-saver window layer', async () => {
@@ -480,6 +482,48 @@ test('Electron 44 clipboard items preserve concealed content and lazily decode i
     image: null,
   });
   assert.equal(imageReads, 0, '敏感剪贴板不得解码图片内容');
+});
+
+test('vault passwords carry the platform concealed markers, and SoloDock skips markers from other apps', async () => {
+  const mac = concealedClipboardFormats('darwin');
+  assert.deepEqual(mac.map((entry) => entry.format), [
+    'electron application/osclipboard;format="org.nspasteboard.ConcealedType"',
+    'electron application/osclipboard;format="org.nspasteboard.TransientType"',
+  ]);
+  const windows = concealedClipboardFormats('win32');
+  assert.deepEqual(windows.map((entry) => [entry.format.match(/format="(.+)"/)[1], entry.bytes]), [
+    ['ExcludeClipboardContentFromMonitorProcessing', 0],
+    ['CanIncludeInClipboardHistory', 4],
+    ['CanUploadToCloudClipboard', 4],
+  ]);
+  assert.deepEqual(concealedClipboardFormats('linux'), []);
+
+  // What SoloDock writes is recognised by its own history on both platforms.
+  for (const platform of ['darwin', 'win32']) {
+    const types = ['text/plain', ...concealedClipboardFormats(platform).map((entry) => entry.format)];
+    const observation = await readClipboardObservation([{ types, getType: async () => new Blob(['pw']) }]);
+    assert.equal(observation.concealed, true, platform);
+    assert.equal(observation.text, '', 'the secret text is never read');
+  }
+  const transient = await readClipboardObservation([{ types: ['text/plain', 'electron application/osclipboard;format="org.nspasteboard.TransientType"'], getType: async () => new Blob(['x']) }]);
+  assert.equal(transient.concealed, true);
+});
+
+test('the secret tracker matches only the copied value and forgets it', () => {
+  let clock = 1000;
+  const tracker = createSecretClipboardTracker({ now: () => clock });
+  assert.equal(tracker.pending(), false);
+  assert.equal(tracker.matches('hunter2'), false);
+  tracker.remember('hunter2');
+  clock += 1500;
+  assert.equal(tracker.pending(), true);
+  assert.equal(tracker.age(), 1500);
+  assert.equal(tracker.matches('hunter2'), true);
+  assert.equal(tracker.matches('something the user copied later'), false);
+  assert.equal(tracker.matches(''), false);
+  assert.doesNotMatch(JSON.stringify(Object.entries(tracker)), /hunter2/);
+  tracker.forget();
+  assert.equal(tracker.matches('hunter2'), false);
 });
 
 test('Electron 44 clipboard items decode text first and only read image bytes when requested', async () => {

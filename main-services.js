@@ -386,11 +386,56 @@ async function runOwnedOpenDialog(showOpenDialog, owner, options, updateGuard = 
   }
 }
 
+// Markers other apps (password managers) and SoloDock's vault put next to a secret.
+// macOS: nspasteboard.org conventions; Windows: the clipboard-monitor exclusion format.
+const CONCEALED_CLIPBOARD_MARKERS = [
+  'org.nspasteboard.concealedtype',
+  'org.nspasteboard.transienttype',
+  'excludeclipboardcontentfrommonitorprocessing',
+];
+
+// Raw formats written together with a copied vault password, so clipboard managers,
+// Windows clipboard history / cloud sync and SoloDock's own history skip it.
+function concealedClipboardFormats(platform) {
+  const raw = (format) => `electron application/osclipboard;format="${format}"`;
+  if (platform === 'darwin') {
+    return [
+      { format: raw('org.nspasteboard.ConcealedType'), bytes: 0 },
+      { format: raw('org.nspasteboard.TransientType'), bytes: 0 },
+    ];
+  }
+  if (platform === 'win32') {
+    // The two "Can…" formats take a DWORD; 0 means "no".
+    return [
+      { format: raw('ExcludeClipboardContentFromMonitorProcessing'), bytes: 0 },
+      { format: raw('CanIncludeInClipboardHistory'), bytes: 4 },
+      { format: raw('CanUploadToCloudClipboard'), bytes: 4 },
+    ];
+  }
+  return [];
+}
+
+// Remembers only a hash of the secret SoloDock last put on the clipboard, so it can be
+// cleared later without touching whatever the user copied afterwards.
+function createSecretClipboardTracker(options = {}) {
+  const now = typeof options.now === 'function' ? options.now : Date.now;
+  const digest = (value) => crypto.createHash('sha256').update(String(value)).digest('hex');
+  let entry = null;
+  return {
+    remember(value) { entry = { digest: digest(value), at: now() }; },
+    matches(text) { return Boolean(entry && typeof text === 'string' && text && digest(text) === entry.digest); },
+    pending() { return entry !== null; },
+    age() { return entry ? now() - entry.at : Infinity; },
+    forget() { entry = null; },
+  };
+}
+
 async function readClipboardObservation(items, options = {}) {
   const rows = Array.isArray(items) ? items.filter((item) => item && Array.isArray(item.types)) : [];
-  const concealed = rows.some((item) => item.types.some((type) => (
-    String(type || '').toLowerCase().includes('org.nspasteboard.concealedtype')
-  )));
+  const concealed = rows.some((item) => item.types.some((type) => {
+    const name = String(type || '').toLowerCase();
+    return CONCEALED_CLIPBOARD_MARKERS.some((marker) => name.includes(marker));
+  }));
   if (concealed) return { concealed: true, text: '', image: null };
 
   let text = '';
@@ -565,6 +610,8 @@ function framePhotoSize(size, maxEdge) {
 }
 
 module.exports = {
+  concealedClipboardFormats,
+  createSecretClipboardTracker,
   isFramePhotoId,
   framePhotoSize,
   normalizeClaudeRateLimits,

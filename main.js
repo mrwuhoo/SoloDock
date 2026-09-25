@@ -15,6 +15,7 @@ const {
   dialog,
   desktopCapturer,
   ClipboardItem,
+  powerMonitor,
 } = require('electron');
 const WebSocket = require('ws');
 const path = require('path');
@@ -56,6 +57,8 @@ const {
   updateDefaultTabPreference,
   createForegroundMediaPermissionCoordinator,
   normalizeClaudeRateLimits,
+  concealedClipboardFormats,
+  createSecretClipboardTracker,
 } = require('./main-services');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
 
@@ -2435,19 +2438,48 @@ ipcMain.handle('credentials:copy', async (event, payload) => {
   const item = readCredentialsVault().find((row) => row.id === id);
   if (!item) return false;
   const value = item[field];
-  await clipboard.writeText(value);
-  if (field === 'password') {
-    setTimeout(() => {
-      void clipboard.readText()
-        .then((currentValue) => {
-          if (currentValue === value) return clipboard.clear();
-          return undefined;
-        })
-        .catch(() => {});
-    }, 60_000).unref?.();
-  }
+  if (field === 'password') await writeSecretToClipboard(value);
+  else await clipboard.writeText(value);
   return true;
 });
+
+// ============ 密码复制：机密标记 + 自动清除 ============
+// 复制的密码带上机密标记（剪贴板管理器、Windows 剪贴板历史与云同步、SoloDock 自己的历史都会跳过），
+// 60 秒后、锁屏或休眠时、退出前，若剪贴板仍是这段密码就清除；只记哈希，不保留明文。
+const SECRET_CLIPBOARD_CLEAR_MS = 60_000;
+const secretClipboard = createSecretClipboardTracker();
+let secretClipboardTimer = null;
+
+async function writeSecretToClipboard(value) {
+  const entry = { 'text/plain': value };
+  for (const { format, bytes } of concealedClipboardFormats(process.platform)) {
+    entry[format] = new Blob([Buffer.alloc(bytes)]);
+  }
+  try {
+    await clipboard.write([new ClipboardItem(entry)]);
+  } catch (error) {
+    await clipboard.writeText(value);
+  }
+  secretClipboard.remember(value);
+  if (secretClipboardTimer) clearTimeout(secretClipboardTimer);
+  secretClipboardTimer = setTimeout(() => { void clearSecretFromClipboard(); }, SECRET_CLIPBOARD_CLEAR_MS);
+  secretClipboardTimer.unref?.();
+}
+
+async function clearSecretFromClipboard() {
+  if (secretClipboardTimer) clearTimeout(secretClipboardTimer);
+  secretClipboardTimer = null;
+  if (!secretClipboard.pending()) return false;
+  let cleared = false;
+  try {
+    if (secretClipboard.matches(await clipboard.readText())) {
+      clipboard.clear();
+      cleared = true;
+    }
+  } catch (error) {}
+  secretClipboard.forget();
+  return cleared;
+}
 
 // ============ 百炼实时语音转写 ============
 function getTranscriptionSettingsPath() {
@@ -3019,6 +3051,8 @@ async function pollClipboard() {
 
     // 优先读文字
     const text = observation.text;
+    // 机密标记写入失败时的兜底：SoloDock 刚复制的密码同样不记录。
+    if (text && secretClipboard.matches(text)) return;
     if (text) {
       const decision = reduceClipboardObservation(clipObservationState, { text });
       clipObservationState = decision.state;
@@ -3271,7 +3305,16 @@ function pasteToPreviousApp(target) {
 
 ipcMain.handle('clipboard:write', (event, entry) => writeClipboardEntry(entry));
 // 提示词库「填好后复制」时读取 {剪贴板}：只在用户点击时调用，只返回纯文字，并限制长度。
-ipcMain.handle('clipboard:read-text', () => String(clipboard.readText() || '').slice(0, 20000));
+// 提示词的「{剪贴板}」变量：Electron 44 的剪贴板读取是异步的；机密内容与刚复制的密码一律返回空。
+ipcMain.handle('clipboard:read-text', async () => {
+  try {
+    const observation = await readClipboardObservation(await clipboard.read());
+    if (observation.concealed || secretClipboard.matches(observation.text)) return '';
+    return String(observation.text || '').slice(0, 20000);
+  } catch (error) {
+    return '';
+  }
+});
 
 // 点击历史项后先收起灵动岛，再回到打开面板前的应用执行粘贴。
 // 若系统尚未授予辅助功能权限，内容仍保留在系统剪贴板作为可靠降级。
@@ -3337,6 +3380,10 @@ app.whenReady().then(() => {
   ensureRecordingsDir();
   applyAppSettings();
   startTaskNotificationServer();
+  // 锁屏或休眠时清掉仍在剪贴板上的密码。
+  for (const eventName of ['lock-screen', 'suspend']) {
+    powerMonitor.on(eventName, () => { void clearSecretFromClipboard(); });
+  }
   // 不在启动时索要权限：只有用户在「当前窗口」卡片里点了授权按钮才申请，
   // 那条路径会先调用 desktopCapturer，让 SoloDock 出现在系统的录屏权限列表里。
 
@@ -3350,9 +3397,17 @@ app.whenReady().then(() => {
 // 常驻菜单栏应用：所有窗口暂时关闭时仍保持后台运行。
 app.on('window-all-closed', () => {});
 
-app.on('before-quit', () => {
+let secretClipboardCheckedForQuit = false;
+app.on('before-quit', (event) => {
   isQuitting = true;
   hideWhenCollapsed = false;
+  // 退出前清掉仍在剪贴板上的密码；最多等 500ms，不拖慢退出。
+  if (secretClipboard.pending() && !secretClipboardCheckedForQuit) {
+    secretClipboardCheckedForQuit = true;
+    event.preventDefault();
+    Promise.race([clearSecretFromClipboard(), new Promise((resolve) => setTimeout(resolve, 500))])
+      .finally(() => app.quit());
+  }
 });
 
 app.on('will-quit', () => {

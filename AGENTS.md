@@ -48,6 +48,7 @@
 - 展开态：各页内容区统一 `1240 × 540`；窗口总高为 `76 + 540`，窄屏与矮屏保留 24px 安全距
 - 待办：2 × 2 布局，一次回车新增，颜色为红 / 橙 / 绿 / 蓝。内部存储键仍是 `P0`–`P3`（`notch-todo-data` 结构不可变更），但界面显示名默认「课程 / 自媒体&写作 / Vibe coding / 日常」且用户可改名（存 `notch-todo-category-names-v1`）；截止时间默认当天 23:30，到期前一小时提醒
 - 剪贴板：默认关闭（`DEFAULT_FEATURES.clip = false`），可在菜单栏「显示功能」中启用。历史记录由主进程轮询采集，不再占用任何全局快捷键（见 `clipboardServicePolicy`）
+- 机密内容：带 `org.nspasteboard.ConcealedType` / `TransientType`（macOS）或 `ExcludeClipboardContentFromMonitorProcessing`（Windows）标记的内容一律不记录、不读取文字。密钥页复制密码时用 `writeSecretToClipboard` 写入这些标记（Windows 另写 `CanIncludeInClipboardHistory` / `CanUploadToCloudClipboard` = 0），主进程只保留哈希；60 秒后、锁屏或休眠时、退出前，若剪贴板仍是该密码就清除。Windows 标记尚待实机验证。
 - 链接：只允许公开 http/https；主进程抓取标题时必须阻止本机、内网与不安全重定向
 - 录制：音频写入 `userData/recordings/`，转写与元数据保存在 LocalStorage；可选百炼 Qwen3-ASR 实时转写，API Key 必须经 `safeStorage` 加密或环境变量读取
 - 相框（原镜子）：只显示用户自选的照片，不调用摄像头；v0.2 起摄像头与汽水音乐组件已移除。照片由 `frame-store.js` 存进数据文件夹 `photo-frame/`（`<id>.jpg` 长边 ≤ 1600 + `<id>.thumb.jpg` 320，最多 50 张，id 必须匹配 `photo-[a-z0-9-]`）；说明文字、倒数日、顺序、固定与切换方式在 LocalStorage `notch-frame-v1`。v0.1 的 `mirror-cover.jpg` 首次读取时迁入相册，原文件保留用于回退。移除照片要等撤销提示结束后才删文件。
@@ -86,6 +87,7 @@
 - NEVER 重新引入摄像头或第三方音乐 App 控制（v0.2 已移除）
 - NEVER 在用户未主动点击时启动麦克风；结束录音或退出应用时必须释放音频 track
 - NEVER 把剪贴板图片 dataURL 存入 LocalStorage
+- NEVER 用 `clipboard.writeText` 复制密码或令牌，必须走 `writeSecretToClipboard`
 - NEVER 提交 `node_modules` 或 `dist`
 - NEVER 在没有用户确认时打包或发布桌面应用
 
