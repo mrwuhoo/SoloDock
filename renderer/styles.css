@@ -4867,6 +4867,155 @@ body {
 }
 .credential-edit-actions button[type='submit'] { background: #f5f5f7; color: #101114; font-weight: 650; }
 
+/* ============ 密钥锁 ============ */
+/* 锁着时只显示居中的解锁卡片；解锁后列表头显示倒计时与「锁定」。 */
+#tab-credentials[data-vault-locked='true'] > .credentials-page { display: none; }
+.vault-lock { position: absolute; inset: 0; display: grid; place-items: center; }
+.vault-lock[hidden] { display: none; }
+.vault-lock-card {
+  width: 380px;
+  max-width: calc(100% - 32px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 30px 28px 22px;
+  border-radius: var(--sd-radius-card);
+  text-align: center;
+}
+.vault-lock-icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin-bottom: 4px;
+  border-radius: 20px;
+  background: var(--sd-accent-soft);
+  color: var(--sd-accent-strong);
+}
+.vault-lock-icon svg,
+.vault-setup-icon svg,
+.vault-lock-now svg { fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.vault-lock-icon svg { width: 30px; height: 30px; }
+.vault-lock-card h2 { margin: 0; color: var(--sd-text-1); font-size: var(--sd-fs-title); font-weight: var(--sd-fw-semibold); }
+.vault-lock-card > p { margin: 0; color: var(--sd-text-3); font-size: var(--sd-fs-secondary); }
+.vault-unlock-system { width: 100%; height: 40px; margin-top: 10px; font-size: var(--sd-fs-body); }
+.vault-unlock-system[hidden],
+.vault-unlock-password[hidden],
+.vault-forgot[hidden] { display: none; }
+.vault-unlock-password { display: flex; gap: 8px; width: 100%; }
+.vault-unlock-password input {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid rgba(23, 50, 80, 0.1);
+  border-radius: var(--sd-radius-control);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--sd-text-1);
+  font: var(--sd-fs-secondary) var(--sd-font);
+}
+.vault-unlock-password input:focus { outline: none; border-color: var(--sd-accent); box-shadow: 0 0 0 3px var(--sd-accent-soft); }
+.vault-unlock-password input:disabled { opacity: 0.6; }
+.vault-lock-card .vault-lock-error { min-height: 18px; color: var(--sd-text-2); font-size: var(--sd-fs-secondary); }
+.vault-lock-card .vault-forgot { color: var(--sd-accent-strong); font-size: var(--sd-fs-caption); }
+
+.vault-setup {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--sd-accent-tint);
+  box-shadow: inset 0 0 0 1px rgba(57, 125, 221, 0.14);
+}
+.vault-setup[hidden] { display: none; }
+.vault-setup-icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 10px;
+  background: var(--sd-accent-soft);
+  color: var(--sd-accent-strong);
+}
+.vault-setup-icon svg { width: 16px; height: 16px; }
+.vault-setup p { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; margin: 0; }
+.vault-setup b { color: var(--sd-text-1); font-size: var(--sd-fs-secondary); font-weight: var(--sd-fw-semibold); }
+.vault-setup span { color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
+
+.vault-auto-lock { color: var(--sd-text-3); font-size: var(--sd-fs-caption); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.vault-auto-lock[hidden],
+.vault-lock-now[hidden] { display: none; }
+.vault-lock-now {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(255, 255, 255, 0.7);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.5);
+  color: var(--sd-text-2);
+  font: var(--sd-fw-medium) 12px var(--sd-font);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.vault-lock-now svg { width: 14px; height: 14px; }
+.vault-lock-now:hover { background: var(--sd-surface-selected); color: var(--sd-accent-strong); }
+.vault-lock-now:focus-visible,
+.credential-reveal:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
+
+/* 密码框默认遮蔽；「显示」10 秒后自动遮蔽。 */
+.credentials-form-card label .credential-secret,
+.credential-item.editing label .credential-secret { position: relative; display: flex; color: inherit; font-size: inherit; }
+.credentials-form-card .credential-secret > input,
+.credential-item.editing .credential-secret > input { flex: 1; min-width: 0; padding-right: 56px; }
+.credential-reveal {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  height: 24px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: var(--sd-radius-small);
+  background: rgba(23, 50, 80, 0.07);
+  color: var(--sd-text-2);
+  font: var(--sd-fw-medium) var(--sd-fs-caption) var(--sd-font);
+  transform: translateY(-50%);
+  cursor: pointer;
+}
+.credential-reveal[aria-pressed='true'] { background: var(--sd-accent-soft); color: var(--sd-accent-strong); }
+
+.settings-vault-card { display: flex; flex-direction: column; gap: 12px; }
+.settings-vault-card .settings-card-heading > small { color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
+.settings-card .settings-vault-hint { color: var(--sd-text-3); font-size: var(--sd-fs-caption); line-height: 1.55; }
+.settings-vault-card .settings-strip-toggle { margin-top: 0; }
+.settings-vault-password { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border-radius: 13px; background: rgba(245, 250, 255, 0.66); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5); }
+.settings-vault-password-head { display: flex; align-items: center; gap: 8px; }
+.settings-vault-password-head > span { display: flex; flex: 1; flex-direction: column; gap: 2px; color: var(--sd-text-1); font-size: var(--sd-fs-secondary); font-weight: var(--sd-fw-semibold); }
+.settings-vault-password-head small { color: var(--sd-text-3); font-size: var(--sd-fs-caption); font-weight: var(--sd-fw-regular); }
+.settings-vault-password-head b { color: var(--sd-text-3); font-size: var(--sd-fs-caption); font-weight: var(--sd-fw-medium); }
+.settings-vault-password-head button[hidden] { display: none; }
+.settings-vault-password-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto auto; gap: 6px; }
+.settings-vault-password-form[hidden] { display: none; }
+.settings-vault-password-form input {
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  border: 1px solid rgba(23, 50, 80, 0.1);
+  border-radius: var(--sd-radius-control);
+  background: rgba(255, 255, 255, 0.72);
+  color: var(--sd-text-1);
+  font: var(--sd-fs-secondary) var(--sd-font);
+}
+.settings-vault-password-form input:focus { outline: none; border-color: var(--sd-accent); box-shadow: 0 0 0 3px var(--sd-accent-soft); }
+.settings-card .settings-vault-note { min-height: 0; color: var(--sd-text-2); font-size: var(--sd-fs-caption); }
+.settings-card .settings-vault-note:empty { display: none; }
+.settings-card .settings-vault-note.error { color: var(--sd-danger); }
+
 /* 录音转写状态在最小组件也保留一行，不再表现为空黑块。 */
 .home-recorder[data-widget-size='mini'] .home-transcript {
   display: -webkit-box !important;

@@ -593,6 +593,26 @@ function normalizeClaudeRateLimits(payload, now = Date.now()) {
   return { fiveHour, sevenDay, receivedAt: Number(now) };
 }
 
+// Windows Hello via Windows PowerShell 5.1 (WinRT UserConsentVerifier); Electron has no API for it.
+// action 'check' prints the availability (e.g. "Available"), 'verify' prints the result (e.g. "Verified").
+function windowsHelloScript(action, reason = '') {
+  const quoted = `'${String(reason).replace(/'/g, "''").replace(/[\r\n]/g, ' ').slice(0, 120)}'`;
+  const ui = 'Windows.Security.Credentials.UI';
+  const call = action === 'verify'
+    ? `Await ([${ui}.UserConsentVerifier]::RequestVerificationAsync(${quoted})) ([${ui}.UserConsentVerificationResult])`
+    : `Await ([${ui}.UserConsentVerifier]::CheckAvailabilityAsync()) ([${ui}.UserConsentVerifierAvailability])`;
+  return [
+    "$ErrorActionPreference = 'Stop'",
+    'Add-Type -AssemblyName System.Runtime.WindowsRuntime',
+    "$asTask = [System.WindowsRuntimeSystemExtensions].GetMethods() | Where-Object { $_.Name -eq 'AsTask' -and $_.GetParameters().Count -eq 1 -and $_.GetParameters()[0].ParameterType.Name -eq 'IAsyncOperation`1' } | Select-Object -First 1",
+    'function Await($operation, [Type]$type) { $task = $asTask.MakeGenericMethod($type).Invoke($null, @($operation)); $task.Wait(-1) | Out-Null; $task.Result }',
+    `$null = [${ui}.UserConsentVerifier, ${ui}, ContentType = WindowsRuntime]`,
+    `$null = [${ui}.UserConsentVerifierAvailability, ${ui}, ContentType = WindowsRuntime]`,
+    `$null = [${ui}.UserConsentVerificationResult, ${ui}, ContentType = WindowsRuntime]`,
+    call,
+  ].join('\n');
+}
+
 // Photo frame: photos are stored as "<id>.jpg" (long edge ≤ 1600) plus "<id>.thumb.jpg".
 const FRAME_PHOTO_ID = /^photo-[a-z0-9-]{1,48}$/;
 
@@ -610,6 +630,7 @@ function framePhotoSize(size, maxEdge) {
 }
 
 module.exports = {
+  windowsHelloScript,
   concealedClipboardFormats,
   createSecretClipboardTracker,
   isFramePhotoId,

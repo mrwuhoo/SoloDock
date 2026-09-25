@@ -32,6 +32,7 @@
       "main.js",
       "main-services.js",
       "frame-store.js",
+      "vault-lock.js",
       "codex-usage.js",
       "reset-news.js",
       "platform.js",

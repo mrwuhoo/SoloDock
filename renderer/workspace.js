@@ -2184,7 +2184,7 @@
           <div class="credential-edit-head"><strong>修改密钥</strong><span>回车保存</span></div>
           <label><span>服务</span><input name="service" maxlength="80" autocomplete="off" /></label>
           <label><span>账号</span><input name="account" maxlength="320" autocomplete="off" /></label>
-          <label><span>密码</span><input name="password" type="text" maxlength="4096" autocomplete="off" spellcheck="false" /></label>
+          <label><span>密码</span><span class="credential-secret"><input name="password" type="password" maxlength="4096" autocomplete="off" spellcheck="false" /><button class="credential-reveal" type="button" aria-pressed="false" aria-label="显示密码 10 秒">显示</button></span></label>
           <div class="credential-edit-actions"><button type="button" data-credential-cancel>取消</button><button type="submit">保存</button></div>
         `;
         form.elements.service.value = editingCredential.service || '';
@@ -2236,6 +2236,13 @@
     let result;
     try { result = await window.notchAPI.listCredentials(); } catch (error) { result = null; }
     credentials = result && Array.isArray(result.items) ? result.items : [];
+    // 锁着时主进程不返回任何条目，也清掉正在编辑的内容与多选。
+    if (result?.locked) {
+      editingCredentialId = '';
+      editingCredential = null;
+      credentialSelection.clear();
+      credentialAnchor = null;
+    }
     if (credentialsNote && result && !result.secureStorage) {
       credentialsNote.textContent = '当前系统安全存储不可用，暂时无法保存密码。';
       credentialsNote.classList.add('error');
@@ -2262,7 +2269,7 @@
     credentialSave.disabled = false;
     if (!result || !result.ok) {
       if (credentialsNote) {
-        credentialsNote.textContent = '加密保存失败，请确认系统钥匙串可用。';
+        credentialsNote.textContent = result?.error === 'locked' ? '密钥已锁定，请先解锁。' : '加密保存失败，请确认系统钥匙串可用。';
         credentialsNote.classList.add('error');
       }
       return;
@@ -2272,6 +2279,12 @@
     if (credentialPassword) {
       credentialPassword.value = '';
       credentialPassword.placeholder = '保存后才会加密';
+      credentialPassword.type = 'password';
+      const reveal = document.querySelector('.credential-reveal[data-reveal-for="credential-password"]');
+      if (reveal) {
+        reveal.textContent = '显示';
+        reveal.setAttribute('aria-pressed', 'false');
+      }
     }
     if (credentialsNote) {
       credentialsNote.textContent = '已使用系统安全存储加密保存。';
@@ -2397,6 +2410,8 @@
     credentialAnchor = null;
     await loadCredentials();
   });
+
+  document.addEventListener('notch:vault-changed', () => loadCredentials());
 
   document.addEventListener('notch:clear-selection', () => {
     linkSelection.clear();

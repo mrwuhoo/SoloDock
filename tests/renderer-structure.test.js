@@ -117,5 +117,5 @@ test('Electron 44 clipboard reads are awaited and vault copies are marked concea
   assert.doesNotMatch(mainJs, /String\(clipboard\.readText\(\)/);
   assert.match(mainJs, /if \(field === 'password'\) await writeSecretToClipboard\(value\)/);
   assert.match(mainJs, /secretClipboard\.matches\(text\)\) return;/, 'the history poller skips a just-copied password');
-  assert.match(mainJs, /powerMonitor\.on\(eventName, \(\) => \{ void clearSecretFromClipboard\(\); \}\)/);
+  assert.match(mainJs, /getVaultLock\(\)\.lock\(eventName\);\s+void clearSecretFromClipboard\(\);/, 'screen lock and sleep lock the vault and clear a copied password');
 });

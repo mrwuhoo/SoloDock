@@ -444,17 +444,38 @@
           </section>
 
           <section id="tab-credentials" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-credentials" aria-hidden="true" inert>
+            <!-- 密钥锁：锁着时只显示这一张卡片；密钥数据由主进程拒绝返回。 -->
+            <div class="vault-lock" id="vault-lock" hidden>
+              <div class="tile vault-lock-card" role="group" aria-labelledby="vault-lock-title">
+                <div class="vault-lock-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /><path d="M12 14.5v2.5" /></svg></div>
+                <h2 id="vault-lock-title">密钥已锁定</h2>
+                <p id="vault-lock-hint">10 分钟未使用、锁屏或休眠后会自动锁定</p>
+                <button class="workspace-button primary vault-unlock-system" id="vault-unlock-system" type="button" hidden>使用 Touch ID 解锁</button>
+                <form class="vault-unlock-password" id="vault-unlock-password" hidden>
+                  <input id="vault-password" type="password" placeholder="输入主密码" autocomplete="current-password" aria-label="主密码" />
+                  <button class="workspace-button" id="vault-unlock-password-submit" type="submit">解锁</button>
+                </form>
+                <p class="vault-lock-error" id="vault-lock-error" role="status" aria-live="polite"></p>
+                <button class="usage-text-button vault-forgot" id="vault-forgot" type="button" hidden>忘记主密码？</button>
+              </div>
+            </div>
             <div class="credentials-page">
               <section class="tile credentials-form-card">
                 <div class="credentials-heading"><div><span class="tile-label">新增密钥</span><strong>仅保存在本机</strong></div><span class="secure-chip">安全存储</span></div>
                 <label><span>软件 / 服务</span><input id="credential-service" maxlength="80" placeholder="例如 GitHub" autocomplete="off" /></label>
                 <label><span>账号</span><input id="credential-account" maxlength="320" placeholder="邮箱、用户名或手机号" autocomplete="off" /></label>
-                <label><span>密码 / Token</span><input id="credential-password" type="text" maxlength="4096" placeholder="保存后才会加密" autocomplete="off" spellcheck="false" /></label>
+                <label><span>密码 / Token</span><span class="credential-secret"><input id="credential-password" type="password" maxlength="4096" placeholder="保存后才会加密" autocomplete="new-password" spellcheck="false" /><button class="credential-reveal" type="button" data-reveal-for="credential-password" aria-pressed="false" aria-label="显示密码 10 秒">显示</button></span></label>
                 <button class="workspace-button primary credential-save" id="credential-save" type="button">保存</button>
                 <p class="credentials-note" id="credentials-note">密码不会发送到页面存储，复制后 60 秒自动清空剪贴板。</p>
               </section>
               <section class="tile credentials-library">
-                <div class="credentials-library-head"><div><span class="tile-label">账号密码</span><strong id="credential-count">0 项</strong></div><div class="credentials-library-actions"><input id="credential-search" type="search" placeholder="搜索名称或账号" aria-label="搜索密钥" autocomplete="off" /><button class="bulk-delete" id="credential-bulk-delete" type="button" hidden>删除</button></div></div>
+                <div class="vault-setup" id="vault-setup" hidden>
+                  <span class="vault-setup-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg></span>
+                  <p><b>给密钥加一把锁</b><span id="vault-setup-text">10 分钟未使用、锁屏或休眠后自动锁定，用 Touch ID 解锁。</span></p>
+                  <button class="workspace-button compact primary" id="vault-setup-enable" type="button">开启</button>
+                  <button class="workspace-button compact" id="vault-setup-later" type="button">以后再说</button>
+                </div>
+                <div class="credentials-library-head"><div><span class="tile-label">账号密码</span><strong id="credential-count">0 项</strong></div><div class="credentials-library-actions"><input id="credential-search" type="search" placeholder="搜索名称或账号" aria-label="搜索密钥" autocomplete="off" /><button class="bulk-delete" id="credential-bulk-delete" type="button" hidden>删除</button><span class="vault-auto-lock" id="vault-auto-lock" hidden></span><button class="vault-lock-now" id="vault-lock-now" type="button" hidden title="立即锁定（⌘L）" aria-label="立即锁定"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg>锁定</button></div></div>
                 <div class="credential-list" id="credential-list"></div>
               </section>
             </div>
@@ -549,6 +570,28 @@
                   <p id="codex-usage-updated"></p>
                   <div id="usage-details" class="usage-details"></div>
                   <small class="usage-config-note">自动同步仅在首页组件可见或查看此配置时进行。公开发卡消息以 AIHOT 标注为准，个人余额以账号返回为准。</small>
+                </section>
+
+                <section class="tile settings-card settings-vault-card" id="settings-vault-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">密钥</span><strong>密钥锁</strong></div>
+                    <small id="settings-vault-status">未开启</small>
+                  </div>
+                  <p class="settings-vault-hint" id="settings-vault-hint">防的是别人趁你离开时打开密钥页；密钥本身始终由系统钥匙串加密。忘记主密码可以用 Touch ID 或电脑登录密码重置，不会丢失任何密钥。</p>
+                  <label class="settings-strip-toggle"><span><b>开启密钥锁</b><small id="settings-vault-method">用 Touch ID 解锁</small></span><input type="checkbox" id="settings-vault-enabled" aria-label="开启密钥锁" /><i aria-hidden="true"></i></label>
+                  <div class="settings-frame-row">
+                    <label>自动锁定<select id="settings-vault-auto"><option value="1">1 分钟未使用</option><option value="5">5 分钟未使用</option><option value="10">10 分钟未使用</option><option value="30">30 分钟未使用</option><option value="60">1 小时未使用</option></select></label>
+                  </div>
+                  <div class="settings-vault-password">
+                    <div class="settings-vault-password-head"><span>主密码<small>备用解锁方式</small></span><b id="settings-vault-password-state">未设置</b><button class="workspace-button compact" id="settings-vault-password-edit" type="button">设置</button><button class="workspace-button compact danger" id="settings-vault-password-remove" type="button" hidden>移除</button></div>
+                    <form class="settings-vault-password-form" id="settings-vault-password-form" hidden>
+                      <input id="settings-vault-password-new" type="password" placeholder="至少 6 位" autocomplete="new-password" aria-label="新的主密码" />
+                      <input id="settings-vault-password-confirm" type="password" placeholder="再输入一次" autocomplete="new-password" aria-label="再次输入主密码" />
+                      <button class="workspace-button compact" id="settings-vault-password-cancel" type="button">取消</button>
+                      <button class="workspace-button compact primary" type="submit">保存</button>
+                    </form>
+                  </div>
+                  <p class="settings-vault-note" id="settings-vault-note" role="status" aria-live="polite"></p>
                 </section>
 
                 <section class="tile settings-card settings-frame-card" id="settings-frame-card">
@@ -706,6 +749,7 @@
     <script src="today-strip.js"></script>
     <script src="frame-domain.js"></script>
     <script src="photo-frame.js"></script>
+    <script src="vault.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

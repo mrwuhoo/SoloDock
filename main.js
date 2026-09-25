@@ -59,7 +59,9 @@ const {
   normalizeClaudeRateLimits,
   concealedClipboardFormats,
   createSecretClipboardTracker,
+  windowsHelloScript,
 } = require('./main-services');
+const { createVaultLock } = require('./vault-lock');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
 
 // Keep the glass edition isolated from the official app so both builds can be
@@ -223,6 +225,7 @@ const CLIP_IMAGES_DIR_NAME = 'clipboard-images';
 const RECORDINGS_DIR_NAME = 'recordings';
 const TRANSCRIPTION_SETTINGS_FILE = 'transcription-settings.json';
 const CREDENTIALS_VAULT_FILE = 'credentials.vault.json';
+const VAULT_LOCK_FILE = 'vault-lock.json';
 const APP_SETTINGS_FILE = 'app-settings.json';
 const WORKSPACE_SETTINGS_FILE = 'workspace-settings.json';
 const WORKSPACE_DATA_FILE = 'workspace.json';
@@ -1266,6 +1269,23 @@ function workspacePath(name) {
   return path.join(workspaceRoot(), name);
 }
 
+// 系统对话框、Touch ID / Windows Hello 弹窗期间面板会失焦；计数期间不因失焦收起面板。
+function updateTransientSystemInteraction(delta) {
+  transientSystemInteractionRequests = Math.max(0, transientSystemInteractionRequests + delta);
+  if (delta < 0 && transientSystemInteractionRequests === 0 && mediaPermissionRequests === 0) {
+    blurDeferred = false;
+  }
+}
+
+async function withSystemInteraction(task) {
+  updateTransientSystemInteraction(1);
+  try {
+    return await task();
+  } finally {
+    updateTransientSystemInteraction(-1);
+  }
+}
+
 function showOwnedOpenDialog(options) {
   const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
   if (owner) {
@@ -1276,12 +1296,7 @@ function showOwnedOpenDialog(options) {
     dialog.showOpenDialog.bind(dialog),
     owner,
     options,
-    (delta) => {
-      transientSystemInteractionRequests = Math.max(0, transientSystemInteractionRequests + delta);
-      if (delta < 0 && transientSystemInteractionRequests === 0 && mediaPermissionRequests === 0) {
-        blurDeferred = false;
-      }
-    }
+    updateTransientSystemInteraction
   );
 }
 
@@ -2383,6 +2398,89 @@ function writeCredentialsVault(rows) {
   }
 }
 
+// ============ 密钥锁（方案 A） ============
+// Touch ID / Windows Hello 解锁，主密码备用；锁着时所有密钥接口在主进程直接拒绝。见 vault-lock.js。
+let windowsHelloAvailability = null;
+
+function runWindowsHello(action, reason) {
+  const encoded = Buffer.from(windowsHelloScript(action, reason), 'utf16le').toString('base64');
+  return new Promise((resolve) => {
+    execFile(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
+      { windowsHide: true, timeout: action === 'verify' ? 120_000 : 15_000 },
+      (error, stdout) => resolve(error ? '' : String(stdout || '').trim().split(/\r?\n/).pop())
+    );
+  });
+}
+
+const vaultSystemAuth = {
+  async available() {
+    if (process.platform === 'darwin') return systemPreferences.canPromptTouchID() ? 'touchid' : null;
+    if (process.platform === 'win32') {
+      if (!windowsHelloAvailability) {
+        windowsHelloAvailability = runWindowsHello('check').then((result) => (result === 'Available' ? 'hello' : null));
+      }
+      return windowsHelloAvailability;
+    }
+    return null;
+  },
+  prompt(reason) {
+    return withSystemInteraction(async () => {
+      if (mainWindow && !mainWindow.isDestroyed()) mainWindow.focus();
+      if (process.platform === 'darwin') {
+        await systemPreferences.promptTouchID(reason);
+        return true;
+      }
+      if (process.platform === 'win32') return (await runWindowsHello('verify', reason)) === 'Verified';
+      return false;
+    });
+  },
+};
+
+let vaultLock = null;
+function getVaultLock() {
+  if (!vaultLock) {
+    vaultLock = createVaultLock({
+      file: path.join(app.getPath('userData'), VAULT_LOCK_FILE),
+      systemAuth: vaultSystemAuth,
+      onChange: ({ locked, reason }) => {
+        if (locked) void clearSecretFromClipboard();
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('vault:changed', { locked, reason });
+      },
+    });
+  }
+  return vaultLock;
+}
+
+// 每个密钥接口先过这一关：锁着就拒绝；用过一次就顺延自动锁定。
+function vaultAccessAllowed() {
+  const lock = getVaultLock();
+  if (lock.isLocked()) return false;
+  lock.touch();
+  return true;
+}
+
+ipcMain.handle('vault:status', () => getVaultLock().status());
+ipcMain.handle('vault:unlock', (event, payload) => (
+  payload && payload.method === 'password'
+    ? getVaultLock().unlockWithPassword(String(payload.password || '').slice(0, 1024))
+    : getVaultLock().unlockWithSystem()
+));
+ipcMain.handle('vault:lock', () => { getVaultLock().lock('manual'); return { ok: true }; });
+ipcMain.handle('vault:touch', () => { getVaultLock().touch(); return { ok: true }; });
+ipcMain.handle('vault:configure', (event, options) => {
+  const source = options && typeof options === 'object' ? options : {};
+  return getVaultLock().configure({
+    enabled: typeof source.enabled === 'boolean' ? source.enabled : undefined,
+    autoLockMinutes: source.autoLockMinutes === undefined ? undefined : Number(source.autoLockMinutes),
+    password: typeof source.password === 'string' ? source.password.slice(0, 1024) : undefined,
+    removePassword: source.removePassword === true,
+  });
+});
+ipcMain.handle('vault:dismiss-setup', () => getVaultLock().dismissSetup());
+ipcMain.handle('vault:reset-password', () => getVaultLock().resetPasswordWithSystem());
+
 function publicCredential(item) {
   return {
     id: item.id,
@@ -2393,18 +2491,24 @@ function publicCredential(item) {
   };
 }
 
-ipcMain.handle('credentials:list', () => ({
-  ok: safeStorage.isEncryptionAvailable(),
-  secureStorage: safeStorage.isEncryptionAvailable(),
-  items: readCredentialsVault().map(publicCredential),
-}));
+ipcMain.handle('credentials:list', () => {
+  const allowed = vaultAccessAllowed();
+  return {
+    ok: safeStorage.isEncryptionAvailable(),
+    secureStorage: safeStorage.isEncryptionAvailable(),
+    locked: !allowed,
+    items: allowed ? readCredentialsVault().map(publicCredential) : [],
+  };
+});
 
 ipcMain.handle('credentials:get', (event, id) => {
+  if (!vaultAccessAllowed()) return { ok: false, error: 'locked' };
   const item = readCredentialsVault().find((row) => row.id === String(id || ''));
   return item ? { ok: true, item: { ...item } } : { ok: false, error: 'not_found' };
 });
 
 ipcMain.handle('credentials:save', (event, payload) => {
+  if (!vaultAccessAllowed()) return { ok: false, error: 'locked' };
   if (!safeStorage.isEncryptionAvailable()) return { ok: false, error: 'secure_storage_unavailable' };
   const rows = readCredentialsVault();
   const existing = payload && payload.id ? rows.find((item) => item.id === payload.id) : null;
@@ -2423,6 +2527,7 @@ ipcMain.handle('credentials:save', (event, payload) => {
 });
 
 ipcMain.handle('credentials:delete-many', (event, ids) => {
+  if (!vaultAccessAllowed()) return { ok: false, error: 'locked' };
   const targets = new Set(Array.isArray(ids) ? ids.map(String) : []);
   if (!targets.size) return { ok: true, deleted: 0 };
   const rows = readCredentialsVault();
@@ -2435,6 +2540,7 @@ ipcMain.handle('credentials:copy', async (event, payload) => {
   const id = String(payload && payload.id || '');
   const field = payload && payload.field === 'password' ? 'password' : payload && payload.field === 'account' ? 'account' : '';
   if (!id || !field) return false;
+  if (!vaultAccessAllowed()) return false;
   const item = readCredentialsVault().find((row) => row.id === id);
   if (!item) return false;
   const value = item[field];
@@ -3380,9 +3486,12 @@ app.whenReady().then(() => {
   ensureRecordingsDir();
   applyAppSettings();
   startTaskNotificationServer();
-  // 锁屏或休眠时清掉仍在剪贴板上的密码。
+  // 锁屏或休眠时锁上密钥，并清掉仍在剪贴板上的密码。
   for (const eventName of ['lock-screen', 'suspend']) {
-    powerMonitor.on(eventName, () => { void clearSecretFromClipboard(); });
+    powerMonitor.on(eventName, () => {
+      getVaultLock().lock(eventName);
+      void clearSecretFromClipboard();
+    });
   }
   // 不在启动时索要权限：只有用户在「当前窗口」卡片里点了授权按钮才申请，
   // 那条路径会先调用 desktopCapturer，让 SoloDock 出现在系统的录屏权限列表里。
@@ -3415,6 +3524,7 @@ app.on('will-quit', () => {
   cancelCollapseWatchdog();
   clearTodoReminderTimer();
   if (timedReminderTimer) clearTimeout(timedReminderTimer);
+  if (vaultLock) vaultLock.dispose();
   stopHoverSpaceShortcut();
   clearTaskNotificationTimers();
   stopTaskNotificationServer();

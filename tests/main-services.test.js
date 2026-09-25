@@ -30,6 +30,7 @@ const {
   createForegroundMediaPermissionCoordinator,
   concealedClipboardFormats,
   createSecretClipboardTracker,
+  windowsHelloScript,
 } = require('../main-services');
 
 test('media permission prompts temporarily leave the screen-saver window layer', async () => {
@@ -636,4 +637,14 @@ test('the Claude status-line script forwards only quota fields and prints remain
   assert.equal(ownStatusLine(input, picked), 'Opus · 5h 剩 18% · 周 剩 54%');
   assert.equal(pickRateLimits({ model: {} }), null);
   assert.equal(ownStatusLine({}, null), 'SoloDock');
+});
+
+test('the Windows Hello script checks availability or asks for verification, with the reason safely quoted', () => {
+  const check = windowsHelloScript('check');
+  assert.match(check, /UserConsentVerifier\]::CheckAvailabilityAsync\(\)/);
+  assert.doesNotMatch(check, /RequestVerificationAsync/);
+  const verify = windowsHelloScript('verify', "解锁 O'Brien 的密钥\r\n'; Remove-Item C:\\ -Recurse; '");
+  const call = verify.split('\n').pop();
+  assert.ok(call.includes("RequestVerificationAsync('解锁 O''Brien 的密钥  ''; Remove-Item C:\\ -Recurse; ''')"), call);
+  assert.equal(verify.split('\n').length, check.split('\n').length, 'no line breaks leak into the script');
 });

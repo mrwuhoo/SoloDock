@@ -47,6 +47,37 @@ app.on('web-contents-created', (_event, contents) => {
       // The preload hydrates the workspace before page scripts run, so recovery must not reload the page.
       assert.equal(indexLoads, 1, `workspace recovery reloaded the page (${indexLoads} loads)`);
       console.log(`Workspace visible ${Date.now() - firstLoadAt}ms after first load`);
+
+      // The real main process enforces the vault lock (master-password path; no Touch ID prompt in tests).
+      const vault = await contents.executeJavaScript(`(async () => {
+        const api = window.notchAPI;
+        const out = { initial: await api.getVaultStatus() };
+        out.openList = (await api.listCredentials()).locked;
+        out.configured = await api.configureVault({ enabled: true, password: 'startup-pass' });
+        await api.lockVault();
+        const lockedList = await api.listCredentials();
+        out.locked = {
+          locked: lockedList.locked,
+          items: lockedList.items.length,
+          copy: await api.copyCredential('missing', 'password'),
+          save: (await api.saveCredential({ service: 'a', account: 'b', password: 'c' })).error,
+          get: (await api.getCredential('missing')).error,
+        };
+        out.wrong = await api.unlockVault('password', 'nope');
+        out.right = await api.unlockVault('password', 'startup-pass');
+        out.afterUnlock = (await api.listCredentials()).locked;
+        return out;
+      })()`);
+      assert.equal(vault.initial.enabled, false, 'the lock is off until the user turns it on');
+      assert.equal(vault.initial.locked, false);
+      assert.equal(vault.openList, false);
+      assert.deepEqual(vault.configured, { ok: true });
+      assert.deepEqual(vault.locked, { locked: true, items: 0, copy: false, save: 'locked', get: 'locked' });
+      assert.deepEqual(vault.wrong, { ok: false, error: 'wrong', attemptsLeft: 4 });
+      assert.deepEqual(vault.right, { ok: true });
+      assert.equal(vault.afterUnlock, false);
+      assert.doesNotMatch(fs.readFileSync(path.join(profile, 'vault-lock.json'), 'utf8'), /startup-pass/);
+      assert.deepEqual(errors, []);
       console.log('Production workspace recovery checks passed');
       app.quit();
     } catch (error) { console.error(error); app.exit(1); }
