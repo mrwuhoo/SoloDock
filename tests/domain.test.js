@@ -873,3 +873,22 @@ test('credential selection can toggle its only selected row off', () => {
     anchor: null,
   });
 });
+
+test('today card lists overdue first, then today by deadline, and ignores later or done items', () => {
+  const { todayTodoItems, todoDueLabel } = require('../renderer/domain');
+  const now = new Date(2026, 8, 24, 14, 26).getTime();
+  const at = (day, hour, minute = 0) => new Date(2026, 8, day, hour, minute).toISOString();
+  const data = {
+    P0: [{ id: 'a', text: '课程录制', deadline: at(24, 20) }, { id: 'done', text: '已完成', deadline: at(24, 15), done: true }],
+    P1: [{ id: 'b', text: '周报复盘', deadline: at(24, 12) }, { id: 'c', text: '封面', deadline: at(24, 15, 0) }],
+    P2: [{ id: 'later', text: '明天', deadline: at(25, 9) }],
+    P3: [{ id: 'old', text: '上周', deadline: at(20, 9) }, { id: 'nodate', text: '没有日期' }],
+  };
+  const items = todayTodoItems(data, now);
+  assert.deepEqual(items.map((item) => item.id), ['old', 'b', 'c', 'a']);
+  assert.equal(items[0].label.text, '逾期 4 天');
+  assert.equal(items[1].label.text, '逾期 2 小时');
+  assert.deepEqual(items[2].label, { text: '还剩 34 分钟', tone: 'soon' });
+  assert.deepEqual(items[3].label, { text: '20:00', tone: '' });
+  assert.equal(todoDueLabel('', now).text, '');
+});

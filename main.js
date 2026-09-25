@@ -3187,6 +3187,8 @@ function pasteToPreviousApp(target) {
 }
 
 ipcMain.handle('clipboard:write', (event, entry) => writeClipboardEntry(entry));
+// 提示词库「填好后复制」时读取 {剪贴板}：只在用户点击时调用，只返回纯文字，并限制长度。
+ipcMain.handle('clipboard:read-text', () => String(clipboard.readText() || '').slice(0, 20000));
 
 // 点击历史项后先收起灵动岛，再回到打开面板前的应用执行粘贴。
 // 若系统尚未授予辅助功能权限，内容仍保留在系统剪贴板作为可靠降级。

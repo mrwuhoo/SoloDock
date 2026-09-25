@@ -148,3 +148,24 @@ test('eight homepage widgets fit every visible subset and each requested usage s
     assert.ok(domain.validateHomeWidgetLayout(layout,ids));
   }
 });
+
+test('v0.2 home cards fit together at every size the user can pick for any card', () => {
+  const domain = require('../renderer/domain');
+  const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
+  const defaults = { note: 'large', today: 'medium', pomodoro: 'small', usage: 'medium', mirror: 'medium', recorder: 'mini', windows: 'mini' };
+  for (const id of ids) {
+    let sizes = domain.normalizeHomeWidgetSizes(defaults, defaults, '', 48);
+    for (const size of ['mini', 'small', 'medium', 'large', 'mini']) {
+      const fitted = domain.normalizeHomeWidgetSizes({ ...sizes, [id]: size }, sizes, id, 48);
+      const layout = domain.resolveHomeWidgetLayout(ids, fitted, []);
+      assert.equal(fitted[id], size, `${id} keeps the requested ${size}`);
+      assert.ok(domain.validateHomeWidgetLayout(layout, ids), `${id}=${size} ${JSON.stringify(fitted)}`);
+      sizes = fitted;
+    }
+  }
+  for (let mask = 0; mask < 127; mask++) {
+    const hidden = ids.filter((_, index) => mask & (1 << index));
+    const layout = domain.resolveHomeWidgetLayout(ids, defaults, hidden);
+    assert.ok(domain.validateHomeWidgetLayout(layout, ids.filter((id) => !hidden.includes(id))), `visibility mask ${mask}`);
+  }
+});

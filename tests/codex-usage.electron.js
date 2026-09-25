@@ -9,14 +9,22 @@ app.whenReady().then(async () => {
   const errors = [];
   win.webContents.on('console-message', (details) => { if (details.level === 'error') errors.push(details.message); });
   await win.loadFile(path.join(__dirname, '..', 'renderer/index.html'));
-  // An existing seven-card profile migrates without resetting the user's ordering.
-  // music was removed; an old seven-card order keeps the relative order of the remaining cards.
-  const oldOrder = ['commands','note','mirror','recorder','windows','pomodoro'];
-  await win.webContents.executeJavaScript(`localStorage.setItem('notch-home-order-v3',${JSON.stringify(JSON.stringify(oldOrder))}); localStorage.setItem('notch-home-widget-sizes-v2',JSON.stringify({music:'medium',pomodoro:'mini',windows:'large',recorder:'small',mirror:'medium',note:'medium',commands:'mini'}));`);
+  // v0.2 replaces a pre-0.2 home layout once with the new default (old cards would land in the
+  // wrong slots of the new layout); afterwards the user's order, sizes and visibility are kept.
+  const oldOrder = ['commands','note','mirror','recorder','windows','pomodoro','music'];
+  await win.webContents.executeJavaScript(`localStorage.removeItem('notch-home-layout-version'); localStorage.setItem('notch-home-order-v3',${JSON.stringify(JSON.stringify(oldOrder))}); localStorage.setItem('notch-home-widget-sizes-v2',JSON.stringify({music:'medium',pomodoro:'mini',windows:'large',recorder:'small',mirror:'medium',note:'medium',commands:'mini'})); localStorage.setItem('notch-home-hidden-modules-v1','[]');`);
   await win.reload();
   await new Promise(resolve => win.webContents.once('did-finish-load', resolve));
-  const migrated = await win.webContents.executeJavaScript(`[...document.querySelectorAll('[data-home-module]')].sort((a,b)=>Number(a.style.order)-Number(b.style.order)).map(t=>t.dataset.homeModule)`);
-  assert.deepEqual(migrated,[...oldOrder,'usage']);
+  const migrated = await win.webContents.executeJavaScript(`({
+    order: [...document.querySelectorAll('[data-home-module]')].sort((a,b)=>Number(a.style.order)-Number(b.style.order)).map(t=>t.dataset.homeModule),
+    hidden: window.NotchHome.getVisibility().hiddenIds,
+    version: localStorage.getItem('notch-home-layout-version'),
+  })`);
+  assert.deepEqual(migrated, {
+    order: ['note','today','pomodoro','usage','mirror','recorder','windows'],
+    hidden: ['recorder','windows'],
+    version: '2',
+  });
   await win.webContents.debugger.attach('1.3');
   await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'},{name:'prefers-reduced-transparency',value:'no-preference'}]});
   const result = await win.webContents.executeJavaScript(`(async () => {
@@ -41,6 +49,8 @@ app.whenReady().then(async () => {
     get('usage-news').click();await settle();
     const internalNews=get('tab-resets').classList.contains('active');
     await setActiveTab('home');
+    // Per-card sizes apply when all seven cards are shown.
+    ['recorder','windows'].forEach(id=>window.NotchHome.setModuleVisible(id,true));await settle();
     const checks=[];
     for(let i=0;i<4;i++){
       const button=tile.querySelector('[data-widget-size-cycle]');button.click();await settle();
@@ -83,7 +93,7 @@ app.whenReady().then(async () => {
   assert.equal(result.internalNews,true);
   assert.deepEqual(result.checks.map(x=>x.size),['large','mini','small','medium']);
   for(const check of result.checks){assert.equal(check.visible,true);assert.deepEqual(check.outside,[],JSON.stringify(check));}
-  // With seven registered widgets (music removed), hiding one leaves six visible:
+  // With seven registered widgets, hiding one leaves six visible:
   // the gapless auto-fill template takes over and per-card resizing is disabled.
   assert.equal(result.hiddenResizeBefore.available,false);
   assert.equal(result.hiddenResizeAfter.size,result.hiddenResizeBefore.size);
@@ -116,7 +126,7 @@ app.whenReady().then(async () => {
   await win.webContents.executeJavaScript("setActiveTab('home')");
   const drag=await win.webContents.executeJavaScript(`(()=>{
     const point=id=>{const r=document.querySelector('[data-home-module="'+id+'"]').getBoundingClientRect();return {x:Math.round(r.x+24),y:Math.round(r.y+24)}};
-    return {from:point('usage'),to:point('commands'),order:JSON.parse(localStorage.getItem('notch-home-order-v3')),sizes:localStorage.getItem('notch-home-widget-sizes-v2')};
+    return {from:point('usage'),to:point('pomodoro'),order:JSON.parse(localStorage.getItem('notch-home-order-v3')),sizes:localStorage.getItem('notch-home-widget-sizes-v2')};
   })()`);
   win.webContents.sendInputEvent({type:'mouseDown',...drag.from,button:'left',clickCount:1});
   await new Promise(r=>setTimeout(r,460));
@@ -125,7 +135,7 @@ app.whenReady().then(async () => {
   win.webContents.sendInputEvent({type:'mouseUp',...drag.to,button:'left',clickCount:1});
   await new Promise(r=>setTimeout(r,60));
   const reordered=await win.webContents.executeJavaScript(`({order:JSON.parse(localStorage.getItem('notch-home-order-v3')),sizes:localStorage.getItem('notch-home-widget-sizes-v2')})`);
-  const expected=[...drag.order], source=expected.indexOf('usage'), target=expected.indexOf('commands');
+  const expected=[...drag.order], source=expected.indexOf('usage'), target=expected.indexOf('pomodoro');
   [expected[source],expected[target]]=[expected[target],expected[source]];
   assert.deepEqual(reordered.order,expected,'Usage participates in the shared long-press reorder');
   assert.equal(reordered.sizes,drag.sizes,'Dragging keeps widget sizes');

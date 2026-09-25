@@ -123,8 +123,7 @@ async function main() {
           }
           return false;
         };
-        // 生产默认开启超过四个 Tab，会进入左右分栏并让容器横跨整条顶栏。
-        document.getElementById('tabs').classList.add('is-split');
+        // 页签容器横跨整条顶栏（两组贴着刘海左右排开），中央空白必须把点击交给顶栏。
         document.getElementById('notch').click();
         const opened = await waitForClass('expanded');
         const topbar = document.querySelector('.topbar').getBoundingClientRect();
@@ -214,7 +213,7 @@ async function main() {
           resolve({
             contentClipPath: getComputedStyle(panel).clipPath,
             shellOwnsExpandedOutline: shellClipPath !== 'none' && !shellClipPath.includes('calc'),
-            rightmostTab: document.querySelector('.tab[data-tab]:last-of-type')?.dataset.tab,
+            rightmostTab: [...document.querySelectorAll('.tab[data-tab]:not([hidden])')].at(-1)?.dataset.tab,
             activePanel: document.getElementById('tab-settings')?.classList.contains('active'),
             display: getComputedStyle(page).display,
             columns: getComputedStyle(page).gridTemplateColumns.split(' ').filter(Boolean).length,
@@ -643,7 +642,7 @@ async function main() {
           windows: ['.tile-head', '.window-list'],
           mirror: ['.mirror-stage'],
           note: ['.note-toolbar', '.note-body'],
-          commands: ['.tile-head', '.command-add', '.command-list'],
+          today: ['.today-head', '.today-list'],
         };
         const tiles = [...document.querySelectorAll('#home-bento [data-home-module]')]
           .filter((tile) => !tile.hidden)
@@ -755,7 +754,7 @@ async function main() {
       window.setSize(width, height);
       const matrix = await window.webContents.executeJavaScript(`
         (async () => {
-          const ids = ['pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands', 'usage'];
+          const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
           ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
           const results = [];
           for (let count = 7; count >= 1; count -= 1) {
@@ -798,20 +797,20 @@ async function main() {
 
     const transactionAudit = await window.webContents.executeJavaScript(`
       (() => {
-        const ids = ['pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands', 'usage'];
+        const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
         ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
         const first = window.NotchHome.setModuleVisible('mirror', false);
         const second = window.NotchHome.setModuleVisible('note', false);
         const rapidHidden = [...window.NotchHome.getVisibility().hiddenIds];
         ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
-        window.NotchHome.setModuleVisible('commands', false);
-        window.NotchHome.setModuleVisible('commands', true);
-        window.NotchHome.setModuleVisible('commands', false);
+        window.NotchHome.setModuleVisible('today', false);
+        window.NotchHome.setModuleVisible('today', true);
+        window.NotchHome.setModuleVisible('today', false);
         let eventCount = 0;
         const onChange = () => { eventCount += 1; };
         document.addEventListener('notch:home-modules-changed', onChange);
         const storageBeforeNoop = localStorage.getItem('notch-home-hidden-modules-v1');
-        const noop = window.NotchHome.setModuleVisible('commands', false);
+        const noop = window.NotchHome.setModuleVisible('today', false);
         const noOpStorageStable = storageBeforeNoop === localStorage.getItem('notch-home-hidden-modules-v1');
         document.removeEventListener('notch:home-modules-changed', onChange);
         const beforeRollback = {
@@ -856,7 +855,8 @@ async function main() {
     `);
     assert.equal(transactionAudit.first.ok, true);
     assert.equal(transactionAudit.second.ok, true);
-    assert.deepEqual(transactionAudit.rapidHidden, ['mirror', 'note']);
+    // Hidden ids follow the registry order (note comes before mirror).
+    assert.deepEqual(transactionAudit.rapidHidden, ['note', 'mirror']);
     assert.equal(transactionAudit.noop.changed, false);
     assert.equal(transactionAudit.eventCount, 0);
     assert.equal(transactionAudit.noOpStorageStable, true);
@@ -869,7 +869,7 @@ async function main() {
 
     const persistenceAndRecorderAudit = await window.webContents.executeJavaScript(`
       (() => {
-        const ids = ['pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands', 'usage'];
+        const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
         ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
         const originalSetItem = Storage.prototype.setItem;
         const storedBefore = localStorage.getItem('notch-home-hidden-modules-v1');
@@ -884,7 +884,7 @@ async function main() {
         ['pomodoro', 'recorder', 'windows', 'note', 'usage'].forEach((id) => {
           window.NotchHome.setModuleVisible(id, false);
         });
-        const rejectedWhileDirty = window.NotchHome.setModuleVisible('commands', false);
+        const rejectedWhileDirty = window.NotchHome.setModuleVisible('today', false);
         Storage.prototype.setItem = originalSetItem;
         const recovered = window.NotchHome.setModuleVisible('pomodoro', true);
         const recoveredState = window.NotchHome.getVisibility();
@@ -1000,7 +1000,7 @@ async function main() {
 
     const lifecycleAudit = await window.webContents.executeJavaScript(`
       (async () => {
-        const ids = ['pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands', 'usage'];
+        const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
         ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
         document.getElementById('tab-button-home').click();
         document.getElementById('app').classList.remove('collapsed', 'closing', 'opening');
@@ -1087,7 +1087,7 @@ async function main() {
 
     const autoLayoutMotionAudit = await window.webContents.executeJavaScript(`
       (async () => {
-        const ids = ['pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands', 'usage'];
+        const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
         ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
         document.getElementById('tab-button-home').click();
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));

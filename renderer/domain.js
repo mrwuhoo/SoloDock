@@ -586,6 +586,46 @@
     };
   }
 
+  // 首页「今天」卡片的时间标签：逾期写清欠了多久，一小时内写剩余分钟，其余写时刻。
+  function todoDueLabel(deadline, now = Date.now()) {
+    const due = Date.parse(String(deadline || ''));
+    if (!Number.isFinite(due)) return { text: '', tone: '' };
+    const diff = due - Number(now);
+    if (diff <= 0) {
+      const minutes = Math.max(1, Math.floor(-diff / 60000));
+      if (minutes < 60) return { text: `逾期 ${minutes} 分钟`, tone: 'overdue' };
+      const hours = Math.floor(minutes / 60);
+      if (hours < 24) return { text: `逾期 ${hours} 小时`, tone: 'overdue' };
+      return { text: `逾期 ${Math.floor(hours / 24)} 天`, tone: 'overdue' };
+    }
+    if (diff <= 60 * 60000) return { text: `还剩 ${Math.max(1, Math.ceil(diff / 60000))} 分钟`, tone: 'soon' };
+    const date = new Date(due);
+    return { text: `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`, tone: '' };
+  }
+
+  // 今天到期或已经逾期、尚未完成的待办；逾期在前，其余按截止时间排序。
+  function todayTodoItems(data, now = Date.now(), priorities = ['P0', 'P1', 'P2', 'P3']) {
+    const current = new Date(Number(now));
+    const endOfToday = new Date(current.getFullYear(), current.getMonth(), current.getDate() + 1).getTime();
+    const items = [];
+    priorities.forEach((priority) => {
+      (Array.isArray(data?.[priority]) ? data[priority] : []).forEach((todo) => {
+        if (!todo || todo.done === true) return;
+        const due = Date.parse(String(todo.deadline || ''));
+        if (!Number.isFinite(due) || due >= endOfToday) return;
+        items.push({
+          priority,
+          id: String(todo.id),
+          text: String(todo.text || ''),
+          due,
+          overdue: due <= Number(now),
+          label: todoDueLabel(todo.deadline, now),
+        });
+      });
+    });
+    return items.sort((left, right) => (Number(right.overdue) - Number(left.overdue)) || (left.due - right.due));
+  }
+
   function updateRangeSelection(ids, selectedIds, clickedId, anchorId, shiftKey, toggleSelected = false) {
     const ordered = Array.isArray(ids) ? ids.map(String) : [];
     const clicked = String(clickedId || '');
@@ -677,6 +717,33 @@
       if (!candidate) break;
       sizes[candidate.key] = sizes[candidate.key] === 'mini' ? 'small' : sizes[candidate.key] === 'small' ? 'medium' : 'large';
     }
+    // 单向放大可能差一点凑不满（例如只差 2 格，而其余卡片最小都是「小」）。
+    // 这时在「其余每张卡最多上下调一档」的组合里，找改动最少、正好铺满的方案；
+    // 不动用户正在调整的那张。其余卡片最多 7 张，组合数上限 3^7，计算量可以忽略。
+    if (Number.isFinite(capacity) && totalArea() !== capacity) {
+      const order = ['mini', 'small', 'medium', 'large'];
+      const base = siblings.map((key) => sizes[key]);
+      const fixedArea = totalArea() - base.reduce((total, size) => total + area[size], 0);
+      let best = null;
+      const walk = (index, chosen, changed, areaSum) => {
+        if (best && changed > best.changed) return;
+        if (index === siblings.length) {
+          if (fixedArea + areaSum !== capacity) return;
+          if (!best || changed < best.changed) best = { changed, chosen: [...chosen] };
+          return;
+        }
+        const current = order.indexOf(base[index]);
+        for (const delta of [0, 1, -1]) {
+          const next = order[current + delta];
+          if (!next) continue;
+          chosen.push(next);
+          walk(index + 1, chosen, changed + (delta ? 1 : 0), areaSum + area[next]);
+          chosen.pop();
+        }
+      };
+      walk(0, [], 0, 0);
+      if (best) siblings.forEach((key, index) => { sizes[key] = best.chosen[index]; });
+    }
     return sizes;
   }
 
@@ -745,12 +812,14 @@
       { column: 0, row: 2, width: 6, height: 2 },
       { column: 6, row: 2, width: 6, height: 2 },
     ],
+    // v0.2 默认首页：左侧大卡（随笔）、中间上排两张（今天 3 列 + 专注 2 列）、
+    // 中间下排一张宽卡（AI 用量 5 列）、右侧竖卡（相框 3 列）。
     5: [
       { column: 0, row: 0, width: 4, height: 4 },
-      { column: 4, row: 0, width: 4, height: 2 },
-      { column: 8, row: 0, width: 4, height: 2 },
-      { column: 4, row: 2, width: 4, height: 2 },
-      { column: 8, row: 2, width: 4, height: 2 },
+      { column: 4, row: 0, width: 3, height: 2 },
+      { column: 7, row: 0, width: 2, height: 2 },
+      { column: 4, row: 2, width: 5, height: 2 },
+      { column: 9, row: 0, width: 3, height: 4 },
     ],
     6: [
       { column: 0, row: 0, width: 4, height: 2 },
@@ -836,7 +905,10 @@
     let placements;
     if (visibleOrder.length >= 7) {
       const visibleSizes = Object.fromEntries(visibleOrder.map((id) => [id, sizes[id]]));
-      const fittedSizes = hidden.size
+      const area = { mini: 2, small: 4, medium: 8, large: 16 };
+      const total = visibleOrder.reduce((sum, id) => sum + (area[sizes[id]] || 0), 0);
+      // 可见卡片的面积必须正好铺满网格；不等时（例如刚打开一张隐藏的卡片）先自动调整尺寸。
+      const fittedSizes = hidden.size || total !== columns * rows
         ? normalizeHomeWidgetSizes(visibleSizes, visibleSizes, '', columns * rows)
         : sizes;
       placements = packHomeWidgetLayout(visibleOrder, fittedSizes, columns, rows);
@@ -954,6 +1026,8 @@
     shiftCalendarMonth,
     defaultTodoDeadline,
     todoTimeBattery,
+    todoDueLabel,
+    todayTodoItems,
     updateRangeSelection,
     normalizeHomeLayout,
     swapHomeLayoutSlots,

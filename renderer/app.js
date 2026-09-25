@@ -169,6 +169,7 @@ function saveData(data) {
   } catch (e) {
     // ignore quota errors
   }
+  if (typeof renderTodayCard === 'function') renderTodayCard();
   if (window.notchAPI && typeof window.notchAPI.scheduleTodoReminders === 'function') {
     const reminders = PRIORITIES.flatMap((priority) => data[priority] || []);
     window.notchAPI.scheduleTodoReminders(reminders).catch(() => {});
@@ -349,7 +350,110 @@ function renderAll() {
   });
 }
 
-setInterval(() => PRIORITIES.forEach(renderList), 60_000);
+setInterval(() => {
+  PRIORITIES.forEach(renderList);
+  renderTodayCard();
+}, 60_000);
+
+// ============ 首页 · 今天 ============
+// 今天到期和已逾期的待办。勾选即完成（可撤销），点击其余位置打开待办页。
+// saveData 可能在脚本初始化早期被调用，所以元素在函数内查找，而不是依赖后面才声明的常量。
+function renderTodayCard() {
+  const homeTodayList = document.getElementById('home-today-list');
+  const homeTodaySummary = document.getElementById('home-today-summary');
+  if (!homeTodayList) return;
+  const items = window.NotchDomain.todayTodoItems(data, Date.now(), PRIORITIES);
+  const overdue = items.filter((item) => item.overdue).length;
+  if (homeTodaySummary) {
+    homeTodaySummary.textContent = items.length
+      ? `${items.length} 项${overdue ? ` · ${overdue} 项逾期` : ''}`
+      : '';
+  }
+  homeTodayList.replaceChildren();
+  if (!items.length) {
+    const empty = document.createElement('li');
+    empty.className = 'today-empty';
+    empty.textContent = '今天没有到期的待办';
+    homeTodayList.append(empty);
+    return;
+  }
+  // 卡片不滚动：只放得下的行数；放不下时最后一行换成「还有 N 项」。
+  const ROW_HEIGHT = 34;
+  const capacity = homeTodayList.clientHeight > 0
+    ? Math.max(1, Math.floor(homeTodayList.clientHeight / ROW_HEIGHT))
+    : items.length;
+  const shown = items.length > capacity ? items.slice(0, Math.max(0, capacity - 1)) : items;
+  shown.forEach((item) => {
+    const row = document.createElement('li');
+    row.className = 'today-item';
+    row.dataset.priority = item.priority;
+    row.dataset.id = item.id;
+    const check = document.createElement('button');
+    check.type = 'button';
+    check.className = `today-check today-${item.priority.toLowerCase()}`;
+    check.dataset.action = 'complete';
+    check.setAttribute('aria-label', `完成「${item.text}」`);
+    const text = document.createElement('button');
+    text.type = 'button';
+    text.className = 'today-text';
+    text.dataset.action = 'open';
+    text.textContent = item.text;
+    text.title = `${todoCategoryNames[item.priority] || ''} · ${item.text}`;
+    const time = document.createElement('span');
+    time.className = `today-time${item.label.tone ? ` ${item.label.tone}` : ''}`;
+    time.textContent = item.label.text;
+    row.append(check, text, time);
+    homeTodayList.append(row);
+  });
+  if (shown.length < items.length) {
+    const more = document.createElement('li');
+    more.className = 'today-more';
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.dataset.action = 'more';
+    button.textContent = `还有 ${items.length - shown.length} 项 ›`;
+    more.append(button);
+    homeTodayList.append(more);
+  }
+}
+
+// 卡片尺寸随首页布局变化时，重新计算能放下几行。
+if (window.ResizeObserver && document.getElementById('home-today-list')) {
+  let lastTodayListHeight = -1;
+  new ResizeObserver(([entry]) => {
+    const height = Math.round(entry.contentRect.height);
+    if (height === lastTodayListHeight) return;
+    lastTodayListHeight = height;
+    renderTodayCard();
+  }).observe(document.getElementById('home-today-list'));
+}
+
+document.getElementById('home-today-list')?.addEventListener('click', (event) => {
+  const action = event.target.closest('[data-action]')?.dataset.action;
+  if (action === 'more') {
+    setActiveTab('todo');
+    return;
+  }
+  const row = event.target.closest('.today-item');
+  if (!action || !row) return;
+  const { priority, id } = row.dataset;
+  if (action === 'complete') {
+    const item = (data[priority] || []).find((todo) => todo.id === id);
+    if (!item || item.done) return;
+    toggleTodo(priority, id);
+    showStatusToast(`已完成「${item.text}」`, {
+      actionLabel: '撤销',
+      duration: 5000,
+      onAction: () => {
+        const current = (data[priority] || []).find((todo) => todo.id === id);
+        if (current?.done) toggleTodo(priority, id);
+      },
+    });
+    return;
+  }
+  setActiveTab('todo');
+});
+document.getElementById('home-today-all')?.addEventListener('click', () => setActiveTab('todo'));
 
 // 渲染重建 innerHTML 后，给指定条目挂一次性动画类；动画结束即卸载，不污染后续渲染
 function flashItemClass(priority, id, cls) {
@@ -574,8 +678,8 @@ async function setMode(expanded) {
       await nextAnimationFrame();
       app.classList.remove('opening');
       app.classList.add('expanded');
-      // 展开后面板从隐藏变为可见，tab 尺寸此时才可量，校准激活胶囊位置
-      requestAnimationFrame(() => requestAnimationFrame(positionIndicator));
+      // 展开后面板从隐藏变为可见，tab 尺寸此时才可量：先判断是否要切成图标模式，再校准激活胶囊
+      requestAnimationFrame(() => requestAnimationFrame(fitTabsToPanel));
       setTimeout(() => {
         if (!isExpanded) return;
         if (activeTab === 'clip') renderClipList();
@@ -717,7 +821,8 @@ if (window.notchAPI && typeof window.notchAPI.onMetricsChanged === 'function') {
 
 // ============ Tab 切换 ============
 const TAB_KEY = 'notch-active-tab';
-const ALL_TABS = ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'resets', 'settings'];
+// 左组（刘海左侧）：天天用的页面；右组（刘海右侧）：录制、可选页面与设置。
+const ALL_TABS = ['home', 'todo', 'notes', 'links', 'clip', 'credentials', 'recordings', 'resets', 'settings'];
 let TABS = ALL_TABS.filter((name) => name !== 'clip');
 let tabButtons = Array.from(document.querySelectorAll('.tab:not([hidden])'));
 const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));
@@ -739,14 +844,27 @@ function applyFeatureSettings(settings) {
   TABS = window.NotchDomain.visiblePanelTabs(ALL_TABS, features);
   defaultOpenTab = window.NotchDomain.resolveDefaultPanelTab(settings?.defaultTab, TABS);
   tabButtons = Array.from(document.querySelectorAll('.tab:not([hidden])'));
-  tabButtons.forEach((button) => button.classList.remove('tab-split-start'));
-  document.getElementById('tabs')?.classList.toggle('is-split', tabButtons.length > 4);
-  if (tabButtons.length > 4) {
-    tabButtons[Math.ceil(tabButtons.length / 2)]?.classList.add('tab-split-start');
-  }
+  document.querySelectorAll('.tab-group').forEach((group) => {
+    group.hidden = !group.querySelector('.tab:not([hidden])');
+  });
   if (!TABS.includes(activeTab)) setActiveTab('home');
-  requestAnimationFrame(positionIndicator);
+  requestAnimationFrame(fitTabsToPanel);
 }
+
+// 两组页签各自只能用到刘海一侧的宽度；放不下时整体切成只显示图标，
+// 而不是让某一组越过刘海。
+function fitTabsToPanel() {
+  const tabs = document.getElementById('tabs');
+  if (!tabs) return;
+  tabs.classList.remove('is-compact');
+  const sideWidth = (tabs.clientWidth - 224) / 2;
+  const overflowing = [...tabs.querySelectorAll('.tab-group:not([hidden])')]
+    .some((group) => group.scrollWidth > sideWidth + 0.5);
+  tabs.classList.toggle('is-compact', overflowing);
+  positionIndicator();
+}
+
+window.addEventListener('resize', () => requestAnimationFrame(fitTabsToPanel));
 
 if (window.notchAPI?.getAppSettings) {
   window.notchAPI.getAppSettings().then(applyFeatureSettings).catch(() => {});
@@ -756,8 +874,14 @@ if (window.notchAPI?.getAppSettings) {
 function positionIndicator() {
   const btn = tabButtons.find((b) => b.dataset.tab === activeTab);
   if (!btn || !tabIndicator) return;
-  tabIndicator.style.width = `${btn.offsetWidth}px`;
-  tabIndicator.style.transform = `translateX(${btn.offsetLeft}px)`;
+  // 页签分在两个定位的组里，offsetLeft 只相对各自的组，所以按 #tabs 的矩形换算。
+  const container = tabIndicator.offsetParent || tabIndicator.parentElement;
+  const origin = container.getBoundingClientRect();
+  const rect = btn.getBoundingClientRect();
+  if (!rect.width) return;
+  tabIndicator.style.width = `${rect.width}px`;
+  tabIndicator.style.height = `${rect.height}px`;
+  tabIndicator.style.transform = `translate(${rect.left - origin.left}px, ${rect.top - origin.top}px)`;
 }
 
 function applyTabDom(name) {
@@ -2253,7 +2377,7 @@ function renderNotesLibrary() {
   if (!notesList) return;
   const archive = loadNoteArchive();
   const notes = window.NotchDomain.filterNotes(archive, notesSearch?.value || '');
-  if (notesCount) notesCount.textContent = `${archive.length} 篇`;
+  if (notesCount) notesCount.textContent = String(archive.length);
   if (!notes.some((note) => note.id === selectedNoteId)) selectedNoteId = notes[0]?.id || '';
   notesList.replaceChildren();
   if (!notes.length) {
@@ -2305,6 +2429,20 @@ noteSaveButton?.addEventListener('click', () => {
   selectedNoteId = activeId;
   renderNotesLibrary();
   showStatusToast('笔记已保存');
+});
+
+// 笔记页顶部的「新建」：提示词模式由 prompts.js 处理，笔记模式在这里新建空白笔记。
+document.getElementById('notes-new')?.addEventListener('click', () => {
+  if (document.getElementById('notes-page')?.dataset.library !== 'notes') return;
+  flushNotesEditorSave();
+  const now = Date.now();
+  const id = generateId();
+  const notes = [{ id, title: '', content: '', createdAt: now, updatedAt: now }, ...loadNoteArchive()];
+  localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.slice(0, 200)));
+  if (notesSearch) notesSearch.value = '';
+  selectedNoteId = id;
+  renderNotesLibrary();
+  notesDetail?.querySelector('.notes-detail-title')?.focus();
 });
 
 notesList?.addEventListener('click', (event) => {
@@ -2414,20 +2552,39 @@ if (notePreview) {
 const HOME_ORDER_KEY = 'notch-home-order-v3';
 const HOME_SIZES_KEY = 'notch-home-widget-sizes-v2';
 const HOME_HIDDEN_MODULES_KEY = 'notch-home-hidden-modules-v1';
-const HOME_MODULE_REGISTRY = ['pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands', 'usage'];
+const HOME_MODULE_REGISTRY = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
 const unavailableHomeModules = window.NotchPlatform.capabilities(window.notchAPI?.platform || 'darwin').unavailableHomeModules;
 const effectiveHomeHidden = (hidden) => window.NotchPlatform.effectiveHiddenModules(hidden, HOME_MODULE_REGISTRY, unavailableHomeModules);
-// 汽水音乐组件已移除；旧布局里的 music 会在读取时被丢弃，其余卡片自动补满网格。
-const HOME_ORDER_DEFAULTS = ['pomodoro', 'windows', 'recorder', 'mirror', 'note', 'commands', 'usage'];
+// v0.2 默认首页（与 docs/design/v0.2 原型一致）：随笔 · 今天 · 专注 · AI 用量 · 相框；
+// 快速录音与当前窗口默认隐藏，可在设置中打开。汽水音乐与常用指令已从首页移除。
+const HOME_ORDER_DEFAULTS = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
+const HOME_HIDDEN_DEFAULTS = ['recorder', 'windows'];
 const HOME_SIZE_DEFAULTS = {
-  windows: 'medium',
-  recorder: 'small',
-  mirror: 'medium',
   note: 'large',
-  commands: 'mini',
-  pomodoro: 'mini',
+  today: 'medium',
+  pomodoro: 'small',
   usage: 'medium',
+  mirror: 'medium',
+  // 两张可选卡片默认「迷你」，这样 7 张全部打开时面积正好是 48 格。
+  recorder: 'mini',
+  windows: 'mini',
 };
+const HOME_LAYOUT_VERSION_KEY = 'notch-home-layout-version';
+const HOME_LAYOUT_VERSION = '2';
+
+// 升级到 v0.2 时只执行一次：旧布局按旧卡片排列，换成新卡片后会落进不合适的格子，
+// 所以统一换成新的默认布局。之后用户的排序、尺寸和显隐照常保存。
+(function migrateHomeLayoutToV2() {
+  try {
+    if (localStorage.getItem(HOME_LAYOUT_VERSION_KEY) === HOME_LAYOUT_VERSION) return;
+    localStorage.setItem(HOME_ORDER_KEY, JSON.stringify(HOME_ORDER_DEFAULTS));
+    localStorage.setItem(HOME_SIZES_KEY, JSON.stringify(HOME_SIZE_DEFAULTS));
+    localStorage.setItem(HOME_HIDDEN_MODULES_KEY, JSON.stringify(HOME_HIDDEN_DEFAULTS));
+    localStorage.setItem(HOME_LAYOUT_VERSION_KEY, HOME_LAYOUT_VERSION);
+  } catch (error) {
+    // LocalStorage 不可用时使用内存中的默认布局。
+  }
+})();
 const HOME_SIZE_LABELS = { mini: '迷你', small: '小', medium: '中', large: '大' };
 const homeBento = document.getElementById('home-bento');
 const homeTiles = homeBento
@@ -3529,6 +3686,7 @@ if (window.notchAPI && typeof window.notchAPI.onNewClipEntry === 'function') {
 }
 
 renderAll();
+renderTodayCard();
 renderClipList(); // 首屏确保 clip-list DOM 就绪时渲染一次（幂等）
 renderClipFavs(); // 首屏渲染收藏剪贴块
 initTab();

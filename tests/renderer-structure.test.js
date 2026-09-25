@@ -56,7 +56,7 @@ test('settings exposes exactly one switch for every homepage widget', () => {
   const switches = [...html.matchAll(/data-settings-home-module="([^"]+)"/g)]
     .map((match) => match[1]);
   assert.deepEqual(switches, [
-    'usage', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands',
+    'note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows',
   ]);
   assert.match(workspaceJs, /isRecordingActive/);
   assert.match(workspaceJs, /recording_active/);
@@ -67,7 +67,7 @@ test('settings exposes every panel tab as a possible default opening page', () =
   const select = html.match(/<select id="settings-default-tab"[\s\S]*?<\/select>/)?.[0] || '';
   const options = [...select.matchAll(/<option value="([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(options, [
-    'home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'resets', 'settings',
+    'home', 'todo', 'notes', 'links', 'clip', 'credentials', 'recordings', 'resets', 'settings',
   ]);
   assert.match(workspaceJs, /setDefaultTab/);
 });
@@ -101,4 +101,13 @@ test('startup never asks for system permissions; they are requested in context',
   assert.doesNotMatch(mainJs, /promptForMissingPermissions/);
   assert.match(mainJs, /ipcMain\.handle\('media:screen-recording'/);
   assert.match(workspaceJs, /requestScreenRecording/);
+});
+
+test('tabs sit in two groups on either side of the notch, ordered by weight', () => {
+  const primary = html.match(/<div class="tab-group tab-group-primary">[\s\S]*?<\/div>/)?.[0] || '';
+  const secondary = html.match(/<div class="tab-group tab-group-secondary">[\s\S]*?<\/div>/)?.[0] || '';
+  const ids = (block) => [...block.matchAll(/data-tab="([a-z]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(ids(primary), ['home', 'todo', 'notes', 'links', 'clip', 'credentials']);
+  assert.deepEqual(ids(secondary), ['recordings', 'resets', 'settings']);
+  assert.doesNotMatch(appJs, /is-split|tab-split-start/);
 });
