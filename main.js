@@ -61,6 +61,8 @@ const {
   createSecretClipboardTracker,
   windowsHelloScript,
   credentialEnvName,
+  needsInputMessage,
+  needsInputDetail,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
 const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold } = require('./reminder-rules');
@@ -190,6 +192,9 @@ function createNotchTrayIcon() {
 
 const COLLAPSED_WIDTH = 200;
 const COLLAPSED_MIN_HEIGHT = 38;
+// 刘海下沿状态：有事要告诉你时只向下延伸 24pt，宽度仍是 200，不遮挡菜单栏图标。
+const NOTCH_STATUS_LIP = 24;
+let notchStatusActive = false;
 // NOTCH_LIP（原 6px 唇边）已移除：折叠条高度现在恰好等于菜单栏高（≈物理刘海高），
 // 一个像素都不超出物理刘海。虽然折叠条完全在菜单栏拦截带内，
 // 但本项目窗口使用 setAlwaysOnTop(true,'screen-saver') 级别，
@@ -392,7 +397,8 @@ function getBoundsForMode(mode, display) {
     const { width, height } = getExpandedSize(d);
     return getCenteredBounds(width, height, d);
   }
-  return getCenteredBounds(COLLAPSED_WIDTH, getCollapsedHeight(d), d);
+  const lip = notchStatusActive ? NOTCH_STATUS_LIP : 0;
+  return getCenteredBounds(COLLAPSED_WIDTH, getCollapsedHeight(d) + lip, d);
 }
 
 function cancelCollapseWatchdog() {
@@ -620,6 +626,7 @@ async function handleTaskNotificationAction(eventId, actionId) {
   if (!notification || notification.eventId !== eventId) return false;
   if (!notification.actions.some((item) => item.id === actionId)) return false;
   const now = Date.now();
+  if (notification.source === 'needs-you' && actionId === 'open') clearNeedsYou();
   switch (actionId) {
     case 'open':
       await activateActiveTaskNotification(eventId);
@@ -1228,6 +1235,28 @@ function startTaskNotificationServer() {
         sendTaskNotificationResponse(response, 202, { ok: true });
         return;
       }
+      const needsMessage = needsInputMessage(payload);
+      if (needsMessage) {
+        const base = normalizeTaskNotification({ ...payload, message: '' }, source);
+        if (!base) {
+          sendTaskNotificationResponse(response, 202, { ok: true, result: 'ignored' });
+          return;
+        }
+        const agentName = { claude: 'Claude', codex: 'Codex', gpt: 'GPT' }[source] || 'AI';
+        const notification = {
+          ...base,
+          source: 'needs-you',
+          agent: source,
+          taskId: `needs-${base.taskId || base.eventId}`,
+          title: `${agentName} 需要你确认`,
+          detail: needsInputDetail(needsMessage, base.project),
+        };
+        setNeedsYou({ agent: source, title: notification.title, detail: notification.detail, project: base.project, at: Date.now() });
+        sendTaskNotificationResponse(response, 202, { ok: true, result: enqueueTaskNotification(notification) });
+        return;
+      }
+      // 这一轮完成了，之前的「需要你确认」也就结束了。
+      clearNeedsYou(source);
       const result = enqueueTaskNotification(normalizeTaskNotification(payload, source));
       sendTaskNotificationResponse(response, 202, { ok: true, result });
     });
@@ -1750,6 +1779,72 @@ ipcMain.handle('window:set-mode', async (event, mode) => {
 
 ipcMain.handle('window:begin-collapse', () => {
   beginNativeCollapse();
+});
+
+// ============ 刘海下沿状态 ============
+// 显示哪条状态由页面决定（专注、录音、日程都在页面里）；这里只负责把收起的窗口加高或恢复。
+ipcMain.handle('notch:status', (event, active) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return false;
+  const next = active === true && process.platform === 'darwin';
+  if (next !== notchStatusActive) {
+    notchStatusActive = next;
+    if (currentMode === 'collapsed') repositionWindow();
+  }
+  return notchStatusActive;
+});
+
+// 「AI 需要你确认」：Claude Code 请求权限时点亮，等它继续完成、你跳回去处理或 15 分钟后清除。
+const NEEDS_YOU_TTL_MS = 15 * 60 * 1000;
+let needsYouState = null;
+let needsYouTimer = null;
+
+function publishNeedsYou() {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('notch:needs-you', needsYouState);
+}
+
+function setNeedsYou(state) {
+  if (needsYouTimer) clearTimeout(needsYouTimer);
+  needsYouTimer = null;
+  needsYouState = state;
+  if (state) {
+    needsYouTimer = setTimeout(() => clearNeedsYou(), NEEDS_YOU_TTL_MS);
+    needsYouTimer.unref?.();
+  }
+  publishNeedsYou();
+}
+
+function clearNeedsYou(agent = null) {
+  if (!needsYouState || (agent && needsYouState.agent !== agent)) return;
+  setNeedsYou(null);
+}
+
+ipcMain.handle('notch:needs-you:get', () => needsYouState);
+
+// 右键刘海：原生快捷菜单。
+ipcMain.handle('notch:menu', (event, context) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return false;
+  const state = context && typeof context === 'object' ? context : {};
+  const send = (action, value) => () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('notch:menu-action', { action, value });
+  };
+  const template = [];
+  if (state.pomodoro === 'running') template.push({ label: '暂停专注', click: send('pomodoro-toggle') });
+  if (state.pomodoro === 'paused') template.push({ label: '继续专注', click: send('pomodoro-toggle') });
+  if (state.recording) template.push({ label: '结束录音', click: send('stop-recording') });
+  if (template.length) template.push({ type: 'separator' });
+  template.push({
+    label: '稍后提醒',
+    submenu: [
+      { label: '10 分钟后', click: send('later', '10') },
+      { label: '30 分钟后', click: send('later', '30') },
+      { label: '1 小时后', click: send('later', '60') },
+      { label: '今晚 8 点', click: send('later', 'evening') },
+    ],
+  });
+  if (needsYouState) template.push({ label: '忽略「需要你确认」', click: () => clearNeedsYou() });
+  template.push({ type: 'separator' }, { label: '打开设置', click: send('settings') });
+  Menu.buildFromTemplate(template).popup({ window: mainWindow });
+  return true;
 });
 
 ipcMain.handle('codex:usage', (event) => {
@@ -3758,6 +3853,7 @@ app.on('will-quit', () => {
   if (timedReminderTimer) clearTimeout(timedReminderTimer);
   if (vaultLock) vaultLock.dispose();
   if (bodySampleTimer) clearInterval(bodySampleTimer);
+  if (needsYouTimer) clearTimeout(needsYouTimer);
   if (focusFlushTimer) clearTimeout(focusFlushTimer);
   stopHoverSpaceShortcut();
   clearTaskNotificationTimers();

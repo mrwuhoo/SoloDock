@@ -191,4 +191,14 @@
   const timer = setInterval(maybeRefresh, 30000);
   window.addEventListener('pagehide', () => clearInterval(timer), { once: true });
   maybeRefresh();
+
+  // 刘海下沿用：最紧的那个 Codex 额度窗口剩余百分比；数据超过 6 小时视为过期，返回 null。
+  window.NotchCodexUsage = {
+    remaining() {
+      if (!snapshot || !Array.isArray(snapshot.buckets)) return null;
+      if (lastUpdated && Date.now() - lastUpdated > 6 * 3600000) return null;
+      const values = snapshot.buckets.flatMap((bucket) => bucket.windows || []).map(currentRemaining).filter((value) => value !== null);
+      return values.length ? Math.min(...values) : null;
+    },
+  };
 })();

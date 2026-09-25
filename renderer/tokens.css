@@ -82,6 +82,17 @@
   --sd-card-padding: 14px 16px;
   --sd-card-gap: 12px;
 
+  /* On the black notch (collapsed status lip): the only dark surface in the app */
+  --sd-on-dark-1: rgba(255, 255, 255, 0.94);
+  --sd-on-dark-2: rgba(255, 255, 255, 0.6);
+  --sd-on-dark-track: rgba(255, 255, 255, 0.14);
+  --sd-on-dark-accent: #8bb8ff;
+  --sd-on-dark-success: #62d6ab;
+  --sd-on-dark-warning: #ffb547;
+  --sd-on-dark-danger: #ff5f57;
+  /* The notch lip is the only 12px text: 200pt must fit "03:20 客户电话 · 23 分钟后". */
+  --sd-fs-notch: 12px;
+
   /* Elevation: floating layers only */
   --sd-shadow-float: 0 18px 48px rgba(28, 51, 77, 0.24), 0 2px 8px rgba(28, 51, 77, 0.1);
 

@@ -1716,6 +1716,7 @@ window.notchAPI?.onOpenTodo?.(async () => {
 
 window.NotchPomodoro = {
   start: startPomodoroSession,
+  toggle: () => pomodoroToggle?.click(),
   state: () => ({ running: pomodoroRunning, started: pomodoroStarted, mode: pomodoroMode, remaining: pomodoroRemaining, session: pomodoroSessionSeconds }),
 };
 window.NotchReminderActions = { completeTodoById, moveDueTodosToTomorrow };

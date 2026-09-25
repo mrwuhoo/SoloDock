@@ -2580,6 +2580,8 @@
   window.NotchWorkspace = {
     refreshWindows,
     startRecording,
+    stopRecording,
     isRecordingActive: isRecordingBusy,
+    recordingState: () => ({ status: recordingStatus, durationMs: isRecordingActive() ? currentDuration() : 0 }),
   };
 })();

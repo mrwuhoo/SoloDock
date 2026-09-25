@@ -378,5 +378,12 @@
     isOnHome: (id) => onHome().some((item) => item.id === id),
     subscriptions: () => subscriptions.map((item) => ({ ...item })),
     refreshClaude: () => refreshClaude(true),
+    // 刘海下沿用：Claude 开着且数据不超过 6 小时时，返回最紧额度窗口的剩余百分比。
+    claudeRemaining() {
+      if (!subscriptions.some((item) => item.id === 'claude' && item.enabled)) return null;
+      const summary = Ai.claudeSummary(claudeSnapshot);
+      if (summary.state !== 'ready' || (summary.receivedAt && Date.now() - summary.receivedAt > 6 * 3600000)) return null;
+      return summary.primary.remaining;
+    },
   };
 })();

@@ -128,6 +128,19 @@ app.on('web-contents-created', (_event, contents) => {
       await new Promise((resolve) => setTimeout(resolve, 700));
       assert.equal(globalShortcut.isRegistered('Control+Alt+Return'), false, 'and released once it is dismissed');
       await contents.executeJavaScript(`document.getElementById('pomodoro-reset').click()`);
+
+      // The collapsed notch grows 24pt downward for a status and keeps its 200pt width.
+      const panelWindow = Windows.getAllWindows().find((win) => win.webContents.getURL().endsWith('/renderer/index.html'));
+      await contents.executeJavaScript(`window.NotchNotchStatus.setOffwork({ enabled: false }); true`);
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const idleBounds = panelWindow.getBounds();
+      await contents.executeJavaScript('window.notchAPI.setNotchStatus(true)');
+      const statusBounds = panelWindow.getBounds();
+      await contents.executeJavaScript('window.notchAPI.setNotchStatus(false)');
+      const restoredBounds = panelWindow.getBounds();
+      assert.equal(idleBounds.width, 200);
+      assert.deepEqual([statusBounds.width, statusBounds.height - idleBounds.height, statusBounds.x, statusBounds.y], [200, 24, idleBounds.x, idleBounds.y]);
+      assert.deepEqual(restoredBounds, idleBounds);
       assert.deepEqual(errors, []);
       console.log('Production workspace recovery checks passed');
       app.quit();

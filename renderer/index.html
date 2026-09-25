@@ -23,6 +23,22 @@
         aria-controls="panel"
       >
         <div class="notch-dot"></div>
+        <!-- 刘海下沿状态：同一时刻只显示最要紧的一条（见 notch-status-domain.js）。 -->
+        <div class="notch-status" id="notch-status" aria-live="polite" hidden>
+          <span class="notch-status-icon" aria-hidden="true">
+            <svg data-icon="alert" viewBox="0 0 24 24"><path d="M12 4.5 21 19.5H3Z"/><path d="M12 10v4.2M12 17h.01"/></svg>
+            <span class="notch-status-dot" data-icon="dot"></span>
+            <svg data-icon="timer" viewBox="0 0 24 24"><circle cx="12" cy="13.5" r="6.8"/><path d="M12 13.5V10M10 3.8h4"/></svg>
+            <svg data-icon="leaf" viewBox="0 0 24 24"><path d="M5.5 18.5c0-7.5 5-12 13-12 0 8-4.5 13-12 13Z"/><path d="M5.5 18.5 13 11"/></svg>
+            <svg data-icon="gauge" viewBox="0 0 24 24"><path d="M4 16a8 8 0 1 1 16 0"/><path d="m12 16 3.5-4.5"/></svg>
+            <svg data-icon="calendar" viewBox="0 0 24 24"><rect x="4.5" y="5.5" width="15" height="14" rx="3"/><path d="M4.5 10h15M9 3.5v4M15 3.5v4"/></svg>
+            <svg data-icon="bell" viewBox="0 0 24 24"><path d="M7 16.5V11a5 5 0 0 1 10 0v5.5l1.5 1.5h-13Z"/><path d="M10.2 20.2a2 2 0 0 0 3.6 0"/></svg>
+            <svg data-icon="moon" viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5Z"/></svg>
+          </span>
+          <span class="notch-status-text" id="notch-status-text"></span>
+          <span class="notch-status-detail" id="notch-status-detail"></span>
+          <span class="notch-status-progress" aria-hidden="true"><i id="notch-status-progress"></i></span>
+        </div>
       </div>
 
       <div id="panel" class="panel" aria-hidden="true" inert>
@@ -780,6 +796,8 @@
     <script src="photo-frame.js"></script>
     <script src="vault.js"></script>
     <script src="body-settings.js"></script>
+    <script src="notch-status-domain.js"></script>
+    <script src="notch-status.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

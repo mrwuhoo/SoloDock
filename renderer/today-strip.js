@@ -308,15 +308,22 @@
     get('later-note').focus();
   }
 
+  // 也供刘海右键菜单使用；返回提醒时间，预设无效时返回 null。
+  function addLater(preset, note = '') {
+    const at = Timeline.laterAt(preset);
+    if (!at) return null;
+    later = Timeline.normalizeLater([...later, { id: uid('later'), note: String(note || '').trim(), at, createdAt: Date.now() }]);
+    saveLater();
+    return at;
+  }
+
   laterPop.addEventListener('click', (event) => {
     const preset = event.target.closest('[data-later]')?.dataset.later;
     if (!preset) return;
-    const at = Timeline.laterAt(preset);
-    if (!at) return;
     const note = get('later-note').value.trim();
-    later = Timeline.normalizeLater([...later, { id: uid('later'), note, at, createdAt: Date.now() }]);
+    const at = addLater(preset, note);
+    if (!at) return;
     closePops();
-    saveLater();
     toast(`将在 ${Timeline.clock(at)} 提醒${note ? `：${note}` : ''}`);
   });
   laterPop.addEventListener('keydown', (event) => {
@@ -415,5 +422,6 @@
     refreshCompletions: loadCompletions,
     events: () => events.map((item) => ({ ...item })),
     later: () => later.map((item) => ({ ...item })),
+    addLater,
   };
 })();

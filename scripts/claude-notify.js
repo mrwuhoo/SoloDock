@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 
-// Claude Code Stop 钩子：把「任务已完成」转发给刘海面板的本地接收服务。
+// Claude Code 钩子：Stop 把「任务已完成」、Notification 把「需要你批准」转发给刘海面板的本地接收服务。
 // 覆盖终端 CLI、VS Code / JetBrains 插件与桌面端——三者共用同一份 CLI 内核，
 // 所以只要 ~/.claude/settings.json 注册了 Stop 钩子，本脚本就会被调用。
 // 钩子必须静默失败：任何异常都不能阻塞 Claude 结束回合。
@@ -142,6 +142,18 @@ async function main() {
 
   // 子代理结束不该弹提醒，主进程也会再过滤一次。
   if (payload.agent_id) return;
+
+  // 请求权限等 Notification 事件：原样转发消息，由主进程判断是否算「需要你确认」。
+  if (payload.hook_event_name === 'Notification') {
+    await post({
+      source: 'claude',
+      hook_event_name: 'Notification',
+      message: typeof payload.message === 'string' ? payload.message.slice(0, 200) : '',
+      session_id: typeof payload.session_id === 'string' ? payload.session_id : '',
+      cwd: typeof payload.cwd === 'string' ? payload.cwd : '',
+    });
+    return;
+  }
 
   let title = '';
   for (let attempt = 0; attempt < TRANSCRIPT_RETRIES; attempt += 1) {

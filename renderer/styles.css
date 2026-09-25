@@ -239,6 +239,178 @@ body {
   opacity: 0;
 }
 
+/* ============ 刘海下沿状态 ============ */
+/* 有事要说时，刘海只向下长出 24pt（宽度仍是 200），黑色与物理刘海连成一体；
+   同一时刻只显示一条：图标 + 文字 + 右侧数值，专注时底边有 2px 进度线。 */
+#app.collapsed.has-notch-status .notch {
+  height: calc(var(--notch-h, 38px) + 24px);
+  padding-bottom: 0;
+  border-radius: 0 0 14px 14px;
+  transition:
+    height 280ms var(--sd-ease-out),
+    border-radius 280ms var(--sd-ease-out);
+}
+
+#app.collapsed.has-notch-status .notch-dot {
+  opacity: 0;
+}
+
+.notch-status {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: none;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 12px 2px;
+  color: var(--sd-on-dark-1);
+  font: var(--sd-fw-medium) var(--sd-fs-notch) / 1 var(--sd-font);
+  --status-tint: var(--sd-on-dark-accent);
+}
+
+#app.collapsed.has-notch-status .notch-status {
+  display: flex;
+  animation: notch-status-in 240ms var(--sd-ease-out) 120ms both;
+}
+
+#app.expanded .notch-status {
+  display: none;
+}
+
+@keyframes notch-status-in {
+  from { opacity: 0; transform: translateY(-3px); }
+  to { opacity: 1; transform: none; }
+}
+
+.notch-status-icon {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  color: var(--status-tint);
+}
+
+.notch-status-icon svg {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+}
+
+.notch-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--sd-on-dark-danger);
+  opacity: 0;
+}
+
+.notch-status[data-icon='alert'] [data-icon='alert'],
+.notch-status[data-icon='dot'] [data-icon='dot'],
+.notch-status[data-icon='timer'] [data-icon='timer'],
+.notch-status[data-icon='leaf'] [data-icon='leaf'],
+.notch-status[data-icon='gauge'] [data-icon='gauge'],
+.notch-status[data-icon='calendar'] [data-icon='calendar'],
+.notch-status[data-icon='bell'] [data-icon='bell'],
+.notch-status[data-icon='moon'] [data-icon='moon'] {
+  opacity: 1;
+}
+
+.notch-status-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.notch-status-detail {
+  flex: none;
+  color: var(--sd-on-dark-2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.notch-status-detail:empty {
+  display: none;
+}
+
+/* 专注 / 休息的剩余进度：底边 2px。 */
+.notch-status-progress {
+  position: absolute;
+  right: 12px;
+  bottom: 3px;
+  left: 12px;
+  display: none;
+  height: 2px;
+  overflow: hidden;
+  border-radius: var(--sd-radius-pill);
+  background: var(--sd-on-dark-track);
+}
+
+.notch-status[data-progress='true'] .notch-status-progress {
+  display: block;
+}
+
+.notch-status-progress i {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--status-tint);
+  transition: width 900ms linear;
+}
+
+.notch-status[data-tone='focus'] { --status-tint: var(--sd-on-dark-accent); }
+.notch-status[data-tone='calm'] { --status-tint: var(--sd-on-dark-success); }
+.notch-status[data-tone='info'] { --status-tint: var(--sd-on-dark-accent); }
+.notch-status[data-tone='warning'],
+.notch-status[data-tone='needs'] { --status-tint: var(--sd-on-dark-warning); }
+.notch-status[data-tone='recording'] { --status-tint: var(--sd-on-dark-danger); }
+.notch-status[data-kind='offwork'] { color: var(--sd-on-dark-2); }
+
+/* 需要你确认：琥珀描边 + 1.8 秒的内发光呼吸；录音：红点 1.4 秒呼吸。 */
+#app.collapsed.has-notch-status[data-notch-tone='needs'] .notch {
+  box-shadow: inset 0 0 0 1.5px var(--sd-on-dark-warning);
+  animation: notch-needs 1.8s ease-in-out infinite;
+}
+
+@keyframes notch-needs {
+  0%, 100% { box-shadow: inset 0 0 0 1.5px var(--sd-on-dark-warning), inset 0 -6px 14px -8px rgba(255, 181, 71, 0.2); }
+  50% { box-shadow: inset 0 0 0 1.5px var(--sd-on-dark-warning), inset 0 -10px 20px -6px rgba(255, 181, 71, 0.55); }
+}
+
+.notch-status[data-tone='recording'] .notch-status-dot {
+  animation: notch-breathe 1.4s ease-in-out infinite;
+}
+
+@keyframes notch-breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.45; transform: scale(0.8); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #app.collapsed.has-notch-status .notch,
+  #app.collapsed.has-notch-status .notch-status,
+  .notch-status[data-tone='recording'] .notch-status-dot {
+    animation: none;
+    transition: none;
+  }
+
+  #app.collapsed.has-notch-status[data-notch-tone='needs'] .notch {
+    box-shadow: inset 0 0 0 1.5px var(--sd-on-dark-warning);
+  }
+}
+
 /* ============ 玻璃材质（复用配方） ============ */
 .tile {
   background: var(--surface-1);

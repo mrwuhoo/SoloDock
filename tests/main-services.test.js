@@ -648,3 +648,15 @@ test('the Windows Hello script checks availability or asks for verification, wit
   assert.ok(call.includes("RequestVerificationAsync('解锁 O''Brien 的密钥  ''; Remove-Item C:\\ -Recurse; ''')"), call);
   assert.equal(verify.split('\n').length, check.split('\n').length, 'no line breaks leak into the script');
 });
+
+test('only permission requests from Claude Code count as "needs you", with a Chinese explanation', () => {
+  const { needsInputMessage, needsInputDetail } = require('../main-services');
+  assert.equal(needsInputMessage({ hook_event_name: 'Notification', message: 'Claude needs your permission to use Bash' }), 'Claude needs your permission to use Bash');
+  assert.equal(needsInputMessage({ hook_event_name: 'Notification', message: 'Claude is waiting for your input' }), '', 'idle prompts are covered by Stop');
+  assert.equal(needsInputMessage({ hook_event_name: 'Stop', message: 'permission' }), '');
+  assert.equal(needsInputMessage({ kind: 'needs-input', message: '' }), 'needs input');
+  assert.equal(needsInputMessage(null), '');
+  assert.equal(needsInputDetail('Claude needs your permission to use Bash', 'solodock'), '想使用 Bash，等你批准 · solodock');
+  assert.equal(needsInputDetail('Please confirm the plan'), 'Please confirm the plan');
+  assert.equal(needsInputDetail(''), '等你批准后继续');
+});

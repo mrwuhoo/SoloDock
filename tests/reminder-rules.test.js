@@ -22,6 +22,9 @@ test('each reminder type gets its own buttons, and the ones that need you stay u
   assert.deepEqual(ids('sit'), ['break-5', 'body-snooze-10', 'body-mute-today']);
   assert.deepEqual(ids('offwork'), ['move-tomorrow', 'body-snooze-30']);
   assert.deepEqual(ids('codex'), ['open', 'snooze-10']);
+  assert.deepEqual(ids('needs-you'), ['open', 'snooze-10']);
+  assert.equal(rules.reminderPresentation('needs-you').visibleMs, 0, 'a permission request waits for you');
+  assert.equal(rules.isAiSource('needs-you'), false, 'not a completion');
   assert.equal(rules.reminderPresentation('todo').visibleMs, 0);
   assert.equal(rules.reminderPresentation('event').visibleMs, 0);
   assert.equal(rules.reminderPresentation('codex').visibleMs, 8000);

@@ -624,6 +624,26 @@ function normalizeClaudeRateLimits(payload, now = Date.now()) {
   return { fiveHour, sevenDay, receivedAt: Number(now) };
 }
 
+// Claude Code 的 Notification 钩子：只有「需要你批准」这类消息算「需要你确认」；
+// 「在等你输入」由 Stop（任务完成）覆盖，不重复提醒。返回原始消息，不是则返回空字符串。
+const NEEDS_INPUT_PATTERN = /permission|approv|confirm|allow|授权|批准|确认|允许/i;
+
+function needsInputMessage(payload) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return '';
+  const hookEvent = String(payload.hook_event_name || payload.hookEventName || '').toLowerCase();
+  const message = String(payload.message || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+  if (payload.kind === 'needs-input') return message || 'needs input';
+  if (hookEvent !== 'notification' || !message) return '';
+  return NEEDS_INPUT_PATTERN.test(message) ? message : '';
+}
+
+// 提醒里的中文说明：「Claude needs your permission to use Bash」→「想使用 Bash，等你批准」。
+function needsInputDetail(message, project = '') {
+  const tool = /permission to use ([^.,，。]+)/i.exec(String(message || ''));
+  const text = tool ? `想使用 ${tool[1].trim()}，等你批准` : String(message || '').trim() || '等你批准后继续';
+  return project ? `${text} · ${project}` : text;
+}
+
 // Windows Hello via Windows PowerShell 5.1 (WinRT UserConsentVerifier); Electron has no API for it.
 // action 'check' prints the availability (e.g. "Available"), 'verify' prints the result (e.g. "Verified").
 function windowsHelloScript(action, reason = '') {
@@ -661,6 +681,8 @@ function framePhotoSize(size, maxEdge) {
 }
 
 module.exports = {
+  needsInputMessage,
+  needsInputDetail,
   deriveEnvName,
   credentialEnvName,
   windowsHelloScript,
