@@ -46,11 +46,8 @@ const {
   installLocalWebContentsGuards,
   runOwnedOpenDialog,
   readClipboardObservation,
-  screenRecordingProbePolicy,
   taskNotificationWindowPolicy,
   updateFeaturePreference,
-  controlSodaMusic,
-  sodaShortcutSpec,
   selectTranscriptionSettings,
   createWorkspacePersistenceGate,
   hoverSpacePollingPolicy,
@@ -226,7 +223,6 @@ const WORKSPACE_SETTINGS_FILE = 'workspace-settings.json';
 const WORKSPACE_DATA_FILE = 'workspace.json';
 const MIRROR_IMAGE_FILE = 'mirror-cover.jpg';
 const workspacePersistenceGate = createWorkspacePersistenceGate();
-const SODA_MUSIC_APP = '/Applications/汽水音乐.app';
 const TRANSCRIPTION_MODEL = 'qwen3-asr-flash-realtime';
 const TRANSCRIPTION_SAMPLE_RATE = 16000;
 const TRANSCRIPTION_FINISH_TIMEOUT_MS = 7000;
@@ -258,10 +254,8 @@ let collapseGeneration = 0;
 let hideWhenCollapsed = false;
 let isQuitting = false;
 let mediaPermissionRequests = 0;
-let mediaPermissionBatchHadCamera = false;
 let transientSystemInteractionRequests = 0;
-let cameraBlurDeferred = false;
-let sodaMusicPlaying = false;
+let blurDeferred = false;
 const mediaPermissionCoordinator = createForegroundMediaPermissionCoordinator();
 
 let notificationWindow = null;
@@ -1048,14 +1042,14 @@ function createWindow() {
   // 失焦时让渲染层走完整退场动画，再由渲染层请求缩小原生窗口。
   mainWindow.on('blur', () => {
     if (mediaPermissionRequests > 0 || transientSystemInteractionRequests > 0) {
-      cameraBlurDeferred = true;
+      blurDeferred = true;
       return;
     }
     requestRendererCollapse();
   });
 
   mainWindow.on('focus', () => {
-    cameraBlurDeferred = false;
+    blurDeferred = false;
   });
   mainWindow.on('show', syncHoverSpacePolling);
   mainWindow.on('hide', syncHoverSpacePolling);
@@ -1192,7 +1186,7 @@ function showOwnedOpenDialog(options) {
     (delta) => {
       transientSystemInteractionRequests = Math.max(0, transientSystemInteractionRequests + delta);
       if (delta < 0 && transientSystemInteractionRequests === 0 && mediaPermissionRequests === 0) {
-        cameraBlurDeferred = false;
+        blurDeferred = false;
       }
     }
   );
@@ -1504,11 +1498,22 @@ ipcMain.handle('settings:set-shortcut', (event, accelerator) => {
   return { ok: true, shortcut: accelerator };
 });
 ipcMain.handle('workspace:get', () => ({ path: workspaceRoot(), portable: workspaceRoot() !== app.getPath('userData') }));
-ipcMain.handle('workspace:load-data', () => {
+function readWorkspaceSnapshot() {
   const payload = readJsonFile(workspacePath(WORKSPACE_DATA_FILE), {});
   return payload && payload.localStorage && typeof payload.localStorage === 'object'
     ? payload.localStorage
     : {};
+}
+ipcMain.handle('workspace:load-data', () => readWorkspaceSnapshot());
+// 预加载脚本在页面脚本运行前同步读取工作区，写入 LocalStorage 后页面首帧即有数据，
+// 不再出现「先空白、异步导入、再整页刷新」的约 2.5 秒空档。只对主面板开放。
+ipcMain.on('workspace:load-data-sync', (event) => {
+  const fromMainPanel = mainWindow && !mainWindow.isDestroyed() && event.sender === mainWindow.webContents;
+  try {
+    event.returnValue = fromMainPanel ? readWorkspaceSnapshot() : {};
+  } catch (error) {
+    event.returnValue = {};
+  }
 });
 
 function normalizePortableStorage(storage) {
@@ -1576,31 +1581,15 @@ async function requestMacMediaAccess(mediaType) {
     // 并把应用激活，让“不允许 / 允许”确实处在可点击的最前方。
     activate: () => app.focus({ steal: true }),
     track: (delta) => {
-      if (delta > 0 && mediaType === 'camera') mediaPermissionBatchHadCamera = true;
       mediaPermissionRequests = Math.max(0, mediaPermissionRequests + delta);
-      if (delta >= 0 || mediaPermissionRequests > 0) return;
-      const shouldCollapse = cameraBlurDeferred && mediaPermissionBatchHadCamera;
-      mediaPermissionBatchHadCamera = false;
-      cameraBlurDeferred = false;
-      if (!shouldCollapse) return;
-      const targetWindow = mainWindow;
-      setTimeout(() => {
-        if (
-          mainWindow === targetWindow &&
-          targetWindow &&
-          !targetWindow.isDestroyed() &&
-          !targetWindow.isFocused()
-        ) {
-          requestRendererCollapse();
-        }
-      }, 200);
+      if (delta < 0 && mediaPermissionRequests === 0) blurDeferred = false;
     },
+
     request: () => systemPreferences.askForMediaAccess(mediaType),
   });
 }
 
 // macOS 渲染层 getUserMedia 不会自动弹 TCC 授权，必须由主进程申请摄像头/麦克风权限。
-ipcMain.handle('media:camera', () => requestMacMediaAccess('camera'));
 ipcMain.handle('media:microphone', () => requestMacMediaAccess('microphone'));
 
 // macOS 没有 askForMediaAccess('screen')。只能在明确的用户操作后调用
@@ -1652,12 +1641,10 @@ ipcMain.handle('shell:openPath', (event, p) => {
 // 绝不能拼进 URL：x-apple.systempreferences: 能打开任意设置面板。
 const PRIVACY_SETTINGS_PANES = process.platform === 'win32' ? {
   microphone: 'ms-settings:privacy-microphone',
-  camera: 'ms-settings:privacy-webcam',
 } : {
   accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
   'screen-recording': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
   microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
-  camera: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Camera',
 };
 
 ipcMain.handle('shell:open-privacy-settings', (event, pane) => {
@@ -1669,69 +1656,6 @@ ipcMain.handle('shell:open-privacy-settings', (event, pane) => {
 
 // ============ 启动时的权限自检 ============
 // DMG 装的是全新二进制，TCC 授权不会从开发版继承，而这几项缺失时的表现都是「静默失效」：
-// 缺「屏幕录制」→ CGWindowList 照样返回窗口但标题全空，当前窗口看起来像真的没窗口；
-// 缺「辅助功能」→ 枚举、聚焦窗口和汽水音乐发按键全部无效。
-// 系统对前者根本不弹提示，所以只能由应用自己说，否则用户完全无从下手。
-const PERMISSION_PROMPT_SKIP_FILE = 'permission-prompt-skipped';
-
-// 先尊重系统的明确状态，尤其不能在 not-determined 时调用 desktopCapturer，
-// 否则启动自检本身就会抢先弹出系统录屏框。只有系统报告 granted 时才通过
-// 无缩略图的窗口标题做二次确认；未知状态 fail-open，等用户实际使用时再申请。
-async function hasScreenRecordingAccess() {
-  const policy = screenRecordingProbePolicy(systemPreferences.getMediaAccessStatus('screen'));
-  if (!policy.inspectWindowTitles) return policy.hasAccess;
-  try {
-    const sources = await desktopCapturer.getSources({
-      types: ['window'],
-      thumbnailSize: { width: 0, height: 0 },
-      fetchWindowIcons: false,
-    });
-    if (sources.length === 0) return true; // 拿不到源无法判定，不误报
-    return sources.some((source) => String(source.name || '').trim().length > 0);
-  } catch (error) {
-    return true; // 探测本身失败时不打扰用户
-  }
-}
-
-async function promptForMissingPermissions() {
-  if (process.platform !== 'darwin') return;
-  const skipFlag = path.join(app.getPath('userData'), PERMISSION_PROMPT_SKIP_FILE);
-  if (fs.existsSync(skipFlag)) return;
-
-  const missing = [];
-  // 传 false 只查询不弹系统框：先把缺失项攒齐一次性告知，避免连弹两个系统对话框。
-  if (!systemPreferences.isTrustedAccessibilityClient(false)) missing.push('accessibility');
-  if (!await hasScreenRecordingAccess()) missing.push('screen-recording');
-  if (missing.length === 0) return;
-
-  const names = missing.map((key) => (key === 'accessibility' ? '辅助功能' : '屏幕录制'));
-  const { response, checkboxChecked } = await dialog.showMessageBox({
-    type: 'info',
-    message: `SoloDock 需要「${names.join('」和「')}」权限`,
-    detail: [
-      '缺少这些权限时，「当前窗口」会读不到任何窗口，汽水音乐的播放控制也不会生效。',
-      '',
-      '授权后需要重新启动 SoloDock 才会生效。',
-      'ad-hoc 签名的应用每次重新打包都要重新授权一次，这是没有开发者账号分发的固有限制。',
-    ].join('\n'),
-    buttons: ['打开系统设置', '以后再说'],
-    defaultId: 0,
-    cancelId: 1,
-    checkboxLabel: '不再提示',
-    checkboxChecked: false,
-  });
-
-  if (checkboxChecked) {
-    try { fs.writeFileSync(skipFlag, new Date().toISOString()); } catch (error) {}
-  }
-  if (response !== 0) return;
-
-  // 顺带用 true 触发一次系统的辅助功能提示：这一步会把应用登记进系统设置的列表里，
-  // 否则用户打开设置面板可能找不到 SoloDock 这一项、只能手动拖进去。
-  if (missing.includes('accessibility')) systemPreferences.isTrustedAccessibilityClient(true);
-  shell.openExternal(PRIVACY_SETTINGS_PANES[missing[0]]);
-}
-
 async function validatePublicHttpUrl(value) {
   let url;
   try {
@@ -2440,97 +2364,6 @@ ipcMain.handle('credentials:copy', async (event, payload) => {
     }, 60_000).unref?.();
   }
   return true;
-});
-
-function sodaMusicRunning() {
-  return new Promise((resolve) => {
-    execFile('/usr/bin/pgrep', ['-f', '^/Applications/汽水音乐\\.app/Contents/MacOS/汽水音乐$'], { timeout: 1500 }, (error) => resolve(!error));
-  });
-}
-
-function launchSodaMusic() {
-  return new Promise((resolve) => {
-    const cleanEnvironment = { ...process.env };
-    delete cleanEnvironment.ELECTRON_RUN_AS_NODE;
-    cleanEnvironment.XPC_SERVICE_NAME = '0';
-    execFile(
-      '/usr/bin/open',
-      [SODA_MUSIC_APP],
-      { timeout: 4000, env: cleanEnvironment },
-      (error) => resolve(!error)
-    );
-  });
-}
-
-const SODA_SHORTCUT_JXA = `
-function run(argv) {
-  const keyCode = Number(argv[0]);
-  const usesCommand = String(argv[1] || '') === '1';
-  const dismissOverlays = String(argv[2] || '') === '1';
-  const processes = Application('System Events').applicationProcesses.whose({ bundleIdentifier: 'com.soda.music' })();
-  if (!processes.length) return 'missing';
-  processes[0].frontmost = true;
-  delay(0.35);
-  const systemEvents = Application('System Events');
-  if (!Number.isFinite(keyCode)) return 'invalid';
-  if (dismissOverlays) {
-    systemEvents.keyCode(53);
-    delay(0.15);
-  }
-  if (usesCommand) systemEvents.keyCode(keyCode, { using: 'command down' });
-  else systemEvents.keyCode(keyCode);
-  return 'ok';
-}`;
-
-async function sendSodaShortcut(action) {
-  if (process.platform !== 'darwin') return { ok: false, error: 'unsupported' };
-  if (!systemPreferences.isTrustedAccessibilityClient(true)) {
-    return { ok: false, error: 'accessibility_permission_required' };
-  }
-  const shortcut = sodaShortcutSpec(action);
-  if (!shortcut) return { ok: false, error: 'invalid_action' };
-  try {
-    const result = await runJxa(SODA_SHORTCUT_JXA, [
-      shortcut.keyCode,
-      shortcut.command ? '1' : '0',
-      shortcut.dismissOverlays ? '1' : '0',
-    ]);
-    return result === 'ok' ? { ok: true } : { ok: false, error: 'soda_control_failed' };
-  } catch (error) {
-    console.warn('[music] failed to send Soda Music shortcut', error && error.message || error);
-    return { ok: false, error: 'soda_control_failed' };
-  }
-}
-
-ipcMain.handle('music:status', async () => {
-  const installed = fs.existsSync(SODA_MUSIC_APP);
-  const running = installed ? await sodaMusicRunning() : false;
-  if (!running) sodaMusicPlaying = false;
-  return {
-    installed,
-    running,
-    sessionActive: running,
-    playing: running && sodaMusicPlaying,
-    title: '',
-    artist: '',
-    icon: installed ? await readSystemAppIconNow(SODA_MUSIC_APP) : null,
-  };
-});
-
-ipcMain.handle('music:control', async (event, action) => {
-  if (process.platform !== 'darwin') return { ok: false, error: 'unsupported' };
-  if (!fs.existsSync(SODA_MUSIC_APP)) return { ok: false, error: 'not_installed' };
-  const result = await controlSodaMusic(action, {
-    isRunning: sodaMusicRunning,
-    launch: launchSodaMusic,
-    sendShortcut: sendSodaShortcut,
-  }, sodaMusicPlaying);
-  if (result && result.ok) sodaMusicPlaying = result.playing;
-  if (result && result.ok && mainWindow && !mainWindow.isDestroyed() && currentMode === 'expanded') {
-    if (!mainWindow.isVisible()) mainWindow.show();
-    mainWindow.focus();
-  }
-  return result;
 });
 
 // ============ 百炼实时语音转写 ============
@@ -3419,7 +3252,8 @@ app.whenReady().then(() => {
   ensureRecordingsDir();
   applyAppSettings();
   startTaskNotificationServer();
-  void promptForMissingPermissions();
+  // 不在启动时索要权限：只有用户在「当前窗口」卡片里点了授权按钮才申请，
+  // 那条路径会先调用 desktopCapturer，让 SoloDock 出现在系统的录屏权限列表里。
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

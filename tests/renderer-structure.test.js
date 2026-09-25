@@ -7,6 +7,7 @@ const html = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'index.html'
 const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 'utf8');
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
+const mainJs = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
@@ -48,7 +49,6 @@ test('homepage visibility has one storage key, exact validation, and lifecycle e
   assert.match(appJs, /window\.NotchHome\s*=/);
   assert.match(appJs, /notch:home-modules-changed/);
   assert.match(appJs, /notch:home-layout-error/);
-  assert.match(appJs, /stopMirror\(\)/);
   assert.match(appJs, /new Set\(homeTiles\.map\(\(tile\) => tile\.dataset\.homeModule\)\)/);
 });
 
@@ -56,7 +56,7 @@ test('settings exposes exactly one switch for every homepage widget', () => {
   const switches = [...html.matchAll(/data-settings-home-module="([^"]+)"/g)]
     .map((match) => match[1]);
   assert.deepEqual(switches, [
-    'usage', 'music', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands',
+    'usage', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands',
   ]);
   assert.match(workspaceJs, /isRecordingActive/);
   assert.match(workspaceJs, /recording_active/);
@@ -81,8 +81,24 @@ test('usage belongs to home widgets while reset news is an independent feature',
   assert.match(html, /id="tab-resets"/);
 });
 
-test('hidden visual widgets stop presentation-only background work', () => {
-  assert.match(effectsJs, /setEnabled/);
-  assert.match(effectsJs, /notch:home-modules-changed/);
+test('hidden widgets stop background work and no WebGL effect remains', () => {
+  // The Soda Music widget and its WebGL shader were removed in v0.2.
+  assert.doesNotMatch(effectsJs, /getContext\(['"]webgl/);
+  assert.doesNotMatch(html, /home-music|music-color-bends/);
   assert.match(workspaceJs, /NotchHome\?\.isVisible/);
+});
+
+test('the photo frame shows a chosen picture and never opens the camera', () => {
+  const frame = html.match(/<section class="tile home-mirror"[\s\S]*?<\/section>/)?.[0] || '';
+  assert.match(frame, /class="mirror-photo"/);
+  assert.doesNotMatch(frame, /<video|mirror-water-canvas/);
+  assert.doesNotMatch(appJs, /getUserMedia\(\s*\{\s*video/);
+});
+
+test('startup never asks for system permissions; they are requested in context', () => {
+  // A launch-time dialog sent people to a Screen Recording list where SoloDock was not yet
+  // registered. Permissions are requested only from the current-windows card.
+  assert.doesNotMatch(mainJs, /promptForMissingPermissions/);
+  assert.match(mainJs, /ipcMain\.handle\('media:screen-recording'/);
+  assert.match(workspaceJs, /requestScreenRecording/);
 });

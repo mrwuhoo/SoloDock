@@ -1,0 +1,93 @@
+/*
+ * SoloDock design tokens (v0.2).
+ * The single source of truth for colour, type, radius, spacing and elevation.
+ * Visual reference: docs/design/v0.2/prototype.html · spec: docs/design/v0.2/design-spec.md
+ *
+ * Rules:
+ * - Components reference these variables only; no raw colours, font sizes or radii.
+ * - Font sizes: 11 / 13 / 14 / 17 / 22 / 40. Weights: 400 / 500 / 600.
+ * - Radii: 30 (shell) / 22 (card) / 12 (control) / 8 (small) / pill.
+ * - Shadows are for floating layers only (popovers, reminders, toasts).
+ * - Never append override blocks to the end of a stylesheet; edit the component's own rules.
+ */
+:root {
+  /* Text */
+  --sd-text-1: #173250;
+  --sd-text-2: #3f5875;
+  --sd-text-3: #5e7590;
+  --sd-text-4: #8a9db2; /* placeholder and disabled only */
+
+  /* Accent: the only brand colour. No purple anywhere. */
+  --sd-accent: #397ddd;
+  --sd-accent-strong: #2c69c4;
+  --sd-accent-soft: rgba(57, 125, 221, 0.13);
+  --sd-accent-tint: rgba(57, 125, 221, 0.07);
+
+  /* Semantic */
+  --sd-success: #2e9a6a;
+  --sd-success-soft: rgba(46, 154, 106, 0.13);
+  --sd-warning: #c7841f; /* "needs you", low quota, over-long days */
+  --sd-warning-soft: rgba(199, 132, 31, 0.14);
+  --sd-danger: #d1504a; /* overdue, destructive */
+  --sd-danger-soft: rgba(209, 80, 74, 0.12);
+
+  /* Category colours: todo categories and habits only, never buttons */
+  --sd-cat-1: #e5534b;
+  --sd-cat-2: #ef8f36;
+  --sd-cat-3: #2fae6a;
+  --sd-cat-4: #4f8ef7;
+  --sd-cat-5: #16a3b8;
+  --sd-cat-6: #d4a21a;
+
+  /* Glass layers: shell → card → inset → selected */
+  --sd-shell-gradient: radial-gradient(85% 90% at 14% -8%, rgba(255, 255, 255, 0.2), transparent 58%),
+    linear-gradient(145deg, rgba(232, 243, 255, 0.86), rgba(206, 224, 243, 0.84));
+  --sd-shell-blur: blur(38px) saturate(168%) brightness(1.04);
+  --sd-surface-card: rgba(246, 250, 255, 0.74);
+  --sd-surface-inset: rgba(233, 242, 252, 0.66);
+  --sd-surface-hover: rgba(255, 255, 255, 0.52);
+  --sd-surface-selected: rgba(255, 255, 255, 0.9);
+  --sd-hairline: rgba(255, 255, 255, 0.76);
+  --sd-divider: rgba(23, 50, 80, 0.09);
+  --sd-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+
+  /* Type */
+  --sd-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Hiragino Sans GB",
+    "Microsoft YaHei UI", "Segoe UI", sans-serif;
+  --sd-font-mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  --sd-fs-caption: 11px;
+  --sd-fs-secondary: 13px;
+  --sd-fs-body: 14px;
+  --sd-fs-section: 17px;
+  --sd-fs-title: 22px;
+  --sd-fs-numeral: 40px;
+  --sd-fw-regular: 400;
+  --sd-fw-medium: 500;
+  --sd-fw-semibold: 600;
+
+  /* Radius */
+  --sd-radius-shell: 30px;
+  --sd-radius-card: 22px;
+  --sd-radius-control: 12px;
+  --sd-radius-small: 8px;
+  --sd-radius-pill: 999px;
+
+  /* Spacing (multiples of 4) */
+  --sd-space-1: 4px;
+  --sd-space-2: 8px;
+  --sd-space-3: 12px;
+  --sd-space-4: 16px;
+  --sd-space-5: 20px;
+  --sd-space-6: 24px;
+  --sd-card-padding: 14px 16px;
+  --sd-card-gap: 12px;
+
+  /* Elevation: floating layers only */
+  --sd-shadow-float: 0 18px 48px rgba(28, 51, 77, 0.24), 0 2px 8px rgba(28, 51, 77, 0.1);
+
+  /* Motion */
+  --sd-ease-out: cubic-bezier(0.2, 0.9, 0.25, 1);
+  --sd-ease-spring: cubic-bezier(0.2, 0.9, 0.25, 1.12);
+  --sd-duration-fast: 160ms;
+  --sd-duration-base: 280ms;
+}

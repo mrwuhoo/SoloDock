@@ -14,14 +14,11 @@ contextBridge.exposeInMainWorld('notchAPI', {
   setMode: (mode) => ipcRenderer.invoke('window:set-mode', mode),
   beginCollapse: () => ipcRenderer.invoke('window:begin-collapse'),
   setTab: (tab) => ipcRenderer.invoke('window:set-tab', tab),
-  ensureCamera: () => ipcRenderer.invoke('media:camera'),
   ensureMicrophone: () => ipcRenderer.invoke('media:microphone'),
   requestScreenRecording: () => ipcRenderer.invoke('media:screen-recording'),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   openPath: (p) => ipcRenderer.invoke('shell:openPath', p),
   openPrivacySettings: (pane) => ipcRenderer.invoke('shell:open-privacy-settings', pane),
-  getMusicStatus: () => ipcRenderer.invoke('music:status'),
-  controlMusic: (action) => ipcRenderer.invoke('music:control', action),
   inspectLink: (url) => ipcRenderer.invoke('links:inspect', url),
   listWindows: () => ipcRenderer.invoke('windows:list'),
   focusWindow: (windowId) => ipcRenderer.invoke('windows:focus', windowId),
@@ -90,3 +87,22 @@ contextBridge.exposeInMainWorld('notchAPI', {
   taskNotificationHover: (paused) =>
     ipcRenderer.send('task-notification:hover', paused === true),
 });
+
+// 在页面脚本运行前把数据文件夹里的工作区写入 LocalStorage（只补缺失的键），
+// 并标记本会话已恢复。这样首帧就是完整数据，渲染层的异步恢复只作为兜底。
+try {
+  if (/\/renderer\/index\.html$/.test(window.location.pathname)
+    && window.sessionStorage.getItem('notch-workspace-hydrated') !== '1') {
+    const snapshot = ipcRenderer.sendSync('workspace:load-data-sync');
+    if (snapshot && typeof snapshot === 'object' && !Array.isArray(snapshot)) {
+      Object.entries(snapshot).forEach(([key, value]) => {
+        if (typeof value === 'string' && window.localStorage.getItem(key) === null) {
+          window.localStorage.setItem(key, value);
+        }
+      });
+      window.sessionStorage.setItem('notch-workspace-hydrated', '1');
+    }
+  }
+} catch (error) {
+  // 读取失败时交给渲染层的异步恢复处理。
+}

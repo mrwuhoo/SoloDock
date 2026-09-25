@@ -20,7 +20,7 @@ test('Mac retains notch height and physical top origin', () => {
 });
 
 test('Windows capabilities cannot enable Mac-only integrations', () => {
-  assert.deepEqual(platform.capabilities('win32').unavailableHomeModules, ['music', 'windows']);
+  assert.deepEqual(platform.capabilities('win32').unavailableHomeModules, ['windows']);
   assert.equal(platform.capabilities('win32').automaticPaste, false);
   assert.equal(platform.capabilities('win32').autoLaunch, true);
   assert.deepEqual(platform.capabilities('darwin').unavailableHomeModules, []);

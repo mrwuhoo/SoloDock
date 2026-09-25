@@ -18,7 +18,7 @@ run(process.execPath, ['--test', ...fs.readdirSync(path.join(root, 'tests')).fil
 env.TODO_TEST_LOG = path.join(root, 'dist.noindex', 'windows-smoke', 'renderer-test.log');
 fs.mkdirSync(path.dirname(env.TODO_TEST_LOG), { recursive: true });
 fs.writeFileSync(env.TODO_TEST_LOG, '');
-for (const file of ['notch-focus', 'codex-usage', 'reset-news', 'retained-workspace', 'startup']) {
+for (const file of ['notch-focus', 'codex-usage', 'reset-news', 'retained-workspace', 'workspace-hydration', 'startup']) {
   const testProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-renderer-test-'));
   env.TODO_TEST_USER_DATA = testProfile;
   run(require('electron'), [`tests/${file}.electron.js`]);

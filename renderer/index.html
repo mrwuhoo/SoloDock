@@ -8,6 +8,7 @@
     />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>SoloDock</title>
+    <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -103,18 +104,6 @@
         <div class="panels" id="panels">
           <section id="tab-home" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-home" aria-hidden="true" inert>
             <div class="home-bento" id="home-bento" aria-label="可长按拖动调整的首页布局">
-              <!-- 本地汽水音乐控制 -->
-              <section class="tile home-music" id="home-music" data-home-module="music" data-widget-size="medium" aria-label="汽水音乐播放器">
-                <canvas class="module-effect-canvas" id="music-color-bends" aria-hidden="true"></canvas>
-                <div class="music-copy">
-                  <strong id="music-title">汽水音乐</strong>
-                </div>
-                <div class="music-controls" role="group" aria-label="汽水音乐控制">
-                  <button type="button" data-music-action="previous" aria-label="上一首"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 9 12l9 6V6Z" /><path d="M6 6v12" /></svg></button>
-                  <button class="music-play" id="music-play-toggle" type="button" data-music-action="play" aria-label="播放"><svg viewBox="0 0 24 24"><path d="m9 7 8 5-8 5z" /></svg></button>
-                  <button type="button" data-music-action="next" aria-label="下一首"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 6 9 6-9 6V6Z" /><path d="M18 6v12" /></svg></button>
-                </div>
-              </section>
 
               <section class="tile home-pomodoro" id="home-pomodoro" data-home-module="pomodoro" data-widget-size="mini" aria-label="番茄钟">
                 <button class="pomodoro-toggle" id="pomodoro-toggle" type="button" aria-label="开始番茄钟">
@@ -174,22 +163,11 @@
                 </div>
               </section>
 
-              <!-- 镜子：静态人像封面；点击切换实时镜头 -->
-              <section class="tile home-mirror" data-home-module="mirror" data-widget-size="medium">
-                <button class="mirror-stage" id="mirror-stage" type="button" aria-label="打开实时镜子" aria-pressed="false">
+              <!-- 相框：用户自选的照片（原镜子封面，已移除摄像头） -->
+              <section class="tile home-mirror" data-home-module="mirror" data-widget-size="medium" aria-label="相框">
+                <div class="mirror-stage" id="mirror-stage">
                   <img class="mirror-photo" src="assets/solodock-mirror.png" alt="" draggable="false" />
-                  <img class="mirror-photo mirror-liquid-layer" src="assets/solodock-mirror.png" alt="" draggable="false" />
-                  <video class="mirror-video" id="mirror-video" muted playsinline aria-hidden="true"></video>
-                  <canvas class="mirror-water-canvas" id="mirror-water-canvas" aria-hidden="true"></canvas>
-                  <span class="mirror-pixel-reveal" id="mirror-pixel-reveal" aria-hidden="true"></span>
-                  <span class="mirror-ripple" aria-hidden="true"></span>
-                  <svg class="mirror-filter-defs" width="0" height="0" aria-hidden="true">
-                    <filter id="mirror-liquid-filter" x="-15%" y="-15%" width="130%" height="130%">
-                      <feTurbulence type="fractalNoise" baseFrequency="0.012 0.022" numOctaves="2" seed="7" result="noise" />
-                      <feDisplacementMap id="mirror-displacement" in="SourceGraphic" in2="noise" scale="0" xChannelSelector="R" yChannelSelector="B" />
-                    </filter>
-                  </svg>
-                </button>
+                </div>
               </section>
 
               <!-- 速记 -->
@@ -473,11 +451,10 @@
                   </div>
                   <div class="settings-home-module-grid" id="settings-home-module-list">
                     <label><span><b>订阅用量</b><small>Codex 额度卡片</small></span><input type="checkbox" data-settings-home-module="usage" aria-label="显示订阅用量" /><i aria-hidden="true"></i></label>
-                    <label><span><b>音乐</b><small>播放状态与控制</small></span><input type="checkbox" data-settings-home-module="music" aria-label="显示音乐" /><i aria-hidden="true"></i></label>
                     <label><span><b>番茄钟</b><small>专注计时</small></span><input type="checkbox" data-settings-home-module="pomodoro" aria-label="显示番茄钟" /><i aria-hidden="true"></i></label>
                     <label><span><b>快速录音</b><small data-home-module-setting-note="recorder">录音与转写</small></span><input type="checkbox" data-settings-home-module="recorder" aria-label="显示快速录音" /><i aria-hidden="true"></i></label>
                     <label><span><b>当前窗口</b><small>窗口快速切换</small></span><input type="checkbox" data-settings-home-module="windows" aria-label="显示当前窗口" /><i aria-hidden="true"></i></label>
-                    <label><span><b>镜子</b><small>相机与封面</small></span><input type="checkbox" data-settings-home-module="mirror" aria-label="显示镜子" /><i aria-hidden="true"></i></label>
+                    <label><span><b>相框</b><small>你喜欢的照片</small></span><input type="checkbox" data-settings-home-module="mirror" aria-label="显示相框" /><i aria-hidden="true"></i></label>
                     <label><span><b>随笔记</b><small>首页快速记录</small></span><input type="checkbox" data-settings-home-module="note" aria-label="显示随笔记" /><i aria-hidden="true"></i></label>
                     <label><span><b>常用指令</b><small>提示词快捷入口</small></span><input type="checkbox" data-settings-home-module="commands" aria-label="显示常用指令" /><i aria-hidden="true"></i></label>
                   </div>
@@ -497,11 +474,11 @@
                 </section>
 
                 <section class="tile settings-card settings-mirror-card">
-                  <img id="settings-mirror-preview" src="assets/solodock-mirror.png" alt="当前首页镜子配图" draggable="false" />
+                  <img id="settings-mirror-preview" src="assets/solodock-mirror.png" alt="当前首页相框照片" draggable="false" />
                   <div>
-                    <span class="tile-label">首页镜子</span>
-                    <strong>封面图片</strong>
-                    <p>支持 PNG、JPG、WebP 与 HEIC，替换后首页立即同步。</p>
+                    <span class="tile-label">首页相框</span>
+                    <strong>照片</strong>
+                    <p>放一张让你开心的照片：家人合照、想去的地方。支持 PNG、JPG、WebP 与 HEIC。</p>
                     <button class="workspace-button compact" id="settings-mirror-choose" type="button">选择图片…</button>
                   </div>
                 </section>

@@ -10,7 +10,8 @@ app.whenReady().then(async () => {
   win.webContents.on('console-message', (details) => { if (details.level === 'error') errors.push(details.message); });
   await win.loadFile(path.join(__dirname, '..', 'renderer/index.html'));
   // An existing seven-card profile migrates without resetting the user's ordering.
-  const oldOrder = ['commands','note','mirror','recorder','windows','pomodoro','music'];
+  // music was removed; an old seven-card order keeps the relative order of the remaining cards.
+  const oldOrder = ['commands','note','mirror','recorder','windows','pomodoro'];
   await win.webContents.executeJavaScript(`localStorage.setItem('notch-home-order-v3',${JSON.stringify(JSON.stringify(oldOrder))}); localStorage.setItem('notch-home-widget-sizes-v2',JSON.stringify({music:'medium',pomodoro:'mini',windows:'large',recorder:'small',mirror:'medium',note:'medium',commands:'mini'}));`);
   await win.reload();
   await new Promise(resolve => win.webContents.once('did-finish-load', resolve));
@@ -82,9 +83,10 @@ app.whenReady().then(async () => {
   assert.equal(result.internalNews,true);
   assert.deepEqual(result.checks.map(x=>x.size),['large','mini','small','medium']);
   for(const check of result.checks){assert.equal(check.visible,true);assert.deepEqual(check.outside,[],JSON.stringify(check));}
-  assert.equal(result.hiddenResizeBefore.available,true);
-  assert.notEqual(result.hiddenResizeAfter.size,result.hiddenResizeBefore.size);
-  assert.equal(result.hiddenResizeAfter.stored,result.hiddenResizeAfter.size);
+  // With seven registered widgets (music removed), hiding one leaves six visible:
+  // the gapless auto-fill template takes over and per-card resizing is disabled.
+  assert.equal(result.hiddenResizeBefore.available,false);
+  assert.equal(result.hiddenResizeAfter.size,result.hiddenResizeBefore.size);
   assert.equal(result.hiddenResizeAfter.valid,true);
   assert.equal(result.restoredAfterResize,true);
   assert.equal(result.configOpens,true);assert.equal(result.hidden,true);
@@ -140,7 +142,7 @@ app.whenReady().then(async () => {
     const button=document.querySelector('#home-usage [data-widget-size-cycle]');
     return {size:button.dataset.currentSize,available:!button.hidden&&!button.disabled,hidden:window.NotchHome.getVisibility().hiddenIds.includes('mirror')};
   })()`);
-  assert.deepEqual(reloadedHiddenSize,{size:savedHiddenSize.size,available:true,hidden:true},'Hidden-card sizing survives restart');
+  assert.deepEqual(reloadedHiddenSize,{size:savedHiddenSize.size,available:false,hidden:true},'Hidden-card state and saved size survive restart');
   console.log('Codex widget: migration, four sizes, drag reorder, visibility, configuration, lifecycle and quota states passed');
   clearTimeout(deadline);app.quit();
 }).catch(error=>{console.error(error);app.exit(1)});
