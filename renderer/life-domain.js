@@ -16,6 +16,7 @@
     { id: 'read', name: '阅读', color: 'cat-6', icon: 'book', goal: 4, items: ['纸书', '电子书', '长文章'] },
   ];
 
+  const TIME = /^([01]\d|2[0-3]):[0-5]\d$/;
   const pad = (value) => String(value).padStart(2, '0');
   const clean = (value, limit) => Array.from(String(value == null ? '' : value).replace(/\s+/g, ' ').trim()).slice(0, limit).join('');
 
@@ -48,6 +49,7 @@
       icon: ICONS.includes(value.icon) ? value.icon : ICONS[index % ICONS.length],
       goal: Math.max(1, Math.min(7, Math.round(Number(value.goal) || 3))),
       items: (Array.isArray(value.items) ? value.items : []).map((item) => clean(item, 10)).filter(Boolean).slice(0, 8),
+      remindAt: TIME.test(value.remindAt) ? value.remindAt : '',
     };
   }
 
@@ -81,7 +83,7 @@
       .filter(Boolean)
       .sort((left, right) => right.at - left.at)
       .slice(0, MAX_RECORDS);
-    return { habits, records };
+    return { habits, records, remindWorkdays: source.remindWorkdays === true };
   }
 
   function recordsFor(state, habitId) {
@@ -121,15 +123,15 @@
   }
 
   function addRecord(state, record) {
-    return normalizeLife({ habits: state.habits, records: [{ ...record }, ...state.records] });
+    return normalizeLife({ ...state, records: [{ ...record }, ...state.records] });
   }
 
   function removeRecord(state, id) {
-    return normalizeLife({ habits: state.habits, records: state.records.filter((record) => record.id !== id) });
+    return normalizeLife({ ...state, records: state.records.filter((record) => record.id !== id) });
   }
 
   function updateRecord(state, id, patch) {
-    return normalizeLife({ habits: state.habits, records: state.records.map((record) => (record.id === id ? { ...record, ...patch, id } : record)) });
+    return normalizeLife({ ...state, records: state.records.map((record) => (record.id === id ? { ...record, ...patch, id } : record)) });
   }
 
   // 「跑步 5km 32分钟」→ 运动 · 跑步 · 32 分钟 · 备注 5km。认不出习惯时返回 null。
@@ -156,19 +158,76 @@
     const color = COLORS.find((item) => !used.has(item)) || COLORS[state.habits.length % COLORS.length];
     const index = state.habits.length;
     const id = `habit-${Date.now().toString(36)}-${index}`;
-    return normalizeLife({ habits: [...state.habits, { id, name, color, icon: ICONS[index % ICONS.length], goal: 3, items: [] }], records: state.records });
+    return normalizeLife({ ...state, habits: [...state.habits, { id, name, color, icon: ICONS[index % ICONS.length], goal: 3, items: [] }] });
   }
 
   function removeHabit(state, id) {
-    return normalizeLife({ habits: state.habits.filter((habit) => habit.id !== id), records: state.records });
+    return normalizeLife({ ...state, habits: state.habits.filter((habit) => habit.id !== id) });
   }
 
   function updateHabit(state, id, patch) {
-    return normalizeLife({ habits: state.habits.map((habit) => (habit.id === id ? { ...habit, ...patch, id } : habit)), records: state.records });
+    return normalizeLife({ ...state, habits: state.habits.map((habit) => (habit.id === id ? { ...habit, ...patch, id } : habit)) });
+  }
+
+  // 从 04:00 起算的分钟数：00:30 算在 22:30 之后（还是同一个「一天」）。
+  const minutesFromDayStart = (time) => {
+    const [hour, minute] = String(time).split(':').map(Number);
+    return (hour * 60 + minute - DAY_BOUNDARY_HOUR * 60 + 1440) % 1440;
+  };
+
+  // 习惯提醒：接下来几天里每个设了提醒时间的习惯，到点走统一提醒浮窗。
+  // 默认只在收工后与周末提醒：工作日的提醒时间早于收工时间就跳过（可在习惯设置里改为工作日也提醒）。
+  // 今天已经记过、或本周已达标的，不再提醒。
+  function habitReminderQueue(state, { now = Date.now(), offwork = '22:30', days = 7 } = {}) {
+    const offworkMinutes = minutesFromDayStart(TIME.test(offwork) ? offwork : '22:30');
+    const today = dayKey(now);
+    const queue = [];
+    for (const habit of state.habits) {
+      if (!habit.remindAt) continue;
+      const remindMinutes = minutesFromDayStart(habit.remindAt);
+      for (let offset = 0; offset < days; offset += 1) {
+        const key = dayKey(dayStart(today) + offset * 86400000 + 3600_000);
+        const at = dayStart(key) + remindMinutes * 60_000;
+        if (at <= now) continue;
+        const weekday = new Date(dayStart(key)).getDay();
+        const weekend = weekday === 0 || weekday === 6;
+        if (!weekend && !state.remindWorkdays && remindMinutes < offworkMinutes) continue;
+        const week = habitWeek(state, habit.id, dayStart(key) + 3600_000);
+        if (week.reached) continue;
+        if (week.doneDays.includes(key)) continue;
+        queue.push({
+          id: `habit-${habit.id}-${key}`,
+          kind: 'habit',
+          habitId: habit.id,
+          at,
+          title: `今天${habit.name}了吗？`,
+          detail: `本周 ${week.count} / ${habit.goal} 次`,
+        });
+      }
+    }
+    return queue.sort((left, right) => left.at - right.at);
+  }
+
+  // 导出 CSV：UTF-8 带 BOM（Excel 直接打开不乱码）；以 = + - @ 开头的格子前加 '，防止被当成公式执行。
+  function recordsCsv(state) {
+    const cell = (value) => {
+      let text = String(value == null ? '' : value);
+      if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+      return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+    };
+    const names = new Map(state.habits.map((habit) => [habit.id, habit.name]));
+    const rows = [['日期', '时间', '习惯', '项目', '时长（分钟）', '备注']];
+    for (const record of [...state.records].sort((left, right) => left.at - right.at)) {
+      const date = new Date(record.at);
+      rows.push([dayKey(record.at), `${pad(date.getHours())}:${pad(date.getMinutes())}`, names.get(record.habitId) || '', record.item, record.minutes || '', record.note]);
+    }
+    return `\ufeff${rows.map((row) => row.map(cell).join(',')).join('\r\n')}\r\n`;
   }
 
   return {
     DAY_BOUNDARY_HOUR,
+    habitReminderQueue,
+    recordsCsv,
     MAX_HABITS,
     DEFAULT_HABITS,
     dayKey,

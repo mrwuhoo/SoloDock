@@ -27,6 +27,8 @@ function reminderPresentation(source) {
       return { visibleMs: 20_000, style: 'quiet', actions: [] };
     case 'offwork':
       return { visibleMs: 0, actions: [action('move-tomorrow', '待办挪到明天', true), action('body-snooze-30', '再工作 30 分钟')] };
+    case 'habit':
+      return { visibleMs: 15_000, actions: [action('habit-log', '记一笔', true), action('dismiss', '今天先不了')] };
     case 'needs-you':
       return { visibleMs: 0, actions: [action('open', '跳回窗口', true), action('snooze-10', '稍后提醒')] };
     case 'focus-summary':

@@ -28,6 +28,7 @@
     'pomodoro-break': ['休息', 'leaf'],
     sit: ['久坐', 'walk'],
     offwork: ['收工', 'moon'],
+    habit: ['习惯', 'leaf'],
   };
   const GLYPHS = {
     check: '<path d="m6.5 12.5 3.5 3.5 7.5-8"/>',

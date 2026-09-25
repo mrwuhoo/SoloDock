@@ -14,7 +14,7 @@ fs.writeFileSync(path.join(profile, 'workspace.json'), JSON.stringify({version:1
 const errors = [];
 let indexLoads = 0;
 let firstLoadAt = 0;
-setTimeout(() => { console.error('Production startup timed out', errors); app.exit(1); }, 25000);
+setTimeout(() => { console.error('Production startup timed out', errors); app.exit(1); }, 45000);
 app.on('web-contents-created', (_event, contents) => {
   contents.on('console-message', (details) => {
     if (details.level === 'error') errors.push(`${details.message} (${details.sourceId}:${details.lineNumber})`);
@@ -179,6 +179,24 @@ app.on('web-contents-created', (_event, contents) => {
       assert.equal((await contents.executeJavaScript('window.notchAPI.getAppSettings()')).captureShortcut, '', 'off stays off');
       const restored = await contents.executeJavaScript(`window.notchAPI.setCaptureShortcut('Alt+Shift+N')`);
       assert.equal(restored.ok, captureSettings.captureShortcutRegistered);
+
+      // Habit reminders use their own schedule and the unified reminder card.
+      const habitAt = Date.now() + 400;
+      const scheduled = await contents.executeJavaScript(`window.notchAPI.scheduleHabitReminders([{ id: 'habit-read-e2e', kind: 'habit', habitId: 'read', at: ${habitAt}, title: '今天阅读了吗？', detail: '本周 1 / 4 次' }, { id: 'bad', at: 1 }])`);
+      assert.deepEqual(scheduled, { ok: true, count: 1 });
+      let habitCard = null;
+      for (let attempt = 0; attempt < 30 && !habitCard; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        const win = Windows.getAllWindows().find((item) => !item.isDestroyed() && item.webContents.getURL().endsWith('/renderer/notification.html'));
+        habitCard = win && await win.webContents.executeJavaScript(`document.getElementById('notification-shell')?.classList.contains('is-visible') && document.getElementById('notification-title').textContent === '今天阅读了吗？' ? { win: true, actions: [...document.querySelectorAll('.notification-action')].map((button) => button.textContent) } : null`).catch(() => null);
+        if (habitCard) habitCard.window = win;
+      }
+      assert.deepEqual(habitCard && habitCard.actions, ['记一笔', '今天先不了']);
+      await habitCard.window.webContents.executeJavaScript(`[...document.querySelectorAll('.notification-action')].find((button) => button.textContent === '今天先不了').click()`);
+      await contents.executeJavaScript('window.notchAPI.scheduleHabitReminders([])');
+      const habitNotice = (await contents.executeJavaScript('window.notchAPI.listNotices()')).items.find((item) => item.source === 'habit');
+      assert.equal(habitNotice && habitNotice.handled, true, 'kept in the notice center, marked handled');
+      await new Promise((resolve) => setTimeout(resolve, 700));
 
       // 暂停提醒: reminders still land in the notice center but don't pop up; the pause survives other
       // settings writes; resuming sums up what was missed in one line.

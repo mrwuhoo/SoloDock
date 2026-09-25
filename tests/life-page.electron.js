@@ -106,8 +106,52 @@ app.whenReady().then(async () => {
     removeButton.click();
     await settle();
     out.cardsAfterRemove = document.querySelectorAll('.life-card').length;
+
+    // Reminder time: the queue for the next 7 days goes to main (its own list, not the timeline's).
+    window.__habitQueues = [];
+    window.notchAPI.scheduleHabitReminders = async (items) => { window.__habitQueues.push(items); return { ok: true }; };
+    const remind = document.querySelector('.life-settings-row[data-habit="read"] [data-remind]');
+    remind.value = '23:30';
+    remind.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    const lastQueue = () => window.__habitQueues.at(-1) || [];
+    out.remind = {
+      stored: JSON.parse(localStorage.getItem('notch-life-v1')).habits.find((habit) => habit.id === 'read').remindAt,
+      toast: $('status-toast-message').textContent,
+      queue: lastQueue().length > 0 && lastQueue().every((item) => item.habitId === 'read' && item.kind === 'habit' && item.at > Date.now()),
+      note: $('life-settings-note').textContent,
+    };
+    // 19:00 is before 收工: only weekends until workdays are allowed.
+    remind.value = '19:00';
+    remind.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    const weekdayCount = (queue) => queue.filter((item) => ![0, 6].includes(new Date(item.at).getDay())).length;
+    out.beforeWorkdays = weekdayCount(lastQueue());
+    $('life-remind-workdays').click();
+    await settle();
+    out.afterWorkdays = [weekdayCount(lastQueue()) > 0, JSON.parse(localStorage.getItem('notch-life-v1')).remindWorkdays, $('life-settings-note').textContent.includes('每天按时')];
+    const remindAgain = document.querySelector('.life-settings-row[data-habit="read"] [data-remind]');
+    remindAgain.value = '';
+    remindAgain.dispatchEvent(new Event('change', { bubbles: true }));
+    await settle();
+    out.cleared = [lastQueue().length, $('status-toast-message').textContent];
+
+    // CSV export goes through main's save dialog.
+    window.__csv = [];
+    window.notchAPI.exportLifeCsv = async (csv) => { window.__csv.push(csv); return { ok: true }; };
+    $('life-export').click();
+    await settle();
+    out.csv = [window.__csv.length, window.__csv[0]?.split('\\r\\n')[0], $('status-toast-message').textContent];
+
     document.querySelector('#tab-life').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     out.settingsClosed = $('life-settings').hidden;
+
+    // 「记一笔」 on a habit reminder opens this habit's log form.
+    await setActiveTab('home');
+    window.__handlers.onLogHabit.forEach((callback) => callback({ habitId: 'meditate' }));
+    await settle(200);
+    out.fromReminder = [document.querySelector('.tab.active')?.dataset.tab, $('life-log').hidden, $('life-log-title').textContent];
+    document.querySelector('#tab-life').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
 
     out.stored = JSON.parse(localStorage.getItem('notch-life-v1')).records.length;
     out.workCalls = window.__calls.filter((call) => ['worklog', 'act', 'read-all'].includes(call[0])).length;
@@ -146,7 +190,16 @@ app.whenReady().then(async () => {
   assert.equal(result.settingsRows, 3);
   assert.equal(result.goal, '每周 6 次');
   assert.deepEqual(result.cardsAfterAdd, [4, '4']);
-  assert.equal(result.confirmText, '连记录一起删？');
+  assert.equal(result.confirmText, '连记录删？');
+  assert.equal(result.remind.stored, '23:30');
+  assert.equal(result.remind.toast, '「阅读」会在 23:30 提醒');
+  assert.equal(result.remind.queue, true);
+  assert.match(result.remind.note, /提醒默认只在收工（22:30）后与周末出现/);
+  assert.equal(result.beforeWorkdays, 0);
+  assert.deepEqual(result.afterWorkdays, [true, true, true]);
+  assert.deepEqual(result.cleared, [0, '「阅读」不再提醒']);
+  assert.deepEqual(result.csv, [1, '\ufeff日期,时间,习惯,项目,时长（分钟）,备注', '已导出 ' + result.stored + ' 条记录']);
+  assert.deepEqual(result.fromReminder, ['life', false, '记一笔 · 冥想']);
   assert.equal(result.cardsAfterRemove, 3);
   assert.equal(result.settingsClosed, true);
   assert.ok(result.stored >= 3);

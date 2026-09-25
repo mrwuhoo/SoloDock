@@ -57,3 +57,51 @@ test('quick input: "跑步 5km 32分钟" becomes a run with a note', () => {
   assert.deepEqual(life.parseLifeInput('读纸书 1小时 三体', state), { habitId: 'read', item: '纸书', minutes: 60, note: '读 三体' });
   assert.equal(life.parseLifeInput('开会 30分钟', state), null);
 });
+
+test('habit reminders fire after work and at weekends, and skip what is already done', () => {
+  const at = (text) => new Date(text).getTime();
+  const now = at('2026-09-23T20:00:00'); // Wednesday
+  let state = life.normalizeLife(null);
+  assert.equal(state.remindWorkdays, false);
+  state = life.updateHabit(state, 'exercise', { remindAt: '19:00' });
+  state = life.updateHabit(state, 'read', { remindAt: '23:00' });
+  state = life.updateHabit(state, 'meditate', { remindAt: '25:00' });
+  assert.equal(state.habits.find((habit) => habit.id === 'meditate').remindAt, '', 'invalid times are dropped');
+  const queue = life.habitReminderQueue(state, { now, offwork: '22:30', days: 5 });
+  const ids = queue.map((item) => item.id);
+  // 19:00 is before 收工 on weekdays: only Saturday and Sunday. 23:00 is after 收工: every day from tonight.
+  assert.deepEqual(ids.filter((id) => id.startsWith('habit-exercise')), ['habit-exercise-2026-09-26', 'habit-exercise-2026-09-27']);
+  assert.deepEqual(ids.filter((id) => id.startsWith('habit-read')), ['habit-read-2026-09-23', 'habit-read-2026-09-24', 'habit-read-2026-09-25', 'habit-read-2026-09-26', 'habit-read-2026-09-27']);
+  assert.equal(queue[0].at, at('2026-09-23T23:00:00'));
+  assert.deepEqual([queue[0].title, queue[0].detail, queue[0].kind, queue[0].habitId], ['今天阅读了吗？', '本周 0 / 4 次', 'habit', 'read']);
+  // Opting in to workdays brings the 19:00 reminder back on weekdays (tonight's has already passed).
+  const workdays = life.habitReminderQueue({ ...state, remindWorkdays: true }, { now, offwork: '22:30', days: 5 }).map((item) => item.id);
+  assert.ok(workdays.includes('habit-exercise-2026-09-24'));
+  assert.ok(!workdays.includes('habit-exercise-2026-09-23'));
+  // Recorded today: no reminder tonight. Weekly goal reached: none for the rest of the week, back next week.
+  state = life.addRecord(state, { id: 'r1', habitId: 'read', at: at('2026-09-23T12:00:00') });
+  assert.ok(!life.habitReminderQueue(state, { now, days: 5 }).some((item) => item.id === 'habit-read-2026-09-23'));
+  for (const [index, day] of ['21', '22', '24'].entries()) state = life.addRecord(state, { id: `w${index}`, habitId: 'read', at: at(`2026-09-${day}T12:00:00`) });
+  const reached = life.habitReminderQueue(state, { now, days: 7 }).filter((item) => item.habitId === 'read').map((item) => item.id);
+  assert.deepEqual(reached, ['habit-read-2026-09-28', 'habit-read-2026-09-29']);
+  // After midnight still counts as the same day: 00:30 is "after 22:30" and belongs to the day that started at 04:00.
+  state = life.updateHabit(state, 'meditate', { remindAt: '00:30' });
+  const late = life.habitReminderQueue(state, { now, days: 1 }).find((item) => item.habitId === 'meditate');
+  assert.equal(late.at, at('2026-09-24T00:30:00'));
+  assert.equal(late.id, 'habit-meditate-2026-09-23');
+  // Updates keep the workdays opt-in.
+  assert.equal(life.addRecord({ ...state, remindWorkdays: true }, { id: 'x', habitId: 'read', at: now }).remindWorkdays, true);
+});
+
+test('life records export as CSV that opens cleanly in Excel', () => {
+  let state = life.normalizeLife(null);
+  state = life.addRecord(state, { id: 'r2', habitId: 'exercise', at: new Date('2026-09-24T07:05:00').getTime(), item: '跑步', minutes: 32, note: '5km, 配速 "6:24"' });
+  state = life.addRecord(state, { id: 'r1', habitId: 'read', at: new Date('2026-09-23T22:10:00').getTime(), note: '=HYPERLINK("x")' });
+  const csv = life.recordsCsv(state);
+  assert.ok(csv.startsWith('\ufeff'), 'BOM for Excel');
+  assert.deepEqual(csv.slice(1).trimEnd().split('\r\n'), [
+    '日期,时间,习惯,项目,时长（分钟）,备注',
+    '2026-09-23,22:10,阅读,,,"\'=HYPERLINK(""x"")"',
+    '2026-09-24,07:05,运动,跑步,32,"5km, 配速 ""6:24"""',
+  ]);
+});

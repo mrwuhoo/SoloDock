@@ -711,6 +711,9 @@ async function handleTaskNotificationAction(eventId, actionId) {
     case 'open-todo':
       openRendererPanel('app:open-todo');
       break;
+    case 'habit-log':
+      openRendererPanel('app:log-habit', { habitId: notification.taskId || '' });
+      break;
     case 'todo-done':
     case 'focus-5':
     case 'focus-again':
@@ -1052,6 +1055,8 @@ ipcMain.handle('todos:schedule-reminders', (event, items) => {
 // 应用没在运行时错过的提醒，超过 5 分钟就不再补发。
 const TIMED_REMINDER_GRACE_MS = 5 * 60 * 1000;
 let scheduledTimedReminders = [];
+// 生活页的习惯提醒单独一份清单，和日程互不覆盖；生活数据不进入工作统计。
+let scheduledHabitReminders = [];
 let timedReminderTimer = null;
 const firedTimedReminders = new Set();
 
@@ -1060,7 +1065,7 @@ function scheduleNextTimedReminder() {
   timedReminderTimer = null;
   const now = Date.now();
   let nextDelay = Infinity;
-  for (const item of scheduledTimedReminders) {
+  for (const item of [...scheduledTimedReminders, ...scheduledHabitReminders]) {
     const key = `${item.id}@${item.at}`;
     if (firedTimedReminders.has(key)) continue;
     if (item.at <= now) {
@@ -1068,8 +1073,8 @@ function scheduleNextTimedReminder() {
       if (now - item.at > TIMED_REMINDER_GRACE_MS) continue;
       enqueueTaskNotification({
         eventId: `timed-${key}`,
-        taskId: item.id,
-        source: item.kind === 'event' ? 'event' : 'reminder',
+        taskId: item.kind === 'habit' ? item.habitId : item.id,
+        source: item.kind === 'event' ? 'event' : item.kind === 'habit' ? 'habit' : 'reminder',
         project: '',
         title: item.title,
         detail: item.detail,
@@ -1103,6 +1108,51 @@ ipcMain.handle('reminders:schedule', (event, items) => {
     : [];
   scheduleNextTimedReminder();
   return { ok: true, count: scheduledTimedReminders.length };
+});
+
+ipcMain.handle('habits:schedule', (event, items) => {
+  scheduledHabitReminders = Array.isArray(items)
+    ? items
+      .filter((item) => item && typeof item === 'object')
+      .map((item) => ({
+        id: String(item.id || '').slice(0, 120),
+        kind: 'habit',
+        habitId: String(item.habitId || '').slice(0, 40),
+        title: String(item.title || '').trim().slice(0, 80) || '习惯提醒',
+        detail: String(item.detail || '').trim().slice(0, 80),
+        at: Number(item.at),
+      }))
+      .filter((item) => item.id && item.habitId && Number.isFinite(item.at) && item.at > 0)
+      .slice(0, 60)
+    : [];
+  scheduleNextTimedReminder();
+  return { ok: true, count: scheduledHabitReminders.length };
+});
+
+ipcMain.handle('life:export', async (event, csv) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false };
+  const content = String(csv || '').slice(0, 5_000_000);
+  const owner = mainWindow;
+  const stamp = new Date();
+  const name = `SoloDock 生活记录 ${stamp.getFullYear()}-${String(stamp.getMonth() + 1).padStart(2, '0')}-${String(stamp.getDate()).padStart(2, '0')}.csv`;
+  updateTransientSystemInteraction(1);
+  let result;
+  try {
+    result = await dialog.showSaveDialog(owner, {
+      title: '导出生活记录',
+      defaultPath: path.join(app.getPath('documents'), name),
+      filters: [{ name: 'CSV', extensions: ['csv'] }],
+    });
+  } finally {
+    updateTransientSystemInteraction(-1);
+  }
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  try {
+    await fs.promises.writeFile(result.filePath, content, 'utf8');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: 'write_failed' };
+  }
 });
 
 ipcMain.handle('pomodoro:notify', (event, payload) => {
@@ -2065,14 +2115,14 @@ ipcMain.handle('settings:set-capture-shortcut', (event, accelerator) => {
   return { ok: true, shortcut: value };
 });
 
-function openRendererPanel(channel) {
+function openRendererPanel(channel, payload) {
   if (!mainWindow || mainWindow.isDestroyed()) createWindow();
   if (!mainWindow || mainWindow.isDestroyed()) return;
   hideWhenCollapsed = false;
   repositionWindow(getTargetDisplay());
   mainWindow.show();
   const send = () => {
-    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel);
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send(channel, payload);
   };
   if (mainWindow.webContents.isLoadingMainFrame()) mainWindow.webContents.once('did-finish-load', send);
   else send();

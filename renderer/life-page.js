@@ -43,7 +43,26 @@
     state = L.normalizeLife(next);
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); } catch (error) { /* keep session state */ }
     render();
+    scheduleReminders();
   }
+
+  // ---------------- 习惯提醒 ----------------
+  // 接下来 7 天的提醒交给主进程，到点走统一提醒浮窗；数据变了、收工时间变了、每半小时都重算一次。
+  let offwork = '22:30';
+  function scheduleReminders() {
+    const queue = L.habitReminderQueue(state, { now: Date.now(), offwork, days: 7 });
+    Promise.resolve(window.notchAPI?.scheduleHabitReminders?.(queue)).catch(() => {});
+  }
+  function applyBodySettings(settings) {
+    const time = settings?.body?.offwork?.time;
+    if (typeof time === 'string' && time !== offwork) {
+      offwork = time;
+      scheduleReminders();
+    }
+  }
+  Promise.resolve(window.notchAPI?.getAppSettings?.()).then(applyBodySettings).catch(() => {});
+  window.notchAPI?.onAppSettingsChanged?.(applyBodySettings);
+  setInterval(scheduleReminders, 30 * 60_000);
 
   const habitById = (id) => state.habits.find((habit) => habit.id === id);
   const icon = (habit) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICONS[habit.icon] || ICONS.leaf}</svg>`;
@@ -375,10 +394,12 @@
       row.className = 'life-settings-row';
       row.dataset.habit = habit.id;
       row.dataset.color = habit.color;
-      row.innerHTML = `<span class="life-icon small">${icon(habit)}</span><input value="${esc(habit.name)}" maxlength="12" aria-label="习惯名称" data-rename="${habit.id}" /><div class="life-goal"><button type="button" data-goal="-1" aria-label="减少目标">−</button><span>每周 ${habit.goal} 次</span><button type="button" data-goal="1" aria-label="增加目标">+</button></div><button class="life-remove" type="button" data-remove="${habit.id}" ${state.habits.length <= 1 ? 'disabled' : ''}>移除</button>`;
+      row.innerHTML = `<span class="life-icon small">${icon(habit)}</span><input value="${esc(habit.name)}" maxlength="12" aria-label="习惯名称" data-rename="${habit.id}" /><div class="life-goal"><button type="button" data-goal="-1" aria-label="减少目标">−</button><span>每周 ${habit.goal} 次</span><button type="button" data-goal="1" aria-label="增加目标">+</button></div><input class="life-remind" type="time" value="${esc(habit.remindAt)}" data-remind="${habit.id}" aria-label="${esc(habit.name)}的提醒时间，留空不提醒" title="留空不提醒" /><button class="life-remove" type="button" data-remove="${habit.id}" ${state.habits.length <= 1 ? 'disabled' : ''}>移除</button>`;
       return row;
     }));
     get('life-settings-add').hidden = state.habits.length >= L.MAX_HABITS;
+    get('life-remind-workdays').checked = state.remindWorkdays;
+    get('life-settings-note').textContent = `最多 6 个；目标按每周几次计算，连续是连续达标的周数。${state.remindWorkdays ? '提醒每天按时出现' : `提醒默认只在收工（${offwork}）后与周末出现`}，今天记过或本周已达标就不提醒。`;
   }
   get('life-settings-open').addEventListener('click', (event) => {
     const wasOpen = !settings.hidden;
@@ -388,8 +409,9 @@
     settings.hidden = false;
     const box = page.getBoundingClientRect();
     const anchor = event.currentTarget.getBoundingClientRect();
-    settings.style.left = `${Math.round(anchor.right - box.left - (settings.offsetWidth || 360))}px`;
-    settings.style.top = `${Math.round(anchor.bottom - box.top + 6)}px`;
+    settings.style.left = `${Math.round(Math.max(8, anchor.right - box.left - (settings.offsetWidth || 470)))}px`;
+    // 靠近页面底部时往上挪，整张设置都留在面板里。
+    settings.style.top = `${Math.round(Math.max(8, Math.min(anchor.bottom - box.top + 6, box.height - settings.offsetHeight - 8)))}px`;
   });
   settings.addEventListener('click', (event) => {
     const goal = event.target.closest('[data-goal]');
@@ -404,7 +426,7 @@
       // 移除会连同记录一起删：点两次确认。
       if (remove.dataset.confirm !== 'true') {
         remove.dataset.confirm = 'true';
-        remove.textContent = '连记录一起删？';
+        remove.textContent = '连记录删？';
         setTimeout(() => { if (remove.isConnected) { delete remove.dataset.confirm; remove.textContent = '移除'; } }, 3000);
         return;
       }
@@ -417,6 +439,30 @@
   settings.addEventListener('change', (event) => {
     const input = event.target.closest('[data-rename]');
     if (input && input.value.trim()) save(L.updateHabit(state, input.dataset.rename, { name: input.value }));
+    const remind = event.target.closest('[data-remind]');
+    if (remind) {
+      save(L.updateHabit(state, remind.dataset.remind, { remindAt: remind.value || '' }));
+      const habit = habitById(remind.dataset.remind);
+      toast(habit?.remindAt ? `「${habit.name}」会在 ${habit.remindAt} 提醒` : `「${habit?.name}」不再提醒`);
+    }
+    if (event.target.id === 'life-remind-workdays') {
+      save({ ...state, remindWorkdays: event.target.checked });
+      renderSettings();
+    }
+  });
+  get('life-export').addEventListener('click', async () => {
+    if (!state.records.length) { toast('还没有记录可以导出'); return; }
+    const result = await Promise.resolve(window.notchAPI?.exportLifeCsv?.(L.recordsCsv(state))).catch(() => null);
+    if (result?.ok) toast(`已导出 ${state.records.length} 条记录`);
+    else if (!result?.canceled) toast('导出失败，请换个位置再试');
+  });
+
+  // 习惯提醒上点「记一笔」：打开生活页，直接弹出这个习惯的记录框。
+  window.notchAPI?.onLogHabit?.(async ({ habitId }) => {
+    if (!habitById(habitId)) return;
+    if (!document.getElementById('app')?.classList.contains('expanded')) await window.setMode?.(true);
+    await window.setActiveTab?.('life');
+    requestAnimationFrame(() => openLog(habitId, page.querySelector(`[data-log="${CSS.escape(habitId)}"]`)));
   });
   get('life-settings-add').addEventListener('submit', (event) => {
     event.preventDefault();
@@ -440,6 +486,7 @@
   viewYear = today[0];
   viewMonth = today[1];
   render();
+  scheduleReminders();
 
-  window.NotchLifePage = { render, state: () => L.normalizeLife(state), openLog, addRecord };
+  window.NotchLifePage = { render, state: () => L.normalizeLife(state), openLog, addRecord, scheduleReminders };
 })();

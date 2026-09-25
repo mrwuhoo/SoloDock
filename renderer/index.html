@@ -696,9 +696,12 @@
               </div>
               <div class="life-pop life-settings" id="life-settings" role="dialog" aria-labelledby="life-settings-title" hidden>
                 <strong id="life-settings-title">习惯设置</strong>
+                <div class="life-settings-head" aria-hidden="true"><span>习惯</span><span>每周目标</span><span>提醒时间</span></div>
                 <div class="life-settings-list" id="life-settings-list"></div>
                 <form class="life-settings-add" id="life-settings-add"><input id="life-settings-name" maxlength="12" placeholder="新习惯，如 早睡、喝水" autocomplete="off" /><button class="workspace-button compact" type="submit">添加</button></form>
-                <p class="life-settings-note">最多 6 个；目标按每周几次计算，连续是连续达标的周数。</p>
+                <label class="life-settings-workdays"><input type="checkbox" id="life-remind-workdays" /><span>工作日也按时提醒</span></label>
+                <p class="life-settings-note" id="life-settings-note">最多 6 个；目标按每周几次计算，连续是连续达标的周数。提醒默认只在收工后与周末出现，今天记过或本周已达标就不提醒。</p>
+                <div class="life-settings-foot"><button class="life-link" id="life-export" type="button">导出记录（CSV）</button></div>
               </div>
             </div>
           </section>
