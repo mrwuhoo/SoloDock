@@ -109,6 +109,14 @@
                 <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2M3 12h2"/></svg>
                 <span class="tab-label">重置资讯</span>
               </button>
+              <span class="tab-divider" aria-hidden="true"></span>
+              <button class="tab" id="tab-button-life" type="button" data-tab="life" role="tab" aria-controls="tab-life" aria-selected="false" tabindex="-1">
+                <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <path d="M5.5 18.5c0-7.5 5-12 13-12 0 8-4.5 13-12 13Z" />
+                  <path d="M5.5 18.5 13 11" />
+                </svg>
+                <span class="tab-label">生活</span>
+              </button>
               <button class="tab" id="tab-button-settings" type="button" data-tab="settings" role="tab" aria-controls="tab-settings" aria-selected="false" tabindex="-1">
                 <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <circle cx="12" cy="12" r="3" />
@@ -571,6 +579,56 @@
             </div>
           </section>
 
+          <!-- 生活：工作之外的好习惯，只记次数、看见坚持；和工作数据完全分开。 -->
+          <section id="tab-life" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-life" aria-hidden="true" inert>
+            <div class="life-page" id="life-page">
+              <div class="life-cards" id="life-cards"></div>
+              <div class="life-bottom">
+                <section class="tile life-month" aria-label="习惯月历">
+                  <header class="life-month-head">
+                    <div><span class="tile-label">生活</span><h2 id="life-month-title">本月</h2></div>
+                    <div class="life-month-nav">
+                      <button class="time-nav-button" id="life-month-prev" type="button" aria-label="上个月">‹</button>
+                      <button class="time-nav-button" id="life-month-next" type="button" aria-label="下个月">›</button>
+                    </div>
+                  </header>
+                  <div class="life-week" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+                  <div class="life-grid" id="life-grid" role="grid" aria-label="按日期查看习惯"></div>
+                  <footer class="life-legend" id="life-legend"></footer>
+                </section>
+                <section class="tile life-recent" aria-label="最近记录">
+                  <header class="life-recent-head">
+                    <div><span class="tile-label" id="life-recent-label">最近</span><h2 id="life-recent-title">最近记录</h2></div>
+                    <button class="life-link" id="life-recent-all" type="button" hidden>看全部</button>
+                    <button class="life-link" id="life-settings-open" type="button">习惯设置</button>
+                  </header>
+                  <div class="life-recent-list" id="life-recent-list"></div>
+                  <p class="life-note">和工作数据完全分开：不进首页、时间统计和通知中心</p>
+                </section>
+              </div>
+              <div class="life-pop" id="life-log" role="dialog" aria-labelledby="life-log-title" hidden>
+                <strong id="life-log-title">记一笔</strong>
+                <input class="life-log-quick" id="life-log-quick" placeholder="快速输入，如：跑步 5km 32分钟" autocomplete="off" spellcheck="false" />
+                <div class="life-chips" id="life-log-items" role="group" aria-label="项目"></div>
+                <div class="life-chips" id="life-log-minutes" role="group" aria-label="时长">
+                  <button type="button" data-minutes="0">不计时</button><button type="button" data-minutes="10">10 分钟</button><button type="button" data-minutes="20">20 分钟</button><button type="button" data-minutes="30">30 分钟</button><button type="button" data-minutes="45">45 分钟</button><button type="button" data-minutes="60">1 小时</button><button type="button" data-minutes="90">1.5 小时</button>
+                </div>
+                <div class="life-log-row">
+                  <label>日期<select id="life-log-day"><option value="0">今天</option><option value="1">昨天</option><option value="2">前天</option></select></label>
+                  <label>时间<input id="life-log-time" type="time" /></label>
+                </div>
+                <label class="life-log-note">备注<input id="life-log-note" maxlength="60" placeholder="可选，如 5km、第 3 章" autocomplete="off" /></label>
+                <div class="life-log-actions"><button class="workspace-button compact danger" id="life-log-delete" type="button" hidden>删除</button><span></span><button class="workspace-button compact" id="life-log-cancel" type="button">取消</button><button class="workspace-button compact primary" id="life-log-save" type="button">保存</button></div>
+              </div>
+              <div class="life-pop life-settings" id="life-settings" role="dialog" aria-labelledby="life-settings-title" hidden>
+                <strong id="life-settings-title">习惯设置</strong>
+                <div class="life-settings-list" id="life-settings-list"></div>
+                <form class="life-settings-add" id="life-settings-add"><input id="life-settings-name" maxlength="12" placeholder="新习惯，如 早睡、喝水" autocomplete="off" /><button class="workspace-button compact" type="submit">添加</button></form>
+                <p class="life-settings-note">最多 6 个；目标按每周几次计算，连续是连续达标的周数。</p>
+              </div>
+            </div>
+          </section>
+
           <section id="tab-resets" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-resets" aria-hidden="true" inert>
             <div class="reset-news-page">
               <section class="tile reset-news-calendar-card" aria-label="重置资讯日历">
@@ -618,6 +676,7 @@
                     <label><span><b>剪贴板</b><small>默认关闭</small></span><input type="checkbox" data-settings-feature="clip" aria-label="显示剪贴板" /><i aria-hidden="true"></i></label>
                     <label><span><b>重置资讯</b><small>独立日历页面</small></span><input type="checkbox" data-settings-feature="resets" aria-label="显示重置资讯" /><i aria-hidden="true"></i></label>
                     <label><span><b>时间</b><small>每天工作时长月历</small></span><input type="checkbox" data-settings-feature="time" aria-label="显示时间页" /><i aria-hidden="true"></i></label>
+                    <label><span><b>生活</b><small>运动、冥想、阅读的次数</small></span><input type="checkbox" data-settings-feature="life" aria-label="显示生活页" /><i aria-hidden="true"></i></label>
                   </div>
                 </section>
 
@@ -746,6 +805,7 @@
                       <option value="time">时间</option>
                       <option value="recordings">录制</option>
                       <option value="resets">重置资讯</option>
+                      <option value="life">生活</option>
                       <option value="settings">设置</option>
                     </select>
                   </label>
@@ -865,6 +925,8 @@
     <script src="notice-center.js"></script>
     <script src="worklog-domain.js"></script>
     <script src="time-page.js"></script>
+    <script src="life-domain.js"></script>
+    <script src="life-page.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

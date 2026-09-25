@@ -217,6 +217,7 @@ const TAB_SIZES = {
   credentials: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
   resets: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
   time: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
+  life: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
   settings: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
 };
 // 与渲染层结构常量对应：panel padding-top(--s-2 8) + 顶栏(--topbar-h 40)
@@ -1545,6 +1546,7 @@ const DEFAULT_FEATURES = {
   clip: false,
   resets: true,
   time: true,
+  life: true,
 };
 
 function getJsonSettingsPath(name) {
@@ -1776,7 +1778,7 @@ function refreshTrayMenu() {
   if (!tray) return;
   const autoLaunch = isAutoLaunchEnabled();
   const settings = readAppSettings();
-  const featureLabels = { todo: '待办', notes: '笔记', links: '链接', recordings: '录制', credentials: '密钥', clip: '剪贴板', resets: '重置资讯', time: '时间' };
+  const featureLabels = { todo: '待办', notes: '笔记', links: '链接', recordings: '录制', credentials: '密钥', clip: '剪贴板', resets: '重置资讯', time: '时间', life: '生活' };
   const menu = Menu.buildFromTemplate([
     {
       label: 'API 配置…',

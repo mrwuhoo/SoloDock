@@ -831,7 +831,7 @@ if (window.notchAPI && typeof window.notchAPI.onMetricsChanged === 'function') {
 // ============ Tab 切换 ============
 const TAB_KEY = 'notch-active-tab';
 // 左组（刘海左侧）：天天用的页面；右组（刘海右侧）：录制、可选页面与设置。
-const ALL_TABS = ['home', 'todo', 'notes', 'links', 'clip', 'credentials', 'time', 'recordings', 'resets', 'settings'];
+const ALL_TABS = ['home', 'todo', 'notes', 'links', 'clip', 'credentials', 'time', 'recordings', 'resets', 'life', 'settings'];
 let TABS = ALL_TABS.filter((name) => name !== 'clip');
 let tabButtons = Array.from(document.querySelectorAll('.tab:not([hidden])'));
 const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));

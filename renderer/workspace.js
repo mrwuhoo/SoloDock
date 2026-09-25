@@ -790,7 +790,7 @@
     if (settingsShortcutValue) settingsShortcutValue.textContent = summary.shortcut;
     if (settingsDefaultTab) {
       const visibleTabs = new Set(Domain.visiblePanelTabs(
-        ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'resets', 'time', 'settings'],
+        ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'resets', 'time', 'life', 'settings'],
         settingsAppSettings?.features
       ));
       Array.from(settingsDefaultTab.options).forEach((option) => {
