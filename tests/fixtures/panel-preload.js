@@ -24,6 +24,12 @@ const known = {
   },
   readAllNotices: async () => { (window.__notices || []).forEach((item) => { item.read = true; }); window.__calls.push(['read-all']); return true; },
   clearNotices: async () => { window.__notices = []; window.__calls.push(['clear']); return true; },
+  // Time page: days the tests put in window.__worklog.
+  getWorklog: async (from, to) => {
+    window.__calls.push(['worklog', from, to]);
+    const days = Object.fromEntries(Object.entries(window.__worklog || {}).filter(([key]) => key >= from && key <= to));
+    return { ok: true, enabled: window.__worklogEnabled !== false, days, recordedDays: Object.keys(window.__worklog || {}).length };
+  },
   actOnNotice: async (id, action) => {
     window.__calls.push(['act', id, action]);
     const item = (window.__notices || []).find((entry) => entry.id === id);

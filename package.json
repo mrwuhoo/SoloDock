@@ -35,6 +35,7 @@
       "vault-lock.js",
       "reminder-rules.js",
       "notice-store.js",
+      "worklog-store.js",
       "codex-usage.js",
       "reset-news.js",
       "platform.js",

@@ -42,11 +42,13 @@ test('body settings default to sit on (50 min), eye off, off-work at 22:30', () 
     sit: { enabled: true, minutes: 50 },
     eye: { enabled: false, minutes: 20 },
     offwork: { enabled: true, time: '22:30' },
+    worklog: { enabled: true },
   });
-  assert.deepEqual(rules.normalizeBodySettings({ sit: { minutes: 45 }, eye: { enabled: true, minutes: 7 }, offwork: { time: '25:00' } }), {
+  assert.deepEqual(rules.normalizeBodySettings({ sit: { minutes: 45 }, eye: { enabled: true, minutes: 7 }, offwork: { time: '25:00' }, worklog: { enabled: false } }), {
     sit: { enabled: true, minutes: 45 },
     eye: { enabled: true, minutes: 20 },
     offwork: { enabled: true, time: '22:30' },
+    worklog: { enabled: false },
   });
 });
 

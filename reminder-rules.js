@@ -51,10 +51,13 @@ function normalizeBodySettings(value) {
   const sit = part('sit');
   const eye = part('eye');
   const offwork = part('offwork');
+  const worklog = part('worklog');
   return {
     sit: { enabled: sit.enabled !== false, minutes: SIT_CHOICES.includes(Number(sit.minutes)) ? Number(sit.minutes) : 50 },
     eye: { enabled: eye.enabled === true, minutes: EYE_CHOICES.includes(Number(eye.minutes)) ? Number(eye.minutes) : 20 },
     offwork: { enabled: offwork.enabled !== false, time: TIME.test(String(offwork.time || '')) ? offwork.time : '22:30' },
+    // 工作时间统计（时间页）：只记在用电脑与专注的时间段，关掉后立即停止。
+    worklog: { enabled: worklog.enabled !== false },
   };
 }
 

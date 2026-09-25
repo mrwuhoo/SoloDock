@@ -67,7 +67,7 @@ test('settings exposes every panel tab as a possible default opening page', () =
   const select = html.match(/<select id="settings-default-tab"[\s\S]*?<\/select>/)?.[0] || '';
   const options = [...select.matchAll(/<option value="([^"]+)"/g)].map((match) => match[1]);
   assert.deepEqual(options, [
-    'home', 'todo', 'notes', 'links', 'clip', 'credentials', 'recordings', 'resets', 'settings',
+    'home', 'todo', 'notes', 'links', 'clip', 'credentials', 'time', 'recordings', 'resets', 'settings',
   ]);
   assert.match(workspaceJs, /setDefaultTab/);
 });
@@ -108,7 +108,7 @@ test('tabs sit in two groups on either side of the notch, ordered by weight', ()
   const secondary = html.match(/<div class="tab-group tab-group-secondary">[\s\S]*?<\/div>/)?.[0] || '';
   const ids = (block) => [...block.matchAll(/data-tab="([a-z]+)"/g)].map((match) => match[1]);
   assert.deepEqual(ids(primary), ['home', 'todo', 'notes', 'links', 'clip', 'credentials']);
-  assert.deepEqual(ids(secondary), ['recordings', 'resets', 'settings']);
+  assert.deepEqual(ids(secondary), ['time', 'recordings', 'resets', 'settings']);
   assert.doesNotMatch(appJs, /is-split|tab-split-start/);
 });
 

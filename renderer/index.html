@@ -91,6 +91,13 @@
               </button>
             </div>
             <div class="tab-group tab-group-secondary">
+              <button class="tab" id="tab-button-time" type="button" data-tab="time" role="tab" aria-controls="tab-time" aria-selected="false" tabindex="-1">
+                <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="4" y="5" width="16" height="15" rx="3" />
+                  <path d="M4 10h16M9 3v4M15 3v4M8.5 15h2M13.5 15h2" />
+                </svg>
+                <span class="tab-label">时间</span>
+              </button>
               <button class="tab" id="tab-button-recordings" type="button" data-tab="recordings" role="tab" aria-controls="tab-recordings" aria-selected="false" tabindex="-1">
                 <svg class="tab-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <rect x="8" y="3" width="8" height="13" rx="4" />
@@ -526,6 +533,44 @@
             </div>
           </section>
 
+          <!-- 时间：月历里每天一只「玻璃杯」，水位 = 工作时长，深色 = 专注。只记时间段，不记内容。 -->
+          <section id="tab-time" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-time" aria-hidden="true" inert>
+            <div class="time-page">
+              <section class="tile time-month" aria-label="工作时长月历">
+                <header class="time-month-head">
+                  <div><span class="tile-label">时间</span><h2 id="time-month-title">本月</h2></div>
+                  <div class="time-month-nav">
+                    <button class="time-nav-button" id="time-month-prev" type="button" aria-label="上个月">‹</button>
+                    <button class="time-nav-today" id="time-month-today" type="button">本月</button>
+                    <button class="time-nav-button" id="time-month-next" type="button" aria-label="下个月">›</button>
+                  </div>
+                </header>
+                <div class="time-summary" id="time-summary"></div>
+                <div class="time-week" aria-hidden="true"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
+                <div class="time-grid" id="time-grid" role="grid" aria-label="按日期查看工作时长"></div>
+                <footer class="time-legend">
+                  <span><i class="time-legend-focus"></i>专注</span>
+                  <span><i class="time-legend-active"></i>其他在用电脑的时间</span>
+                  <span><i class="time-legend-long"></i>超过 10 小时</span>
+                  <span class="time-legend-note">水位满格 = 12 小时 · 一天从凌晨 4 点算起</span>
+                </footer>
+              </section>
+              <section class="tile time-day" aria-label="当天详情">
+                <header class="time-day-head">
+                  <div><span class="tile-label" id="time-day-label">今天</span><h2 id="time-day-title">—</h2></div>
+                </header>
+                <div class="time-bar" id="time-bar" role="img" aria-label="08:00 到 24:00 的时间分布"></div>
+                <div class="time-bar-axis" aria-hidden="true"><span>8</span><span>12</span><span>16</span><span>20</span><span>24</span></div>
+                <div class="time-metrics" id="time-metrics"></div>
+                <p class="time-facts" id="time-facts"></p>
+                <p class="time-observation" id="time-observation"></p>
+                <div class="time-rhythm-head"><b>本周作息</b><span>每列从上到下是 8 点到 24 点</span></div>
+                <div class="time-rhythm" id="time-rhythm" role="img" aria-label="本周每天的作息"></div>
+                <button class="time-privacy" id="time-privacy" type="button">只记录在用电脑与专注的时间段，不记录任何应用或内容 · 设置</button>
+              </section>
+            </div>
+          </section>
+
           <section id="tab-resets" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-resets" aria-hidden="true" inert>
             <div class="reset-news-page">
               <section class="tile reset-news-calendar-card" aria-label="重置资讯日历">
@@ -572,6 +617,7 @@
                     <label><span><b>密钥</b><small>本机安全存储</small></span><input type="checkbox" data-settings-feature="credentials" aria-label="显示密钥" /><i aria-hidden="true"></i></label>
                     <label><span><b>剪贴板</b><small>默认关闭</small></span><input type="checkbox" data-settings-feature="clip" aria-label="显示剪贴板" /><i aria-hidden="true"></i></label>
                     <label><span><b>重置资讯</b><small>独立日历页面</small></span><input type="checkbox" data-settings-feature="resets" aria-label="显示重置资讯" /><i aria-hidden="true"></i></label>
+                    <label><span><b>时间</b><small>每天工作时长月历</small></span><input type="checkbox" data-settings-feature="time" aria-label="显示时间页" /><i aria-hidden="true"></i></label>
                   </div>
                 </section>
 
@@ -629,6 +675,8 @@
                     <label>久坐间隔<select id="settings-body-sit-minutes"><option value="30">30 分钟</option><option value="45">45 分钟</option><option value="50">50 分钟</option><option value="60">1 小时</option><option value="90">1.5 小时</option></select></label>
                     <label>收工时间<input id="settings-body-offwork-time" type="time" /></label>
                   </div>
+                  <label class="settings-strip-toggle"><span><b>记录工作时间</b><small>时间页的月历：只记在用电脑与专注的时间段，不记任何应用或内容</small></span><input type="checkbox" id="settings-body-worklog" aria-label="记录工作时间" /><i aria-hidden="true"></i></label>
+                  <div class="settings-body-worklog-row"><span>保留 13 个月，只存在本机</span><button class="workspace-button compact danger" id="settings-body-worklog-clear" type="button">清除记录</button></div>
                   <p class="settings-body-note">离开电脑 5 分钟、锁屏或休眠都算休息过；番茄钟专注期间不打扰，结束后再提醒。</p>
                 </section>
 
@@ -695,6 +743,7 @@
                       <option value="links">链接</option>
                       <option value="clip">剪贴板</option>
                       <option value="credentials">密钥</option>
+                      <option value="time">时间</option>
                       <option value="recordings">录制</option>
                       <option value="resets">重置资讯</option>
                       <option value="settings">设置</option>
@@ -814,6 +863,8 @@
     <script src="notch-status-domain.js"></script>
     <script src="notch-status.js"></script>
     <script src="notice-center.js"></script>
+    <script src="worklog-domain.js"></script>
+    <script src="time-page.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

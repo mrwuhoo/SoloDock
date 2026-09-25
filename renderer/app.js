@@ -522,6 +522,8 @@ function toggleTodo(priority, id) {
   const restoreFocus = document.activeElement?.closest('.todo-item')?.dataset.id === id;
   list[idx].done = !list[idx].done;
   const nowDone = list[idx].done;
+  // 时间页的「完成待办」：只记当天完成了几项，不记内容。
+  window.notchAPI?.recordTodoDone?.(nowDone ? 1 : -1)?.catch?.(() => {});
   saveData(data);
   renderList(priority, {
     previousPositions,
@@ -829,7 +831,7 @@ if (window.notchAPI && typeof window.notchAPI.onMetricsChanged === 'function') {
 // ============ Tab 切换 ============
 const TAB_KEY = 'notch-active-tab';
 // 左组（刘海左侧）：天天用的页面；右组（刘海右侧）：录制、可选页面与设置。
-const ALL_TABS = ['home', 'todo', 'notes', 'links', 'clip', 'credentials', 'recordings', 'resets', 'settings'];
+const ALL_TABS = ['home', 'todo', 'notes', 'links', 'clip', 'credentials', 'time', 'recordings', 'resets', 'settings'];
 let TABS = ALL_TABS.filter((name) => name !== 'clip');
 let tabButtons = Array.from(document.querySelectorAll('.tab:not([hidden])'));
 const tabPanels = Array.from(document.querySelectorAll('.tab-panel'));

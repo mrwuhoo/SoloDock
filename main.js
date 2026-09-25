@@ -67,6 +67,7 @@ const {
 const { createVaultLock } = require('./vault-lock');
 const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold } = require('./reminder-rules');
 const { createNoticeStore } = require('./notice-store');
+const { createWorklogStore } = require('./worklog-store');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
 
 // Keep the glass edition isolated from the official app so both builds can be
@@ -215,6 +216,7 @@ const TAB_SIZES = {
   recordings: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
   credentials: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
   resets: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
+  time: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
   settings: { width: EXPANDED_WIDTH, panelHeight: EXPANDED_PANEL_HEIGHT },
 };
 // 与渲染层结构常量对应：panel padding-top(--s-2 8) + 顶栏(--topbar-h 40)
@@ -777,10 +779,36 @@ const BODY_COPY = {
   offwork: (settings) => ({ title: '到收工时间了', detail: `${settings.offwork.time} · 把剩下的挪到明天，早点休息` }),
 };
 
+// ============ 工作时间记录（时间页） ============
+let worklogStore = null;
+let worklogEnabled = readStoredBodySettings().worklog.enabled;
+function getWorklogStore() {
+  if (!worklogStore) worklogStore = createWorklogStore({ file: path.join(app.getPath('userData'), 'worklog.json') });
+  return worklogStore;
+}
+
+ipcMain.handle('worklog:range', (event, payload) => {
+  const from = String(payload && payload.from || '');
+  const to = String(payload && payload.to || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return { ok: false, days: {} };
+  return { ok: true, enabled: worklogEnabled, days: getWorklogStore().range(from, to), recordedDays: getWorklogStore().recordedDays() };
+});
+ipcMain.handle('worklog:clear', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return false;
+  getWorklogStore().clear();
+  return true;
+});
+ipcMain.handle('worklog:todo', (event, delta) => {
+  if (!worklogEnabled || !mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return false;
+  getWorklogStore().bump('todos', Number(delta) < 0 ? -1 : 1);
+  return true;
+});
+
 function sampleBodyActivity() {
   let idleMs = 0;
   try { idleMs = powerMonitor.getSystemIdleTime() * 1000; } catch (error) { return; }
   const now = Date.now();
+  if (worklogEnabled) getWorklogStore().record(idleMs, isFocusing(now), now);
   const settings = bodyTracker.settings();
   for (const kind of bodyTracker.sample(idleMs, now)) {
     enqueueTaskNotification({
@@ -813,9 +841,12 @@ ipcMain.handle('settings:set-body', (event, patch) => {
     sit: { ...current.sit, ...(source.sit || {}) },
     eye: { ...current.eye, ...(source.eye || {}) },
     offwork: { ...current.offwork, ...(source.offwork || {}) },
+    worklog: { ...current.worklog, ...(source.worklog || {}) },
   });
   if (!writeJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE), { ...stored, body: next })) return { ok: false };
   bodyTracker.setSettings(next);
+  worklogEnabled = next.worklog.enabled;
+  if (!worklogEnabled) getWorklogStore().pause();
   return { ok: true, body: next };
 });
 
@@ -845,6 +876,7 @@ function enqueueTaskNotification(notification) {
 
   // 完成记录只收 AI 任务完成（首页时间线的绿点），不收待办、日程、番茄钟与身体提醒。
   if (isAiSource(notification.source)) {
+    if (worklogEnabled && !/-(snoozed|after-focus)/.test(String(notification.eventId || ''))) getWorklogStore().bump('ai');
     taskCompletionHistory.unshift(notification);
     if (taskCompletionHistory.length > 20) taskCompletionHistory.length = 20;
     if (mainWindow && !mainWindow.isDestroyed()) {
@@ -1512,6 +1544,7 @@ const DEFAULT_FEATURES = {
   credentials: true,
   clip: false,
   resets: true,
+  time: true,
 };
 
 function getJsonSettingsPath(name) {
@@ -1743,7 +1776,7 @@ function refreshTrayMenu() {
   if (!tray) return;
   const autoLaunch = isAutoLaunchEnabled();
   const settings = readAppSettings();
-  const featureLabels = { todo: '待办', notes: '笔记', links: '链接', recordings: '录制', credentials: '密钥', clip: '剪贴板', resets: '重置资讯' };
+  const featureLabels = { todo: '待办', notes: '笔记', links: '链接', recordings: '录制', credentials: '密钥', clip: '剪贴板', resets: '重置资讯', time: '时间' };
   const menu = Menu.buildFromTemplate([
     {
       label: 'API 配置…',
@@ -1871,6 +1904,7 @@ function publishNeedsYou() {
 function setNeedsYou(state) {
   if (needsYouTimer) clearTimeout(needsYouTimer);
   if (noticeStore) noticeStore.flush();
+  if (worklogStore) worklogStore.flush();
   needsYouTimer = null;
   needsYouState = state;
   if (state) {
@@ -3888,6 +3922,7 @@ app.whenReady().then(() => {
       getVaultLock().lock(eventName);
       void clearSecretFromClipboard();
       bodyTracker.takeBreak();
+      if (worklogStore) worklogStore.pause();
     });
   }
   startBodyTracking();
@@ -3926,6 +3961,7 @@ app.on('will-quit', () => {
   if (bodySampleTimer) clearInterval(bodySampleTimer);
   if (needsYouTimer) clearTimeout(needsYouTimer);
   if (noticeStore) noticeStore.flush();
+  if (worklogStore) worklogStore.flush();
   if (focusFlushTimer) clearTimeout(focusFlushTimer);
   stopHoverSpaceShortcut();
   clearTaskNotificationTimers();

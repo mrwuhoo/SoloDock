@@ -95,9 +95,9 @@ app.on('web-contents-created', (_event, contents) => {
         await api.setFeature('resets', true);
         return { initial, saved, after: (await api.getAppSettings()).body };
       })()`);
-      assert.deepEqual(body.initial, { sit: { enabled: true, minutes: 50 }, eye: { enabled: false, minutes: 20 }, offwork: { enabled: true, time: '22:30' } });
+      assert.deepEqual(body.initial, { sit: { enabled: true, minutes: 50 }, eye: { enabled: false, minutes: 20 }, offwork: { enabled: true, time: '22:30' }, worklog: { enabled: true } });
       assert.equal(body.saved.ok, true);
-      assert.deepEqual(body.after, { sit: { enabled: true, minutes: 45 }, eye: { enabled: true, minutes: 20 }, offwork: { enabled: true, time: '22:30' } });
+      assert.deepEqual(body.after, { sit: { enabled: true, minutes: 45 }, eye: { enabled: true, minutes: 20 }, offwork: { enabled: true, time: '22:30' }, worklog: { enabled: true } });
 
       // A pomodoro reminder shows its buttons; "再专注 5 分钟" starts a 5-minute focus in the panel.
       const { BrowserWindow: Windows, globalShortcut } = require('electron');

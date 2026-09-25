@@ -243,10 +243,10 @@ async function main() {
       columns: 2,
       api: true,
       mirror: true,
-      features: 7,
+      features: 8,
       homeModules: 7,
       shortcut: true,
-      defaultTab: { exists: true, value: 'home', options: 9 },
+      defaultTab: { exists: true, value: 'home', options: 10 },
       workspace: true,
       autoLaunch: true,
     });
