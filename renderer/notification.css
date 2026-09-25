@@ -132,7 +132,6 @@ body {
   color: inherit;
   font: inherit;
   text-align: left;
-  cursor: pointer;
   pointer-events: none;
   clip-path: inset(
     0 var(--notification-side-inset) var(--notification-bottom-inset)
@@ -144,14 +143,43 @@ body {
   will-change: clip-path;
 }
 
-.notification-shell[data-source='gpt'] {
-  --notification-accent: #a988ff;
-  --notification-accent-rgb: 169, 136, 255;
-}
+/* 每类提醒一种强调色：图标、来源标签、主按钮与顶部光晕都用它。 */
+.notification-shell[data-source='claude'] { --notification-accent: #e8916c; --notification-accent-rgb: 232, 145, 108; }
+.notification-shell[data-source='gpt'],
+.notification-shell[data-source='chatgpt'] { --notification-accent: #a988ff; --notification-accent-rgb: 169, 136, 255; }
+.notification-shell[data-source='todo'] { --notification-accent: #ff9f43; --notification-accent-rgb: 255, 159, 67; }
+.notification-shell[data-source='event'] { --notification-accent: #5aa2ff; --notification-accent-rgb: 90, 162, 255; }
+.notification-shell[data-source='reminder'] { --notification-accent: #f5c451; --notification-accent-rgb: 245, 196, 81; }
+.notification-shell[data-source='pomodoro'],
+.notification-shell[data-source='focus-summary'] { --notification-accent: #ff6b5b; --notification-accent-rgb: 255, 107, 91; }
+.notification-shell[data-source='pomodoro-break'] { --notification-accent: #4fd1a5; --notification-accent-rgb: 79, 209, 165; }
+.notification-shell[data-source='sit'] { --notification-accent: #34d3b9; --notification-accent-rgb: 52, 211, 185; }
+.notification-shell[data-source='eye'] { --notification-accent: #7cc8ff; --notification-accent-rgb: 124, 200, 255; }
+.notification-shell[data-source='offwork'] { --notification-accent: #9b8cff; --notification-accent-rgb: 155, 140, 255; }
+.notification-shell[data-source='info'] { --notification-accent: #a7b8cc; --notification-accent-rgb: 167, 184, 204; }
 
-.notification-shell[data-source='todo'] {
-  --notification-accent: #ff9f43;
-  --notification-accent-rgb: 255, 159, 67;
+/* 上半部分（刘海下方的一行）整体可点击。 */
+.notification-body {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  z-index: 3;
+  height: 96px;
+  margin: 0;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.notification-body:focus-visible {
+  outline: var(--border-width) solid var(--color-focus);
+  outline-offset: calc(var(--focus-inset) * -1);
 }
 
 .notification-shell::before {
@@ -172,21 +200,16 @@ body {
 
 .notification-shell.is-visible::before { opacity: .72; }
 
-.notification-shell:hover {
+.notification-body:hover .notification-content {
   filter: brightness(1.08);
-}
-
-.notification-shell:focus-visible {
-  outline: var(--border-width) solid var(--color-focus);
-  outline-offset: calc(var(--focus-inset) * -1);
 }
 
 .notification-content {
   position: absolute;
   top: var(--notch-safe-height);
   right: 0;
-  bottom: 0;
   left: 0;
+  height: calc(96px - var(--notch-safe-height));
   display: grid;
   grid-template-columns: var(--logo-size) minmax(0, 1fr) auto;
   align-items: center;
@@ -222,19 +245,79 @@ body {
   position: absolute;
   width: 17px;
   height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   opacity: 0;
   transform: scale(.75) rotate(-8deg);
   transition: opacity 160ms var(--ease-out), transform 240ms var(--ease-out);
 }
 
-.notification-shell[data-source='codex'] .notification-glyph-check,
-.notification-shell[data-source='task'] .notification-glyph-check,
-.notification-shell[data-source='gpt'] .notification-glyph-spark,
-.notification-shell[data-source='chatgpt'] .notification-glyph-spark,
-.notification-shell[data-source='todo'] .notification-glyph-clock {
+.notification-shell[data-glyph='check'] .notification-glyph[data-glyph='check'],
+.notification-shell[data-glyph='spark'] .notification-glyph[data-glyph='spark'],
+.notification-shell[data-glyph='clock'] .notification-glyph[data-glyph='clock'],
+.notification-shell[data-glyph='timer'] .notification-glyph[data-glyph='timer'],
+.notification-shell[data-glyph='leaf'] .notification-glyph[data-glyph='leaf'],
+.notification-shell[data-glyph='calendar'] .notification-glyph[data-glyph='calendar'],
+.notification-shell[data-glyph='bell'] .notification-glyph[data-glyph='bell'],
+.notification-shell[data-glyph='walk'] .notification-glyph[data-glyph='walk'],
+.notification-shell[data-glyph='eye'] .notification-glyph[data-glyph='eye'],
+.notification-shell[data-glyph='moon'] .notification-glyph[data-glyph='moon'],
+.notification-shell[data-glyph='info'] .notification-glyph[data-glyph='info'] {
   opacity: 1;
   transform: scale(1) rotate(0);
 }
+
+/* 安静样式（护眼）：环形倒计时代替图标底板，不带按钮，到点自己消失。 */
+.notification-ring { position: absolute; inset: -2px; display: none; width: 32px; height: 32px; transform: rotate(-90deg); }
+.notification-ring circle { fill: none; stroke-width: 2.4; }
+.notification-ring-track { stroke: rgba(255,255,255,.12); }
+.notification-ring-progress { stroke: var(--notification-accent); stroke-linecap: round; stroke-dasharray: 81.68; stroke-dashoffset: 0; }
+.notification-shell[data-style='quiet'] .notification-logo-wrap { overflow: visible; border-radius: 50%; background: none; box-shadow: none; }
+.notification-shell[data-style='quiet'] .notification-ring { display: block; }
+.notification-shell[data-style='quiet'] .notification-glyph { width: 15px; height: 15px; }
+.notification-shell[data-style='quiet'] .notification-status-dot { display: none; }
+.notification-shell.is-visible[data-style='quiet'] .notification-ring-progress { animation: notification-ring var(--ring-duration, 20s) linear forwards; }
+@keyframes notification-ring { to { stroke-dashoffset: 81.68; } }
+
+/* 操作按钮：主按钮在左、用强调色；最后是 ⌃⌥↩ 提示。 */
+.notification-actions {
+  position: absolute;
+  top: 98px;
+  right: var(--content-padding-inline);
+  left: calc(var(--content-padding-inline) + var(--logo-size) + var(--space-6));
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  opacity: 0;
+  transform: translateY(var(--motion-content-offset));
+  transition:
+    opacity var(--motion-content-duration) var(--ease-out),
+    transform var(--motion-content-duration) var(--ease-out);
+}
+.notification-shell.is-visible .notification-actions { opacity: 1; transform: none; transition-delay: calc(var(--motion-content-delay) + 40ms); }
+.notification-shell.is-hiding .notification-actions { opacity: 0; transition-duration: var(--motion-content-exit-duration); transition-delay: 0ms; }
+.notification-action {
+  height: 26px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: rgba(255,255,255,.09);
+  color: #e8e8ea;
+  font: 500 12px var(--font-family);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 140ms var(--ease-out), filter 140ms var(--ease-out);
+}
+.notification-action:hover { background: rgba(255,255,255,.16); }
+.notification-action.primary { background: var(--notification-accent); color: #0b0b0d; font-weight: 600; }
+.notification-action.primary:hover { filter: brightness(1.08); background: var(--notification-accent); }
+.notification-action:disabled { opacity: .5; cursor: default; }
+.notification-action:focus-visible { outline: 2px solid rgba(255,255,255,.5); outline-offset: 2px; }
+.notification-shortcut { margin-left: auto; color: var(--color-text-tertiary); font-size: 10.5px; letter-spacing: .5px; white-space: nowrap; }
 
 .notification-status-dot {
   position: absolute;

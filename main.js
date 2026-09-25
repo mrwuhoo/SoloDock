@@ -63,6 +63,7 @@ const {
   credentialEnvName,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
+const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold } = require('./reminder-rules');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
 
 // Keep the glass edition isolated from the official app so both builds can be
@@ -244,11 +245,13 @@ const LINK_FETCH_MAX_REDIRECTS = 3;
 
 const TASK_NOTIFICATION_WIDTH = 400;
 const TASK_NOTIFICATION_HEIGHT = 96;
+const TASK_NOTIFICATION_ACTIONS_HEIGHT = 132; // 带操作按钮时多一行
+const TASK_NOTIFICATION_PRIMARY_SHORTCUT = 'Control+Alt+Return';
 const TASK_NOTIFICATION_SCREEN_MARGIN = 12;
 const TASK_NOTIFICATION_VISIBLE_MS = 6000;
 const TASK_NOTIFICATION_LEAVE_MS = 360;
 const TASK_NOTIFICATION_DEDUPE_MS = 2000;
-const TASK_NOTIFICATION_MAX_QUEUE = 5;
+const TASK_NOTIFICATION_MAX_QUEUE = 8;
 const TASK_NOTIFICATION_BODY_LIMIT = 64 * 1024;
 const TASK_NOTIFICATION_HOST = '127.0.0.1';
 const TASK_NOTIFICATION_PORT = 43821;
@@ -567,6 +570,182 @@ function sendTaskNotificationQueueCount() {
   );
 }
 
+// ============ 统一提醒：专注暂存、按钮操作、⌃⌥⏎ ============
+const focusHold = createFocusHold();
+let focusFlushTimer = null;
+
+function isFocusing(now = Date.now()) {
+  return focusHold.focusing(now);
+}
+
+function flushHeldFocusNotifications() {
+  if (focusFlushTimer) clearTimeout(focusFlushTimer);
+  focusFlushTimer = null;
+  for (const notification of focusHold.flush(Date.now())) enqueueTaskNotification(notification);
+}
+
+ipcMain.on('focus:state', (event, payload) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return;
+  focusHold.setFocus(payload);
+  const { endsAt } = focusHold.focus();
+  bodyTracker.setFocusUntil(isFocusing() ? endsAt : 0);
+  if (focusFlushTimer) clearTimeout(focusFlushTimer);
+  focusFlushTimer = null;
+  if (isFocusing()) {
+    // 渲染层没来得及报告结束时，到点也会汇总。
+    focusFlushTimer = setTimeout(flushHeldFocusNotifications, endsAt - Date.now() + 2000);
+    focusFlushTimer.unref?.();
+  } else {
+    flushHeldFocusNotifications();
+  }
+});
+
+function sendReminderAction(action, notification) {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send('reminder:action', { action, taskId: notification.taskId || '', source: notification.source });
+}
+
+function snoozeNotification(notification, minutes) {
+  const timer = setTimeout(() => {
+    enqueueTaskNotification({ ...notification, eventId: `${notification.eventId}-snoozed-${Date.now()}` });
+  }, minutes * 60_000);
+  timer.unref?.();
+}
+
+// 浮窗按钮：先执行动作，再收起这张提醒。
+async function handleTaskNotificationAction(eventId, actionId) {
+  const notification = activeTaskNotification;
+  if (!notification || notification.eventId !== eventId) return false;
+  if (!notification.actions.some((item) => item.id === actionId)) return false;
+  const now = Date.now();
+  switch (actionId) {
+    case 'open':
+      await activateActiveTaskNotification(eventId);
+      break;
+    case 'snooze-10': snoozeNotification(notification, 10); break;
+    case 'snooze-30': snoozeNotification(notification, 30); break;
+    case 'body-snooze-10': bodyTracker.snooze('sit', 10, now); break;
+    case 'body-snooze-30': bodyTracker.snooze('offwork', 30, now); break;
+    case 'body-mute-today': bodyTracker.muteToday('sit', now); break;
+    case 'break-5':
+      bodyTracker.startBreak(now);
+      sendReminderAction('break-5', notification);
+      break;
+    case 'open-todo':
+      openRendererPanel('app:open-todo');
+      break;
+    case 'todo-done':
+    case 'focus-5':
+    case 'focus-again':
+    case 'move-tomorrow':
+      sendReminderAction(actionId, notification);
+      break;
+    default:
+      break;
+  }
+  beginTaskNotificationDismiss();
+  return true;
+}
+
+ipcMain.handle('task-notification:action', (event, payload) => {
+  if (!notificationWindow || notificationWindow.isDestroyed() || event.sender !== notificationWindow.webContents) return false;
+  return handleTaskNotificationAction(String(payload && payload.eventId || ''), String(payload && payload.actionId || ''));
+});
+
+let primaryShortcutRegistered = false;
+function registerPrimaryActionShortcut() {
+  if (primaryShortcutRegistered) return;
+  try {
+    primaryShortcutRegistered = globalShortcut.register(TASK_NOTIFICATION_PRIMARY_SHORTCUT, () => {
+      const primary = activeTaskNotification && activeTaskNotification.actions.find((item) => item.primary);
+      if (primary) void handleTaskNotificationAction(activeTaskNotification.eventId, primary.id);
+    });
+  } catch (error) {
+    primaryShortcutRegistered = false;
+  }
+}
+
+function unregisterPrimaryActionShortcut() {
+  if (!primaryShortcutRegistered) return;
+  try { globalShortcut.unregister(TASK_NOTIFICATION_PRIMARY_SHORTCUT); } catch (error) {}
+  primaryShortcutRegistered = false;
+}
+
+// 渲染层完成「挪到明天」等动作后的简短回执。
+ipcMain.handle('reminder:info', (event, payload) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return false;
+  const title = String(payload && payload.title || '').trim().slice(0, 60);
+  if (!title) return false;
+  enqueueTaskNotification({
+    eventId: `info-${Date.now()}`,
+    taskId: `info-${Date.now()}`,
+    source: 'info',
+    project: '',
+    title,
+    detail: String(payload && payload.detail || '').trim().slice(0, 80),
+    completedAt: Date.now(),
+  });
+  return true;
+});
+
+// ============ 身体与作息：久坐、护眼、收工 ============
+// 每 30 秒读一次 macOS 的系统空闲时间；离开电脑 5 分钟（或锁屏、休眠）算休息过。
+const BODY_SAMPLE_MS = 30_000;
+const bodyTracker = createActivityTracker(readStoredBodySettings());
+let bodySampleTimer = null;
+
+function readStoredBodySettings() {
+  return normalizeBodySettings(readJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE)).body);
+}
+
+const BODY_COPY = {
+  sit: (settings) => ({ title: '起来活动一下', detail: `已经连续用电脑 ${settings.sit.minutes} 分钟，站起来走走、喝口水` }),
+  eye: () => ({ title: '看看远处 20 秒', detail: '眨眨眼，让眼睛歇一会儿' }),
+  offwork: (settings) => ({ title: '到收工时间了', detail: `${settings.offwork.time} · 把剩下的挪到明天，早点休息` }),
+};
+
+function sampleBodyActivity() {
+  let idleMs = 0;
+  try { idleMs = powerMonitor.getSystemIdleTime() * 1000; } catch (error) { return; }
+  const now = Date.now();
+  const settings = bodyTracker.settings();
+  for (const kind of bodyTracker.sample(idleMs, now)) {
+    enqueueTaskNotification({
+      eventId: `body-${kind}-${now}`,
+      taskId: `body-${kind}-${dayKeyOf(now)}-${now}`,
+      source: kind,
+      project: '',
+      ...BODY_COPY[kind](settings),
+      completedAt: now,
+    });
+  }
+}
+
+function dayKeyOf(time) {
+  const date = new Date(time);
+  return `${date.getFullYear()}${date.getMonth() + 1}${date.getDate()}`;
+}
+
+function startBodyTracking() {
+  if (bodySampleTimer) return;
+  bodySampleTimer = setInterval(sampleBodyActivity, BODY_SAMPLE_MS);
+  bodySampleTimer.unref?.();
+}
+
+ipcMain.handle('settings:set-body', (event, patch) => {
+  const stored = readJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE));
+  const current = normalizeBodySettings(stored.body);
+  const source = patch && typeof patch === 'object' ? patch : {};
+  const next = normalizeBodySettings({
+    sit: { ...current.sit, ...(source.sit || {}) },
+    eye: { ...current.eye, ...(source.eye || {}) },
+    offwork: { ...current.offwork, ...(source.offwork || {}) },
+  });
+  if (!writeJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE), { ...stored, body: next })) return { ok: false };
+  bodyTracker.setSettings(next);
+  return { ok: true, body: next };
+});
+
 function enqueueTaskNotification(notification) {
   if (!notification) return 'ignored';
   const now = Date.now();
@@ -580,16 +759,28 @@ function enqueueTaskNotification(notification) {
   if (lastSeenAt && now - lastSeenAt <= TASK_NOTIFICATION_DEDUPE_MS) return 'duplicate';
   recentTaskNotifications.set(dedupeKey, now);
 
-  // 完成记录只收 AI 与任务完成，不收待办到期、日程和稍后提醒。
-  if (!['todo', 'event', 'reminder'].includes(notification.source)) {
+  // 每类提醒自带按钮与停留方式（reminder-rules.js）。
+  const presentation = reminderPresentation(notification.source);
+  notification = {
+    ...notification,
+    actions: Array.isArray(notification.actions) ? notification.actions : presentation.actions,
+    visibleMs: Number.isFinite(notification.visibleMs) ? notification.visibleMs : presentation.visibleMs,
+    style: notification.style || presentation.style || 'standard',
+  };
+
+  // 完成记录只收 AI 任务完成（首页时间线的绿点），不收待办、日程、番茄钟与身体提醒。
+  if (isAiSource(notification.source)) {
     taskCompletionHistory.unshift(notification);
     if (taskCompletionHistory.length > 20) taskCompletionHistory.length = 20;
     if (mainWindow && !mainWindow.isDestroyed()) {
       mainWindow.webContents.send('task-completion:new', notification);
     }
+    // 番茄钟专注期间：AI 完成只计数不弹出，专注结束后汇总为一条。
+    if (focusHold.hold(notification, now)) return 'held';
   }
 
-  if (taskNotificationQueue.length < TASK_NOTIFICATION_MAX_QUEUE) {
+  const last = taskNotificationQueue[taskNotificationQueue.length - 1];
+  if (taskNotificationQueue.length < TASK_NOTIFICATION_MAX_QUEUE || !isAiSource(notification.source) || !last || !isAiSource(last.source)) {
     taskNotificationQueue.push(notification);
   } else {
     const lastIndex = taskNotificationQueue.length - 1;
@@ -597,6 +788,7 @@ function enqueueTaskNotification(notification) {
     const summaryCount = previous.isSummary ? previous.summaryCount + 1 : 2;
     taskNotificationQueue[lastIndex] = {
       ...notification,
+      ...reminderPresentation('task'),
       source: 'task',
       taskId: '',
       title: `另有 ${summaryCount} 个任务已完成`,
@@ -733,28 +925,33 @@ ipcMain.handle('reminders:schedule', (event, items) => {
   return { ok: true, count: scheduledTimedReminders.length };
 });
 
-ipcMain.handle('pomodoro:notify', (event, minutes) => {
-  const safeMinutes = Math.max(1, Math.min(120, Math.round(Number(minutes) || 25)));
+ipcMain.handle('pomodoro:notify', (event, payload) => {
+  const source = payload && typeof payload === 'object' ? payload : { minutes: payload };
+  const safeMinutes = Math.max(1, Math.min(120, Math.round(Number(source.minutes) || 25)));
   const completedAt = Date.now();
+  const isBreak = source.mode === 'break';
   const notification = {
     eventId: `pomodoro-${completedAt}`,
     taskId: `pomodoro-${completedAt}`,
-    source: 'pomodoro',
+    source: isBreak ? 'pomodoro-break' : 'pomodoro',
     project: '番茄钟',
-    title: '专注完成',
-    body: `${safeMinutes} 分钟专注计时已结束`,
+    title: isBreak ? '休息结束' : '专注完成',
+    detail: isBreak ? '准备好就继续专注' : `${safeMinutes} 分钟专注完成，休息一下吧`,
     completedAt,
   };
   return { ok: true, result: enqueueTaskNotification(notification) };
 });
 
-function getTaskNotificationBounds(display) {
+function getTaskNotificationBounds(display, notification = activeTaskNotification) {
   const d = display || getTargetDisplay();
   const width = Math.min(
     TASK_NOTIFICATION_WIDTH,
     Math.max(280, d.bounds.width - TASK_NOTIFICATION_SCREEN_MARGIN * 2)
   );
-  return getCenteredBounds(width, TASK_NOTIFICATION_HEIGHT, d);
+  const height = notification && Array.isArray(notification.actions) && notification.actions.length
+    ? TASK_NOTIFICATION_ACTIONS_HEIGHT
+    : TASK_NOTIFICATION_HEIGHT;
+  return getCenteredBounds(width, height, d);
 }
 
 function recoverClosedTaskNotificationWindow(targetWindow) {
@@ -839,6 +1036,8 @@ function clearTaskNotificationTimers() {
 
 function scheduleTaskNotificationDismiss() {
   if (!activeTaskNotification || taskNotificationLeaving || taskNotificationPaused) return;
+  // 要你处理的提醒（待办到期、日程、收工）不自动消失。
+  if (!activeTaskNotification.visibleMs) return;
   if (taskNotificationTimer) clearTimeout(taskNotificationTimer);
   taskNotificationTimerStartedAt = Date.now();
   taskNotificationTimer = setTimeout(
@@ -872,14 +1071,14 @@ function showNextTaskNotification() {
   activeTaskNotification = taskNotificationQueue.shift();
   taskNotificationLeaving = false;
   taskNotificationPaused = false;
-  taskNotificationRemainingMs = TASK_NOTIFICATION_VISIBLE_MS;
-  targetWindow.setBounds(getTaskNotificationBounds(getTargetDisplay()));
+  taskNotificationRemainingMs = activeTaskNotification.visibleMs || TASK_NOTIFICATION_VISIBLE_MS;
+  targetWindow.setBounds(getTaskNotificationBounds(getTargetDisplay(), activeTaskNotification));
   targetWindow.showInactive();
   targetWindow.webContents.send('task-notification:show', {
     ...activeTaskNotification,
     pendingCount: getPendingTaskNotificationCount(),
-    visibleMs: TASK_NOTIFICATION_VISIBLE_MS,
   });
+  if (activeTaskNotification.actions.some((item) => item.primary)) registerPrimaryActionShortcut();
   scheduleTaskNotificationDismiss();
 }
 
@@ -900,6 +1099,7 @@ function beginTaskNotificationDismiss() {
 function finishTaskNotification(eventId) {
   if (!activeTaskNotification || activeTaskNotification.eventId !== eventId) return;
   clearTaskNotificationTimers();
+  unregisterPrimaryActionShortcut();
   const completedWindow = notificationWindow;
   if (completedWindow && !completedWindow.isDestroyed()) completedWindow.hide();
   activeTaskNotification = null;
@@ -1253,11 +1453,13 @@ function readAppSettings() {
 }
 
 function publicAppSettings() {
-  return { ...readAppSettings(), autoLaunch: isAutoLaunchEnabled() };
+  return { ...readAppSettings(), autoLaunch: isAutoLaunchEnabled(), body: readStoredBodySettings() };
 }
 
 function saveAppSettings(settings) {
-  return writeJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE), settings);
+  // readAppSettings() 不含身体提醒设置；写回时保留它。
+  const stored = readJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE));
+  return writeJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE), { ...settings, body: stored.body });
 }
 
 function workspaceRoot() {
@@ -3516,8 +3718,10 @@ app.whenReady().then(() => {
     powerMonitor.on(eventName, () => {
       getVaultLock().lock(eventName);
       void clearSecretFromClipboard();
+      bodyTracker.takeBreak();
     });
   }
+  startBodyTracking();
   // 不在启动时索要权限：只有用户在「当前窗口」卡片里点了授权按钮才申请，
   // 那条路径会先调用 desktopCapturer，让 SoloDock 出现在系统的录屏权限列表里。
 
@@ -3550,6 +3754,8 @@ app.on('will-quit', () => {
   clearTodoReminderTimer();
   if (timedReminderTimer) clearTimeout(timedReminderTimer);
   if (vaultLock) vaultLock.dispose();
+  if (bodySampleTimer) clearInterval(bodySampleTimer);
+  if (focusFlushTimer) clearTimeout(focusFlushTimer);
   stopHoverSpaceShortcut();
   clearTaskNotificationTimers();
   stopTaskNotificationServer();

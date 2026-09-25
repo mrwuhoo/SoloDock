@@ -57,7 +57,7 @@
 - 当前窗口：通过 macOS 辅助功能枚举和聚焦，使用系统应用图标；同应用多窗口编号；隐藏项保存在 LocalStorage；聚焦 IPC 只接受最近扫描缓存中的窗口 ID
 - 笔记：首页随笔记保存后进入独立笔记页，可搜索、重命名、编辑和删除
 - 动效：窗口边界变更不使用系统动画；视觉动效由渲染层完成，并支持 `prefers-reduced-motion`
-- 通知：独立 `400 × 96` 无焦点窗口；HTTP 只监听 `127.0.0.1:43821` 的 `/notify/<source>` 与 `/usage/claude`（Claude Code 状态栏额度，由 `scripts/claude-statusline.js` 转发，只保留两个额度窗口），来源白名单 `codex` / `claude` / `gpt`；Codex 与 Claude Code 分别由 `scripts/codex-notify.js`、`scripts/claude-notify.js` 转发，子代理结束与云端会话不弹提醒
+- 通知：独立无焦点窗口，宽 400，高 96（带按钮时 132）；每类提醒的按钮与停留方式由 `reminder-rules.js` 的 `reminderPresentation` 决定（`visibleMs: 0` 表示不自动消失），按钮经 `task-notification:action` 回到主进程执行，需要页面配合的动作（完成待办、开始休息 / 专注、待办挪到明天）通过 `reminder:action` 发给主窗口。显示带主按钮的提醒时临时注册 ⌃⌥↩，收起即注销。专注期间 AI 提醒由 `createFocusHold` 暂存。身体提醒由 `createActivityTracker` 每 30 秒读 `powerMonitor.getSystemIdleTime()` 判断，设置存在 `app-settings.json` 的 `body`（`saveAppSettings` 写回时保留）。HTTP 只监听 `127.0.0.1:43821` 的 `/notify/<source>` 与 `/usage/claude`（Claude Code 状态栏额度，由 `scripts/claude-statusline.js` 转发，只保留两个额度窗口），来源白名单 `codex` / `claude` / `gpt`；Codex 与 Claude Code 分别由 `scripts/codex-notify.js`、`scripts/claude-notify.js` 转发，子代理结束与云端会话不弹提醒
 
 ## v0.2 设计与开发约定
 

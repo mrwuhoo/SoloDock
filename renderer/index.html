@@ -586,6 +586,21 @@
                   <small class="usage-config-note">自动同步仅在首页组件可见或查看此配置时进行。公开发卡消息以 AIHOT 标注为准，个人余额以账号返回为准。</small>
                 </section>
 
+                <section class="tile settings-card settings-body-card" id="settings-body-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">提醒</span><strong>身体与作息</strong></div>
+                    <small>按真实使用电脑的时间计算</small>
+                  </div>
+                  <label class="settings-strip-toggle"><span><b>久坐提醒</b><small id="settings-body-sit-hint">连续用电脑 50 分钟，提醒起来活动</small></span><input type="checkbox" id="settings-body-sit" aria-label="久坐提醒" /><i aria-hidden="true"></i></label>
+                  <label class="settings-strip-toggle"><span><b>护眼提醒</b><small>每连续用 20 分钟，看看远处 20 秒（安静样式）</small></span><input type="checkbox" id="settings-body-eye" aria-label="护眼提醒" /><i aria-hidden="true"></i></label>
+                  <label class="settings-strip-toggle"><span><b>收工提醒</b><small id="settings-body-offwork-hint">22:30 还在用电脑时，提醒把剩下的挪到明天</small></span><input type="checkbox" id="settings-body-offwork" aria-label="收工提醒" /><i aria-hidden="true"></i></label>
+                  <div class="settings-frame-row">
+                    <label>久坐间隔<select id="settings-body-sit-minutes"><option value="30">30 分钟</option><option value="45">45 分钟</option><option value="50">50 分钟</option><option value="60">1 小时</option><option value="90">1.5 小时</option></select></label>
+                    <label>收工时间<input id="settings-body-offwork-time" type="time" /></label>
+                  </div>
+                  <p class="settings-body-note">离开电脑 5 分钟、锁屏或休眠都算休息过；番茄钟专注期间不打扰，结束后再提醒。</p>
+                </section>
+
                 <section class="tile settings-card settings-vault-card" id="settings-vault-card">
                   <div class="settings-card-heading">
                     <div><span class="tile-label">密钥</span><strong>密钥锁</strong></div>
@@ -764,6 +779,7 @@
     <script src="frame-domain.js"></script>
     <script src="photo-frame.js"></script>
     <script src="vault.js"></script>
+    <script src="body-settings.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

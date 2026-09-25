@@ -85,6 +85,46 @@ app.on('web-contents-created', (_event, contents) => {
       assert.deepEqual(vault.right, { ok: true });
       assert.equal(vault.afterUnlock, false);
       assert.doesNotMatch(fs.readFileSync(path.join(profile, 'vault-lock.json'), 'utf8'), /startup-pass/);
+
+      // Body reminder settings persist, and other settings writes keep them.
+      const body = await contents.executeJavaScript(`(async () => {
+        const api = window.notchAPI;
+        const initial = (await api.getAppSettings()).body;
+        const saved = await api.setBodySettings({ sit: { minutes: 45 }, eye: { enabled: true } });
+        await api.setFeature('resets', false);
+        await api.setFeature('resets', true);
+        return { initial, saved, after: (await api.getAppSettings()).body };
+      })()`);
+      assert.deepEqual(body.initial, { sit: { enabled: true, minutes: 50 }, eye: { enabled: false, minutes: 20 }, offwork: { enabled: true, time: '22:30' } });
+      assert.equal(body.saved.ok, true);
+      assert.deepEqual(body.after, { sit: { enabled: true, minutes: 45 }, eye: { enabled: true, minutes: 20 }, offwork: { enabled: true, time: '22:30' } });
+
+      // A pomodoro reminder shows its buttons; "再专注 5 分钟" starts a 5-minute focus in the panel.
+      const { BrowserWindow: Windows, globalShortcut } = require('electron');
+      await contents.executeJavaScript(`window.notchAPI.notifyPomodoro({ minutes: 25, mode: 'focus' })`);
+      let reminderWindow = null;
+      let reminder = null;
+      for (let attempt = 0; attempt < 40 && !reminder; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 150));
+        reminderWindow = Windows.getAllWindows().find((win) => win.webContents.getURL().endsWith('/renderer/notification.html'));
+        if (!reminderWindow) continue;
+        reminder = await reminderWindow.webContents.executeJavaScript(`document.getElementById('notification-shell')?.classList.contains('is-visible') ? [...document.querySelectorAll('.notification-action')].map((button) => button.dataset.actionId) : null`).catch(() => null);
+      }
+      assert.deepEqual(reminder, ['break-5', 'focus-5', 'dismiss']);
+      assert.equal(reminderWindow.getBounds().height, 132);
+      assert.equal(globalShortcut.isRegistered('Control+Alt+Return'), true, '⌃⌥↩ is live while the reminder is up');
+      await reminderWindow.webContents.executeJavaScript(`document.querySelector('[data-action-id="focus-5"]').click()`);
+      let pomodoro = null;
+      for (let attempt = 0; attempt < 20 && !(pomodoro && pomodoro.running); attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        pomodoro = await contents.executeJavaScript('window.NotchPomodoro.state()');
+      }
+      assert.equal(pomodoro.running, true);
+      assert.equal(pomodoro.mode, 'focus');
+      assert.equal(pomodoro.session, 300);
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      assert.equal(globalShortcut.isRegistered('Control+Alt+Return'), false, 'and released once it is dismissed');
+      await contents.executeJavaScript(`document.getElementById('pomodoro-reset').click()`);
       assert.deepEqual(errors, []);
       console.log('Production workspace recovery checks passed');
       app.quit();

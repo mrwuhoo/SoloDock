@@ -3773,6 +3773,13 @@ body {
 .credential-generate:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
 
 
+.settings-body-card { display: flex; flex-direction: column; gap: 10px; }
+.settings-body-card .settings-card-heading > small { color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
+.settings-body-card .settings-strip-toggle { margin-top: 0; }
+.settings-body-card .settings-frame-row input { width: 100%; height: 32px; padding: 0 10px; border: 1px solid rgba(23, 50, 80, 0.1); border-radius: var(--sd-radius-control); background: rgba(255, 255, 255, 0.72); color: var(--sd-text-1); font: var(--sd-fs-secondary) var(--sd-font); color-scheme: light; }
+.settings-body-card .settings-frame-row input:focus { outline: none; border-color: var(--sd-accent); box-shadow: 0 0 0 3px var(--sd-accent-soft); }
+.settings-body-card :disabled { opacity: 0.55; }
+.settings-card .settings-body-note { color: var(--sd-text-3); font-size: var(--sd-fs-caption); line-height: 1.55; }
 .settings-vault-card { display: flex; flex-direction: column; gap: 12px; }
 .settings-vault-card .settings-card-heading > small { color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
 .settings-card .settings-vault-hint { color: var(--sd-text-3); font-size: var(--sd-fs-caption); line-height: 1.55; }

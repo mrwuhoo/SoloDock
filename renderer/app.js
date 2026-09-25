@@ -1480,6 +1480,10 @@ let pomodoroRemaining = pomodoroConfiguredSeconds;
 let pomodoroRunning = false;
 let pomodoroStarted = false;
 let pomodoroTimer = null;
+// 专注（计入专注记录）或休息（提醒浮窗里的「休息 5 分钟」，不计入）。
+let pomodoroMode = 'focus';
+let pomodoroSessionSeconds = pomodoroConfiguredSeconds;
+const pomodoroCaption = homePomodoro?.querySelector('.pomodoro-caption');
 
 function secondsToParts(seconds) {
   const safe = Math.max(0, Math.floor(seconds));
@@ -1520,7 +1524,7 @@ function renderPomodoro() {
     pomodoroEndTime.textContent = formatPomodoroEndTime(pomodoroStarted ? pomodoroRemaining : pomodoroConfiguredSeconds);
   }
   const remainingRatio = pomodoroStarted
-    ? pomodoroRemaining / Math.max(1, pomodoroConfiguredSeconds)
+    ? pomodoroRemaining / Math.max(1, pomodoroSessionSeconds)
     : 1;
   homePomodoro?.style.setProperty('--pomodoro-progress', String(Math.max(0, Math.min(1, remainingRatio))));
   if (pomodoroToggle) {
@@ -1531,6 +1535,64 @@ function renderPomodoro() {
   }
   if (pomodoroReset) pomodoroReset.hidden = !pomodoroStarted;
   homePomodoro?.setAttribute('data-state', pomodoroRunning ? 'running' : (pomodoroStarted ? 'paused' : 'idle'));
+  homePomodoro?.setAttribute('data-mode', pomodoroStarted ? pomodoroMode : 'focus');
+  if (pomodoroCaption) pomodoroCaption.textContent = pomodoroStarted && pomodoroMode === 'break' ? '休息中' : 'Timer';
+}
+
+// 告诉主进程是否在专注：专注期间 AI 完成提醒只计数，身体提醒延后。
+function reportFocusState() {
+  window.notchAPI?.setFocusState?.({
+    running: pomodoroRunning,
+    mode: pomodoroMode,
+    endsAt: pomodoroRunning ? Date.now() + pomodoroRemaining * 1000 : 0,
+  });
+}
+
+function stopPomodoroTimer() {
+  clearInterval(pomodoroTimer);
+  pomodoroTimer = null;
+}
+
+function finishPomodoroSession() {
+  const mode = pomodoroMode;
+  const seconds = pomodoroSessionSeconds;
+  const minutes = Math.max(1, Math.round(seconds / 60));
+  stopPomodoroTimer();
+  pomodoroRunning = false;
+  pomodoroStarted = false;
+  pomodoroMode = 'focus';
+  pomodoroSessionSeconds = pomodoroConfiguredSeconds;
+  pomodoroRemaining = pomodoroConfiguredSeconds;
+  if (mode === 'focus') {
+    showStatusToast(`${minutes} 分钟专注完成`);
+    recordFocusSession(seconds);
+  } else {
+    showStatusToast('休息结束');
+  }
+  window.notchAPI?.notifyPomodoro?.({ minutes, mode }).catch(() => {});
+  reportFocusState();
+}
+
+function runPomodoroTimer() {
+  stopPomodoroTimer();
+  pomodoroTimer = setInterval(() => {
+    pomodoroRemaining -= 1;
+    if (pomodoroRemaining <= 0) finishPomodoroSession();
+    renderPomodoro();
+  }, 1000);
+}
+
+// 从提醒浮窗开始一段专注或休息（例如「休息 5 分钟」「再专注 5 分钟」）。
+function startPomodoroSession(seconds, mode) {
+  const safeSeconds = Math.max(1, Math.round(Number(seconds) || 0));
+  pomodoroMode = mode === 'break' ? 'break' : 'focus';
+  pomodoroSessionSeconds = safeSeconds;
+  pomodoroRemaining = safeSeconds;
+  pomodoroStarted = true;
+  pomodoroRunning = true;
+  runPomodoroTimer();
+  renderPomodoro();
+  reportFocusState();
 }
 
 function commitPomodoroInputs() {
@@ -1538,6 +1600,8 @@ function commitPomodoroInputs() {
   savedPomodoroParts = pomodoroInputs.map((input) => Math.max(0, Math.min(60, Number.parseInt(input?.value || '0', 10) || 0)));
   pomodoroConfiguredSeconds = savedPomodoroParts[0] * 60 + savedPomodoroParts[1];
   pomodoroRemaining = pomodoroConfiguredSeconds;
+  pomodoroSessionSeconds = pomodoroConfiguredSeconds;
+  pomodoroMode = 'focus';
   pomodoroStarted = false;
   localStorage.setItem(POMODORO_DURATION_KEY, JSON.stringify(savedPomodoroParts));
   renderPomodoro();
@@ -1575,41 +1639,86 @@ pomodoroToggle?.addEventListener('click', () => {
       showStatusToast('请先设置倒计时时间');
       return;
     }
-    pomodoroStarted = true;
-    pomodoroRemaining = pomodoroConfiguredSeconds;
+    startPomodoroSession(pomodoroConfiguredSeconds, 'focus');
+    return;
   }
   pomodoroRunning = !pomodoroRunning;
-  clearInterval(pomodoroTimer);
-  pomodoroTimer = null;
-  if (pomodoroRunning) {
-    pomodoroTimer = setInterval(() => {
-      pomodoroRemaining -= 1;
-      if (pomodoroRemaining <= 0) {
-        const completedMinutes = Math.max(1, Math.round(pomodoroConfiguredSeconds / 60));
-        pomodoroRemaining = pomodoroConfiguredSeconds;
-        pomodoroRunning = false;
-        pomodoroStarted = false;
-        clearInterval(pomodoroTimer);
-        pomodoroTimer = null;
-        showStatusToast(`${completedMinutes} 分钟专注完成`);
-        window.notchAPI?.notifyPomodoro?.(completedMinutes).catch(() => {});
-        recordFocusSession(pomodoroConfiguredSeconds);
-      }
-      renderPomodoro();
-    }, 1000);
-  }
+  if (pomodoroRunning) runPomodoroTimer();
+  else stopPomodoroTimer();
   renderPomodoro();
+  reportFocusState();
 });
 
 pomodoroReset?.addEventListener('click', () => {
-  clearInterval(pomodoroTimer);
-  pomodoroTimer = null;
+  stopPomodoroTimer();
   pomodoroRunning = false;
   pomodoroStarted = false;
+  pomodoroMode = 'focus';
+  pomodoroSessionSeconds = pomodoroConfiguredSeconds;
   pomodoroRemaining = pomodoroConfiguredSeconds;
   renderPomodoro();
+  reportFocusState();
 });
 renderPomodoro();
+
+// ============ 提醒浮窗的按钮动作 ============
+function completeTodoById(id) {
+  const priority = PRIORITIES.find((key) => (data[key] || []).some((todo) => todo.id === id && !todo.done));
+  if (!priority) return false;
+  toggleTodo(priority, id);
+  return true;
+}
+
+// 「待办挪到明天」：今天到期和已经逾期、还没完成的待办，截止时间改到明天的同一钟点。
+function moveDueTodosToTomorrow(now = Date.now()) {
+  const today = new Date(now);
+  const endOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).getTime();
+  let moved = 0;
+  PRIORITIES.forEach((priority) => {
+    (data[priority] || []).forEach((todo) => {
+      const due = Date.parse(String(todo.deadline || ''));
+      if (todo.done || !Number.isFinite(due) || due >= endOfToday) return;
+      const clock = new Date(due);
+      todo.deadline = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, clock.getHours(), clock.getMinutes()).toISOString();
+      todo.remindedAt = 0;
+      moved += 1;
+    });
+  });
+  if (moved) {
+    saveData(data);
+    PRIORITIES.forEach((priority) => {
+      renderList(priority);
+      updateCount(priority);
+    });
+  }
+  return moved;
+}
+
+window.notchAPI?.onReminderAction?.((payload) => {
+  const action = payload?.action;
+  if (action === 'break-5') startPomodoroSession(5 * 60, 'break');
+  else if (action === 'focus-5') startPomodoroSession(5 * 60, 'focus');
+  else if (action === 'focus-again') startPomodoroSession(pomodoroConfiguredSeconds || 25 * 60, 'focus');
+  else if (action === 'todo-done') completeTodoById(String(payload.taskId || ''));
+  else if (action === 'move-tomorrow') {
+    const moved = moveDueTodosToTomorrow();
+    window.notchAPI?.notifyReminderInfo?.({
+      title: moved ? `已把 ${moved} 项待办挪到明天` : '今天没有要挪的待办',
+      detail: moved ? '截止时间保持原来的钟点，早点休息' : '',
+    }).catch(() => {});
+  }
+});
+
+window.notchAPI?.onOpenTodo?.(async () => {
+  if (!document.getElementById('app')?.classList.contains('expanded')) await setMode(true);
+  setActiveTab('todo');
+});
+
+window.NotchPomodoro = {
+  start: startPomodoroSession,
+  state: () => ({ running: pomodoroRunning, started: pomodoroStarted, mode: pomodoroMode, remaining: pomodoroRemaining, session: pomodoroSessionSeconds }),
+};
+window.NotchReminderActions = { completeTodoById, moveDueTodosToTomorrow };
 
 // ============ 首页 · Markdown 速记 ============
 // textarea 中的原始 Markdown 始终是唯一数据源；预览只用 DOM API + textContent 构建，

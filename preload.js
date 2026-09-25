@@ -52,7 +52,11 @@ contextBridge.exposeInMainWorld('notchAPI', {
   scheduleReminders: (items) => ipcRenderer.invoke('reminders:schedule', items),
   onReminderFired: (cb) => subscribe('reminder:fired', (event, payload) => cb(payload)),
   scheduleTodoReminders: (items) => ipcRenderer.invoke('todos:schedule-reminders', items),
-  notifyPomodoro: (minutes) => ipcRenderer.invoke('pomodoro:notify', minutes),
+  notifyPomodoro: (payload) => ipcRenderer.invoke('pomodoro:notify', payload),
+  setFocusState: (state) => ipcRenderer.send('focus:state', state),
+  notifyReminderInfo: (info) => ipcRenderer.invoke('reminder:info', info),
+  onReminderAction: (cb) => subscribe('reminder:action', (event, payload) => cb(payload)),
+  setBodySettings: (patch) => ipcRenderer.invoke('settings:set-body', patch),
   onTodoReminder: (cb) => subscribe('todo:reminded', (event, payload) => cb(payload)),
   onEscape: (cb) => subscribe('key:escape', () => cb()),
   onToggleShortcut: (cb) => subscribe('shortcut:toggle-panel', () => cb()),
@@ -82,6 +86,7 @@ contextBridge.exposeInMainWorld('notchAPI', {
   onNewClipEntry: (cb) => subscribe('clipboard:new-entry', (evt, entry) => cb(entry)),
   onOpenClip: (cb) => subscribe('app:open-clip', () => cb()),
   onOpenApiSettings: (cb) => subscribe('app:open-api-settings', () => cb()),
+  onOpenTodo: (cb) => subscribe('app:open-todo', () => cb()),
   listFramePhotos: () => ipcRenderer.invoke('frame:list'),
   readFramePhoto: (id, thumb) => ipcRenderer.invoke('frame:read', id, thumb === true),
   addFramePhotos: () => ipcRenderer.invoke('frame:add'),
@@ -97,6 +102,8 @@ contextBridge.exposeInMainWorld('notchAPI', {
     subscribe('task-completion:new', (event, notification) => cb(notification)),
   taskNotificationDismissed: (eventId) =>
     ipcRenderer.send('task-notification:dismissed', eventId),
+  taskNotificationAction: (eventId, actionId) =>
+    ipcRenderer.invoke('task-notification:action', { eventId, actionId }),
   activateTaskNotification: (eventId) =>
     ipcRenderer.invoke('task-notification:activate', eventId),
   taskNotificationHover: (paused) =>
