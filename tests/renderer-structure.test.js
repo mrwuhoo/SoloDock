@@ -90,7 +90,7 @@ test('hidden widgets stop background work and no WebGL effect remains', () => {
 
 test('the photo frame shows a chosen picture and never opens the camera', () => {
   const frame = html.match(/<section class="tile home-mirror"[\s\S]*?<\/section>/)?.[0] || '';
-  assert.match(frame, /class="mirror-photo"/);
+  assert.match(frame, /class="mirror-photo frame-layer/);
   assert.doesNotMatch(frame, /<video|mirror-water-canvas/);
   assert.doesNotMatch(appJs, /getUserMedia\(\s*\{\s*video/);
 });

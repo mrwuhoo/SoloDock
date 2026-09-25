@@ -57,6 +57,7 @@ const {
   createForegroundMediaPermissionCoordinator,
   normalizeClaudeRateLimits,
 } = require('./main-services');
+const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
 
 // Keep the glass edition isolated from the official app so both builds can be
 // evaluated side by side without sharing notes, recordings, or encrypted keys.
@@ -222,7 +223,9 @@ const CREDENTIALS_VAULT_FILE = 'credentials.vault.json';
 const APP_SETTINGS_FILE = 'app-settings.json';
 const WORKSPACE_SETTINGS_FILE = 'workspace-settings.json';
 const WORKSPACE_DATA_FILE = 'workspace.json';
+// v0.1 的单张相框封面；v0.2 起迁入 photo-frame/ 相册后保留原文件用于回退。
 const MIRROR_IMAGE_FILE = 'mirror-cover.jpg';
+const FRAME_DIR_NAME = 'photo-frame';
 const workspacePersistenceGate = createWorkspacePersistenceGate();
 const TRANSCRIPTION_MODEL = 'qwen3-asr-flash-realtime';
 const TRANSCRIPTION_SAMPLE_RATE = 16000;
@@ -1281,7 +1284,7 @@ function showOwnedOpenDialog(options) {
 
 function copyWorkspaceAssets(sourceRoot, targetRoot) {
   if (!sourceRoot || !targetRoot || path.resolve(sourceRoot) === path.resolve(targetRoot)) return;
-  for (const directory of [RECORDINGS_DIR_NAME, CLIP_IMAGES_DIR_NAME]) {
+  for (const directory of [RECORDINGS_DIR_NAME, CLIP_IMAGES_DIR_NAME, FRAME_DIR_NAME]) {
     const source = path.join(sourceRoot, directory);
     const target = path.join(targetRoot, directory);
     try {
@@ -1396,39 +1399,25 @@ function mirrorImagePath() {
   return workspacePath(MIRROR_IMAGE_FILE);
 }
 
-function mirrorImageDataUrl() {
-  try {
-    const image = nativeImage.createFromPath(mirrorImagePath());
-    if (image.isEmpty()) return null;
-    return image.toDataURL();
-  } catch (error) {
-    return null;
-  }
-}
+// ============ 相框相册 ============
+// 照片存进数据文件夹的 photo-frame/（见 frame-store.js）；说明文字、倒数日、顺序与切换方式
+// 保存在 LocalStorage（notch-frame-v1），随工作区同步。
+const frameStore = createFrameStore({
+  dir: () => workspacePath(FRAME_DIR_NAME),
+  legacyFile: () => mirrorImagePath(),
+  nativeImage,
+});
 
-async function chooseMirrorImage() {
+async function addFramePhotos() {
+  if (frameStore.isFull()) return { ok: false, error: 'limit', added: [], limit: FRAME_MAX_PHOTOS };
   const result = await showOwnedOpenDialog({
-    title: '替换镜子配图',
-    properties: ['openFile'],
+    title: '添加相框照片',
+    properties: ['openFile', 'multiSelections'],
     filters: [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'webp', 'heic'] }],
   });
-  const selected = !result.canceled && result.filePaths && result.filePaths[0];
-  if (!selected) return { ok: true, canceled: true };
-  try {
-    const image = nativeImage.createFromPath(selected);
-    if (image.isEmpty()) throw new Error('invalid_image');
-    const size = image.getSize();
-    if (!size.width || !size.height || size.width * size.height > 60_000_000) throw new Error('image_too_large');
-    fs.writeFileSync(mirrorImagePath(), image.toJPEG(92), { mode: 0o600 });
-    const dataUrl = mirrorImageDataUrl();
-    if (dataUrl && mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('mirror:image-changed', dataUrl);
-    }
-    return { ok: true, canceled: false, dataUrl };
-  } catch (error) {
-    await dialog.showMessageBox({ type: 'error', title: '无法替换配图', message: '请选择一张有效且尺寸适中的图片。' });
-    return { ok: false, error: 'invalid_image' };
-  }
+  const files = !result.canceled && Array.isArray(result.filePaths) ? result.filePaths : [];
+  if (!files.length) return { ok: true, canceled: true, added: [], limit: FRAME_MAX_PHOTOS };
+  return { ok: true, canceled: false, ...frameStore.importFiles(files), limit: FRAME_MAX_PHOTOS };
 }
 
 function refreshTrayMenu() {
@@ -1442,8 +1431,13 @@ function refreshTrayMenu() {
       click: () => openRendererPanel('app:open-api-settings'),
     },
     {
-      label: '替换镜子配图…',
-      click: chooseMirrorImage,
+      label: '添加相框照片…',
+      click: async () => {
+        const result = await addFramePhotos();
+        if (result.added && result.added.length && mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('frame:changed', { added: result.added });
+        }
+      },
     },
     {
       label: '显示功能',
@@ -2350,8 +2344,10 @@ async function rememberPasteTarget() {
   return previousPasteTarget;
 }
 
-ipcMain.handle('mirror:get-image', () => mirrorImageDataUrl());
-ipcMain.handle('mirror:choose-image', () => chooseMirrorImage());
+ipcMain.handle('frame:list', () => frameStore.list());
+ipcMain.handle('frame:read', (event, id, thumb) => frameStore.read(String(id || ''), thumb === true));
+ipcMain.handle('frame:add', () => addFramePhotos());
+ipcMain.handle('frame:delete', (event, id) => frameStore.remove(String(id || '')));
 
 function getCredentialsVaultPath() {
   return path.join(app.getPath('userData'), CREDENTIALS_VAULT_FILE);

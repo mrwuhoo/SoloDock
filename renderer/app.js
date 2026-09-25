@@ -3119,22 +3119,6 @@ function bindDockSurface(surface, selector, maxScale = 1.14) {
   });
 });
 
-// ============ 首页 · 人像镜面（局部水波折射） ============
-const mirrorPhotos = Array.from(document.querySelectorAll('.mirror-photo'));
-
-// 相框：只显示用户选择的照片，不再调用摄像头。
-function applyMirrorCover(dataUrl) {
-  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return;
-  mirrorPhotos.forEach((image) => { image.src = dataUrl; });
-}
-
-if (window.notchAPI && typeof window.notchAPI.getMirrorImage === 'function') {
-  window.notchAPI.getMirrorImage().then(applyMirrorCover).catch(() => {});
-}
-if (window.notchAPI && typeof window.notchAPI.onMirrorImageChanged === 'function') {
-  window.notchAPI.onMirrorImageChanged(applyMirrorCover);
-}
-
 const clipfavListEl = document.getElementById('clipfav-list');
 
 function renderClipFavs() {

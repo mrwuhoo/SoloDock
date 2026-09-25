@@ -74,9 +74,11 @@ contextBridge.exposeInMainWorld('notchAPI', {
   onNewClipEntry: (cb) => subscribe('clipboard:new-entry', (evt, entry) => cb(entry)),
   onOpenClip: (cb) => subscribe('app:open-clip', () => cb()),
   onOpenApiSettings: (cb) => subscribe('app:open-api-settings', () => cb()),
-  getMirrorImage: () => ipcRenderer.invoke('mirror:get-image'),
-  chooseMirrorImage: () => ipcRenderer.invoke('mirror:choose-image'),
-  onMirrorImageChanged: (cb) => subscribe('mirror:image-changed', (event, dataUrl) => cb(dataUrl)),
+  listFramePhotos: () => ipcRenderer.invoke('frame:list'),
+  readFramePhoto: (id, thumb) => ipcRenderer.invoke('frame:read', id, thumb === true),
+  addFramePhotos: () => ipcRenderer.invoke('frame:add'),
+  deleteFramePhoto: (id) => ipcRenderer.invoke('frame:delete', id),
+  onFramePhotosChanged: (cb) => subscribe('frame:changed', (event, payload) => cb(payload)),
   onTaskNotification: (cb) =>
     subscribe('task-notification:show', (event, notification) => cb(notification)),
   onTaskNotificationQueue: (cb) =>

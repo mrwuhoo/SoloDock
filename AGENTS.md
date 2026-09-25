@@ -50,7 +50,7 @@
 - 剪贴板：默认关闭（`DEFAULT_FEATURES.clip = false`），可在菜单栏「显示功能」中启用。历史记录由主进程轮询采集，不再占用任何全局快捷键（见 `clipboardServicePolicy`）
 - 链接：只允许公开 http/https；主进程抓取标题时必须阻止本机、内网与不安全重定向
 - 录制：音频写入 `userData/recordings/`，转写与元数据保存在 LocalStorage；可选百炼 Qwen3-ASR 实时转写，API Key 必须经 `safeStorage` 加密或环境变量读取
-- 相框（原镜子）：只显示用户自选的照片，不调用摄像头；v0.2 起摄像头与汽水音乐组件已移除
+- 相框（原镜子）：只显示用户自选的照片，不调用摄像头；v0.2 起摄像头与汽水音乐组件已移除。照片由 `frame-store.js` 存进数据文件夹 `photo-frame/`（`<id>.jpg` 长边 ≤ 1600 + `<id>.thumb.jpg` 320，最多 50 张，id 必须匹配 `photo-[a-z0-9-]`）；说明文字、倒数日、顺序、固定与切换方式在 LocalStorage `notch-frame-v1`。v0.1 的 `mirror-cover.jpg` 首次读取时迁入相册，原文件保留用于回退。移除照片要等撤销提示结束后才删文件。
 - 当前窗口：通过 macOS 辅助功能枚举和聚焦，使用系统应用图标；同应用多窗口编号；隐藏项保存在 LocalStorage；聚焦 IPC 只接受最近扫描缓存中的窗口 ID
 - 笔记：首页随笔记保存后进入独立笔记页，可搜索、重命名、编辑和删除
 - 动效：窗口边界变更不使用系统动画；视觉动效由渲染层完成，并支持 `prefers-reduced-motion`

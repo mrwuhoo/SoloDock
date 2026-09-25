@@ -548,7 +548,25 @@ function normalizeClaudeRateLimits(payload, now = Date.now()) {
   return { fiveHour, sevenDay, receivedAt: Number(now) };
 }
 
+// Photo frame: photos are stored as "<id>.jpg" (long edge ≤ 1600) plus "<id>.thumb.jpg".
+const FRAME_PHOTO_ID = /^photo-[a-z0-9-]{1,48}$/;
+
+function isFramePhotoId(value) {
+  return typeof value === 'string' && FRAME_PHOTO_ID.test(value);
+}
+
+// Scale so the long edge fits maxEdge; never upscale.
+function framePhotoSize(size, maxEdge) {
+  const width = Math.round(Number(size && size.width) || 0);
+  const height = Math.round(Number(size && size.height) || 0);
+  if (width <= 0 || height <= 0) return null;
+  const scale = Math.min(1, maxEdge / Math.max(width, height));
+  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+}
+
 module.exports = {
+  isFramePhotoId,
+  framePhotoSize,
   normalizeClaudeRateLimits,
   isPrivateAddress,
   decodeHtmlEntities,

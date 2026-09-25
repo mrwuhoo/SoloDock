@@ -201,9 +201,22 @@
               </section>
 
               <!-- 相框：用户自选的照片（原镜子封面，已移除摄像头） -->
-              <section class="tile home-mirror" data-home-module="mirror" data-widget-size="medium" aria-label="相框">
+              <!-- 相框：单张或相册；展开面板时按设置换一张，平时静止。两层图片用于 1.2 秒淡入。 -->
+              <section class="tile home-mirror" id="home-mirror" data-home-module="mirror" data-widget-size="medium" data-state="empty" aria-label="相框">
                 <div class="mirror-stage" id="mirror-stage">
-                  <img class="mirror-photo" src="assets/solodock-mirror.png" alt="" draggable="false" />
+                  <img class="mirror-photo frame-layer is-front" src="assets/solodock-mirror.png" alt="" draggable="false" />
+                  <img class="mirror-photo frame-layer" alt="" draggable="false" />
+                  <div class="frame-caption" id="frame-caption" hidden><b id="frame-caption-text"></b><span id="frame-countdown"></span></div>
+                  <div class="frame-dots" id="frame-dots" aria-hidden="true"></div>
+                  <div class="frame-empty" id="frame-empty"><b>放一张让你开心的照片</b><span>家人合照、想去的地方</span><button class="frame-empty-add" id="frame-empty-add" type="button">选择照片</button></div>
+                  <button class="frame-nav prev" id="frame-prev" type="button" aria-label="上一张照片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6" /></svg></button>
+                  <button class="frame-nav next" id="frame-next" type="button" aria-label="下一张照片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6" /></svg></button>
+                  <button class="frame-more" id="frame-more" type="button" aria-label="相框选项" aria-haspopup="menu" aria-expanded="false" aria-controls="frame-menu"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="18" cy="12" r="1.6" /></svg></button>
+                  <div class="frame-menu" id="frame-menu" role="menu" aria-label="相框选项" hidden>
+                    <button type="button" role="menuitem" data-frame-action="pin">固定这张</button>
+                    <button type="button" role="menuitem" data-frame-action="add">添加照片…</button>
+                    <button type="button" role="menuitem" data-frame-action="settings">相框设置</button>
+                  </div>
                 </div>
               </section>
 
@@ -538,13 +551,27 @@
                   <small class="usage-config-note">自动同步仅在首页组件可见或查看此配置时进行。公开发卡消息以 AIHOT 标注为准，个人余额以账号返回为准。</small>
                 </section>
 
-                <section class="tile settings-card settings-mirror-card">
-                  <img id="settings-mirror-preview" src="assets/solodock-mirror.png" alt="当前首页相框照片" draggable="false" />
-                  <div>
-                    <span class="tile-label">首页相框</span>
-                    <strong>照片</strong>
-                    <p>放一张让你开心的照片：家人合照、想去的地方。支持 PNG、JPG、WebP 与 HEIC。</p>
-                    <button class="workspace-button compact" id="settings-mirror-choose" type="button">选择图片…</button>
+                <section class="tile settings-card settings-frame-card" id="settings-frame-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">首页</span><strong>相框</strong></div>
+                    <small id="settings-frame-count">0 / 50</small>
+                  </div>
+                  <p class="settings-frame-hint">放几张让你开心的照片：家人合照、想去的地方。照片复制进数据文件夹，只保存在本机；支持 PNG、JPG、WebP 与 HEIC。</p>
+                  <div class="settings-frame-row">
+                    <label>切换方式<select id="settings-frame-rotate"><option value="open">每次展开面板换一张</option><option value="daily">每天换一张</option></select></label>
+                    <button class="workspace-button compact primary" id="settings-frame-add" type="button">添加照片…</button>
+                  </div>
+                  <div class="settings-frame-grid" id="settings-frame-grid" role="listbox" aria-label="相框照片"></div>
+                  <div class="settings-frame-editor" id="settings-frame-editor" hidden>
+                    <img id="settings-frame-editor-thumb" alt="" draggable="false" />
+                    <div class="settings-frame-fields">
+                      <label>说明文字<input id="settings-frame-caption" maxlength="24" placeholder="如：京都，明年春天" autocomplete="off" /></label>
+                      <label>倒数日（可选）<input id="settings-frame-countdown" type="date" /></label>
+                    </div>
+                    <div class="settings-frame-actions">
+                      <button class="workspace-button compact" id="settings-frame-pin" type="button">固定这张</button>
+                      <button class="workspace-button compact danger" id="settings-frame-remove" type="button">移除</button>
+                    </div>
                   </div>
                 </section>
 
@@ -677,6 +704,8 @@
     <script src="ai-usage.js"></script>
     <script src="timeline-domain.js"></script>
     <script src="today-strip.js"></script>
+    <script src="frame-domain.js"></script>
+    <script src="photo-frame.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

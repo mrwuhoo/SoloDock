@@ -218,7 +218,7 @@ async function main() {
             display: getComputedStyle(page).display,
             columns: getComputedStyle(page).gridTemplateColumns.split(' ').filter(Boolean).length,
             api: Boolean(document.getElementById('settings-api-configure')),
-            mirror: Boolean(document.getElementById('settings-mirror-choose')),
+            mirror: Boolean(document.getElementById('settings-frame-add')),
             features: document.querySelectorAll('[data-settings-feature]').length,
             homeModules: document.querySelectorAll('[data-settings-home-module]').length,
             shortcut: Boolean(document.getElementById('settings-shortcut-change')),
