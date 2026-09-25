@@ -520,39 +520,55 @@
                 <button class="usage-text-button vault-forgot" id="vault-forgot" type="button" hidden>忘记主密码？</button>
               </div>
             </div>
-            <div class="credentials-page">
-              <section class="tile credentials-form-card">
-                <div class="credentials-heading"><div><span class="tile-label">新增密钥</span><strong>仅保存在本机</strong></div><span class="secure-chip">安全存储</span></div>
-                <div class="credential-kind" role="radiogroup" aria-label="类型">
-                  <button type="button" role="radio" aria-checked="true" data-credential-kind="password">密码</button>
-                  <button type="button" role="radio" aria-checked="false" data-credential-kind="apikey">API Key</button>
-                </div>
-                <label><span>名称</span><input id="credential-service" maxlength="80" placeholder="例如 GitHub" autocomplete="off" /></label>
-                <label><span id="credential-account-label">账号</span><input id="credential-account" maxlength="320" placeholder="邮箱、用户名或手机号" autocomplete="off" /></label>
-                <label><span id="credential-password-label">密码</span><span class="credential-secret"><input id="credential-password" type="password" maxlength="4096" placeholder="保存后才会加密" autocomplete="new-password" spellcheck="false" /><button class="credential-generate" id="credential-generate" type="button" aria-label="生成一个强密码">生成</button><button class="credential-reveal" type="button" data-reveal-for="credential-password" aria-pressed="false" aria-label="显示密码 10 秒">显示</button></span></label>
-                <div class="credential-generator" id="credential-generator" hidden>
-                  <label>长度<select id="credential-generator-length" aria-label="密码长度"><option value="12">12</option><option value="16">16</option><option value="20" selected>20</option><option value="24">24</option><option value="32">32</option></select></label>
-                  <label><input id="credential-generator-symbols" type="checkbox" checked />含符号</label>
-                  <button id="credential-generator-again" type="button">换一个</button>
-                </div>
-                <details class="credential-more">
-                  <summary>网址与备注</summary>
-                  <label><span>网址</span><input id="credential-url" maxlength="400" placeholder="https://" autocomplete="off" spellcheck="false" /></label>
-                  <label><span>备注</span><input id="credential-note" maxlength="500" placeholder="可选" autocomplete="off" /></label>
-                </details>
-                <button class="workspace-button primary credential-save" id="credential-save" type="button">保存</button>
-                <p class="credentials-note" id="credentials-note">只保存在本机；复制的密码不进剪贴板历史，60 秒后自动清除。</p>
-              </section>
-              <section class="tile credentials-library">
-                <div class="vault-setup" id="vault-setup" hidden>
-                  <span class="vault-setup-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg></span>
-                  <p><b>给密钥加一把锁</b><span id="vault-setup-text">10 分钟未使用、锁屏或休眠后自动锁定，用 Touch ID 解锁。</span></p>
-                  <button class="workspace-button compact primary" id="vault-setup-enable" type="button">开启</button>
-                  <button class="workspace-button compact" id="vault-setup-later" type="button">以后再说</button>
-                </div>
-                <div class="credentials-library-head"><div><span class="tile-label">账号密码</span><strong id="credential-count">0 项</strong></div><div class="credentials-library-actions"><input id="credential-search" type="search" placeholder="搜索名称、账号或网址" aria-label="搜索密钥" autocomplete="off" /><button class="bulk-delete" id="credential-bulk-delete" type="button" hidden>删除</button><span class="vault-auto-lock" id="vault-auto-lock" hidden></span><button class="vault-lock-now" id="vault-lock-now" type="button" hidden title="立即锁定（⌘L）" aria-label="立即锁定"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg>锁定</button></div></div>
-                <div class="credential-list" id="credential-list"></div>
-              </section>
+            <!-- 密钥页：顶部搜索（打开即聚焦）+ 新增 + 自动锁定；左边列表，右边详情。新增与编辑在浮层里完成。 -->
+            <div class="credentials-page" id="credentials-page">
+              <div class="cred-toolbar">
+                <label class="cred-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" /><path d="m16 16 4 4" /></svg><input id="credential-search" type="search" placeholder="搜索名称、账号或网址" aria-label="搜索密钥" autocomplete="off" spellcheck="false" /><kbd>⏎ 复制密码</kbd></label>
+                <button class="cred-new" id="credential-new" type="button" title="新增（⌘N）"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13" /></svg>新增</button>
+                <span class="vault-auto-lock" id="vault-auto-lock" hidden></span>
+                <button class="vault-lock-now" id="vault-lock-now" type="button" hidden title="立即锁定（⌘L）" aria-label="立即锁定"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg>锁定<kbd>⌘L</kbd></button>
+              </div>
+              <div class="vault-setup" id="vault-setup" hidden>
+                <span class="vault-setup-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg></span>
+                <p><b>给密钥加一把锁</b><span id="vault-setup-text">10 分钟未使用、锁屏或休眠后自动锁定，用 Touch ID 解锁。</span></p>
+                <button class="workspace-button compact primary" id="vault-setup-enable" type="button">开启</button>
+                <button class="workspace-button compact" id="vault-setup-later" type="button">以后再说</button>
+              </div>
+              <div class="cred-body">
+                <nav class="tile cred-list" id="credential-list" aria-label="密钥列表"></nav>
+                <article class="tile cred-detail" id="credential-detail" aria-live="polite"></article>
+              </div>
+              <div class="cred-toast" id="credential-toast" role="status" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 5.5 6.5V12c0 4 2.8 6.8 6.5 8 3.7-1.2 6.5-4 6.5-8V6.5Z" /></svg>
+                <p><b data-toast-text>密码已复制</b><span>剪贴板历史不会记录</span></p>
+                <button type="button" id="credential-toast-clear">立即清除</button>
+                <i aria-hidden="true"></i>
+              </div>
+              <div class="cred-sheet" id="credential-sheet" hidden>
+                <form class="cred-sheet-card" id="credential-form" role="dialog" aria-modal="true" aria-labelledby="credential-form-title" autocomplete="off">
+                  <header>
+                    <div><h2 id="credential-form-title">新增密钥</h2><p>仅保存在本机</p></div>
+                    <div class="credential-kind" role="radiogroup" aria-label="类型">
+                      <button type="button" role="radio" aria-checked="true" data-credential-kind="password">密码</button>
+                      <button type="button" role="radio" aria-checked="false" data-credential-kind="apikey">API Key</button>
+                    </div>
+                    <button class="cred-icon" type="button" data-sheet-close aria-label="关闭"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17" /></svg></button>
+                  </header>
+                  <div class="cred-sheet-grid">
+                    <label class="cred-input"><span>名称</span><input id="credential-service" maxlength="80" placeholder="例如 GitHub" autocomplete="off" /></label>
+                    <label class="cred-input"><span id="credential-account-label">账号</span><input id="credential-account" maxlength="320" placeholder="邮箱、用户名或手机号" autocomplete="off" /></label>
+                    <label class="cred-input wide"><span id="credential-password-label">密码</span><span class="credential-secret"><input id="credential-password" type="password" maxlength="4096" placeholder="保存后才会加密" autocomplete="new-password" spellcheck="false" /><button class="credential-generate" id="credential-generate" type="button" aria-label="生成一个强密码">生成</button><button class="credential-reveal" type="button" data-reveal-for="credential-password" aria-pressed="false" aria-label="显示密码 10 秒">显示</button></span></label>
+                    <div class="credential-generator wide" id="credential-generator" hidden>
+                      <label>长度<select id="credential-generator-length" aria-label="密码长度"><option value="12">12</option><option value="16">16</option><option value="20" selected>20</option><option value="24">24</option><option value="32">32</option></select></label>
+                      <label><input id="credential-generator-symbols" type="checkbox" checked />含符号</label>
+                      <button id="credential-generator-again" type="button">换一个</button>
+                    </div>
+                    <label class="cred-input"><span>网址</span><input id="credential-url" maxlength="400" placeholder="https://（可选）" autocomplete="off" spellcheck="false" /></label>
+                    <label class="cred-input"><span>备注</span><input id="credential-note" maxlength="500" placeholder="可选" autocomplete="off" /></label>
+                  </div>
+                  <footer><p class="credentials-note" id="credentials-note">由系统钥匙串加密；复制的密码不进剪贴板历史，60 秒后自动清除。</p><button class="cred-secondary" type="button" data-sheet-close>取消</button><button class="cred-primary" id="credential-save" type="submit">保存<kbd>⌘↩</kbd></button></footer>
+                </form>
+              </div>
             </div>
           </section>
 
@@ -968,6 +984,7 @@
     <script src="frame-domain.js"></script>
     <script src="photo-frame.js"></script>
     <script src="vault.js"></script>
+    <script src="credentials-page.js"></script>
     <script src="body-settings.js"></script>
     <script src="notch-status-domain.js"></script>
     <script src="notch-status.js"></script>

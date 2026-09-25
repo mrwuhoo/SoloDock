@@ -34,6 +34,7 @@ contextBridge.exposeInMainWorld('notchAPI', {
   saveCredential: (payload) => ipcRenderer.invoke('credentials:save', payload),
   deleteCredentials: (ids) => ipcRenderer.invoke('credentials:delete-many', ids),
   copyCredential: (id, field) => ipcRenderer.invoke('credentials:copy', { id, field }),
+  clearSecretClipboard: () => ipcRenderer.invoke('credentials:clear-clipboard'),
   getVaultStatus: () => ipcRenderer.invoke('vault:status'),
   unlockVault: (method, password) => ipcRenderer.invoke('vault:unlock', { method, password }),
   lockVault: () => ipcRenderer.invoke('vault:lock'),

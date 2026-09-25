@@ -69,7 +69,7 @@ app.whenReady().then(async () => {
     const settle = (ms = 60) => new Promise((resolve) => setTimeout(resolve, ms));
     const $ = (id) => document.getElementById(id);
     const visible = (el) => Boolean(el) && !el.hidden && getComputedStyle(el).display !== 'none';
-    const names = () => [...document.querySelectorAll('#credential-list .credential-item strong')].map((node) => node.textContent);
+    const names = () => [...document.querySelectorAll('#credential-list .cred-row b')].map((node) => node.textContent);
     const out = {};
     out.initial = { setup: visible($('vault-setup')), lock: visible($('vault-lock')), names: names(), timer: visible($('vault-auto-lock')) };
 
@@ -169,6 +169,8 @@ app.whenReady().then(async () => {
     out.reset = { locked: $('vault-lock').hidden === false, toast: $('status-toast-message').textContent, hasPassword: window.NotchVault.status().hasPassword };
 
     // New-entry password is masked; 显示 reveals it until clicked again (or 10 seconds pass).
+    $('credential-new').click();
+    await settle();
     const input = $('credential-password');
     const reveal = document.querySelector('.credential-reveal[data-reveal-for="credential-password"]');
     out.maskedByDefault = input.type;
@@ -177,13 +179,16 @@ app.whenReady().then(async () => {
     reveal.click();
     out.remasked = input.type;
 
-    // The inline edit form masks the stored password too.
-    document.querySelector('#credential-list .credential-copy').click();
+    // The edit sheet masks the stored password too.
+    window.NotchCredentials.escape();
+    document.querySelector('#credential-list .cred-row').click();
+    document.querySelector('#credential-detail [data-action="edit"]').click();
     await settle(120);
-    const editInput = document.querySelector('.credential-item.editing input[name="password"]');
-    out.editType = editInput?.type;
-    document.querySelector('.credential-item.editing .credential-reveal').click();
-    out.editRevealed = editInput?.type;
+    const editInput = $('credential-password');
+    out.editType = editInput.value === 'hunter22' ? editInput.type : 'not loaded';
+    reveal.click();
+    out.editRevealed = editInput.type;
+    window.NotchCredentials.escape();
     return out;
   })()`);
   assert.deepEqual(resetAndReveal.reset, { locked: false, toast: '主密码已清除，密钥都还在；可以在设置里重新设置主密码', hasPassword: false });

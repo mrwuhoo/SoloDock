@@ -3222,6 +3222,9 @@ ipcMain.handle('credentials:copy', async (event, payload) => {
   return true;
 });
 
+// 复制提示里的「立即清除」：只在剪贴板仍是刚才那段机密时清除，返回是否清掉了。
+ipcMain.handle('credentials:clear-clipboard', () => clearSecretFromClipboard());
+
 // ============ 密码复制：机密标记 + 自动清除 ============
 // 复制的密码带上机密标记（剪贴板管理器、Windows 剪贴板历史与云同步、SoloDock 自己的历史都会跳过），
 // 60 秒后、锁屏或休眠时、退出前，若剪贴板仍是这段密码就清除；只记哈希，不保留明文。

@@ -436,6 +436,7 @@ if (window.notchAPI && typeof window.notchAPI.onEscape === 'function') {
     if (window.NotchPalette?.close?.()) return;
     if (window.NotchTodoPage?.escape?.()) return;
     if (window.NotchLinks?.escape?.()) return;
+    if (window.NotchCredentials?.escape?.()) return;
     const el = document.activeElement;
     if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA')) {
       el.blur();
