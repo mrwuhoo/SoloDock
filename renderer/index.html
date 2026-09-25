@@ -199,6 +199,11 @@
           </section>
         </div>
 
+        <!-- AI 用量详情：点首页「AI 用量」卡片，从卡片位置展开；只读，不替你做任何操作。 -->
+        <div class="usage-pop" id="usage-pop" hidden>
+          <section class="usage-pop-card" id="usage-pop-card" role="dialog" aria-label="AI 用量详情"></section>
+        </div>
+
         <!-- ⌘K 搜索：在记下的东西里一处搜索（待办、笔记、提示词、链接、剪贴板、密钥名称）。 -->
         <div class="palette" id="palette" hidden>
           <div class="palette-backdrop" data-palette-close></div>
@@ -363,7 +368,7 @@
                 <div class="usage-widget-heading"><h2>AI 用量</h2><span class="usage-meta" id="usage-meta"></span><button class="icon-button usage-configure" type="button" aria-label="AI 用量设置" title="AI 用量设置"></button></div>
                 <!-- 每个订阅一栏：Codex 这一栏的元素由 codex-usage.js 更新；Claude 与手动订阅由 ai-usage.js 渲染。 -->
                 <div class="usage-columns" id="usage-columns">
-                  <div class="usage-col usage-col-codex" data-provider="codex">
+                  <div class="usage-col usage-col-codex" data-provider="codex" data-subscription="codex">
                     <div class="usage-col-head"><span class="usage-mark" data-kind="codex">Cx</span><b>Codex</b><span class="usage-plan" data-plan-for="codex" hidden></span></div>
                     <div class="usage-widget-body">
                       <div class="usage-widget-value"><strong id="usage-remaining">—</strong><span id="usage-period">剩余额度</span></div>
@@ -1027,6 +1032,7 @@
     <script src="ai-usage-domain.js"></script>
     <script src="codex-usage.js"></script>
     <script src="ai-usage.js"></script>
+    <script src="usage-detail.js"></script>
     <script src="timeline-domain.js"></script>
     <script src="today-strip.js"></script>
     <script src="frame-domain.js"></script>

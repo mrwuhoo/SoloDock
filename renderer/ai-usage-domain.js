@@ -131,8 +131,72 @@
     return 'normal';
   }
 
+  function windowLabel(minutes) {
+    if (!Number.isFinite(minutes) || minutes <= 0) return '额度';
+    if (minutes >= 10080 - 60) return '本周';
+    if (minutes % 1440 === 0) return `${minutes / 1440} 天`;
+    return `${Math.round(minutes / 60)} 小时`;
+  }
+
+  // 按当前速度推算：窗口从 (重置时刻 − 时长) 开始，已用的百分比除以已过去的时间就是速度。
+  // 返回 none（数据不够）、enough（重置前用不完）或 runs-out + 预计用完的时刻。
+  function exhaustEstimate(window, now = Date.now()) {
+    const { remaining, resetsAt, durationMinutes } = window || {};
+    if (!Number.isFinite(remaining) || !resetsAt || !Number.isFinite(durationMinutes) || durationMinutes <= 0) return { state: 'none' };
+    const elapsed = now - (resetsAt - durationMinutes * 60000);
+    const used = 100 - remaining;
+    if (elapsed < 5 * 60000 || used <= 0) return { state: 'none' };
+    const at = now + remaining / (used / elapsed);
+    return at >= resetsAt ? { state: 'enough' } : { state: 'runs-out', at };
+  }
+
+  // 详情浮层里的额度窗口：按窗口时长排序（每周在前），已过重置时刻的不显示旧数字。
+  function detailWindows(provider, data, now = Date.now()) {
+    let list = [];
+    if (provider === 'claude' && data) {
+      list = [['sevenDay', 10080], ['fiveHour', 300]].map(([key, durationMinutes]) => {
+        const raw = data[key];
+        if (!raw || !Number.isFinite(raw.usedPercent)) return null;
+        return { key, label: windowLabel(durationMinutes), remaining: Math.max(0, Math.min(100, 100 - raw.usedPercent)), resetsAt: raw.resetsAt || null, durationMinutes };
+      }).filter(Boolean);
+    }
+    if (provider === 'codex' && data && Array.isArray(data.buckets)) {
+      list = data.buckets.flatMap((bucket) => (Array.isArray(bucket.windows) ? bucket.windows : []).map((item) => ({
+        key: `${bucket.id || 'codex'}:${item.key}`,
+        label: `${bucket.name && !/^codex$/i.test(bucket.name) ? `${bucket.name} · ` : ''}${windowLabel(item.durationMinutes)}`,
+        remaining: Number.isFinite(item.remainingPercent) ? Math.max(0, Math.min(100, item.remainingPercent)) : null,
+        resetsAt: item.resetsAt || null,
+        durationMinutes: item.durationMinutes || null,
+      })));
+    }
+    return list
+      .map((item) => {
+        const expired = Boolean(item.resetsAt && item.resetsAt <= now);
+        const remaining = expired ? null : item.remaining;
+        const shaped = { ...item, remaining, expired, level: level(remaining) };
+        return { ...shaped, estimate: shaped.level === 'low' || shaped.level === 'critical' ? exhaustEstimate(shaped, now) : { state: 'none' } };
+      })
+      .sort((left, right) => (right.durationMinutes || 0) - (left.durationMinutes || 0));
+  }
+
+  // 「今天 16:40」/「明天 09:00」/「周六 09:00」/「10月3日 09:00」
+  function momentLabel(time, now = Date.now()) {
+    const date = new Date(time);
+    const start = (value) => { const day = new Date(value); day.setHours(0, 0, 0, 0); return day.getTime(); };
+    const days = Math.round((start(time) - start(now)) / 86400000);
+    const hhmm = clock(time);
+    if (days === 0) return `今天 ${hhmm}`;
+    if (days === 1) return `明天 ${hhmm}`;
+    if (days > 1 && days < 7) return `周${'日一二三四五六'[date.getDay()]} ${hhmm}`;
+    return `${date.getMonth() + 1}月${date.getDate()}日 ${hhmm}`;
+  }
+
   return {
     MAX_ON_HOME,
+    detailWindows,
+    exhaustEstimate,
+    momentLabel,
+    windowLabel,
     MAX_MANUAL,
     normalizeSubscriptions,
     homeSubscriptions,

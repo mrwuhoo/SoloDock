@@ -172,6 +172,7 @@
       refresh.disabled = connect.disabled = false;
       refresh.textContent = hasConnected ? '刷新额度' : '连接并读取';
       connect.textContent = '重新连接';
+      document.dispatchEvent(new CustomEvent('notch:ai-usage-updated', { detail: { provider: 'codex' } }));
     }
   }
   function maybeRefresh() {
@@ -194,6 +195,9 @@
 
   // 刘海下沿用：最紧的那个 Codex 额度窗口剩余百分比；数据超过 6 小时视为过期，返回 null。
   window.NotchCodexUsage = {
+    // 用量详情浮层用：当前快照与连接状态（额度只在内存里）。
+    state: () => ({ snapshot, lastUpdated, hasConnected, busy, error: status.dataset.state === 'error' ? status.textContent : '' }),
+    sync: () => { if (firstConnection) { sync.value = '5'; firstConnection = false; savePreference(); } return read(); },
     remaining() {
       if (!snapshot || !Array.isArray(snapshot.buckets)) return null;
       if (lastUpdated && Date.now() - lastUpdated > 6 * 3600000) return null;

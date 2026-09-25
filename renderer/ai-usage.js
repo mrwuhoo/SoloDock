@@ -90,6 +90,7 @@
   function claudeColumn(subscription) {
     const column = node('div', 'usage-col usage-col-extra');
     column.dataset.provider = 'claude';
+    column.dataset.subscription = subscription.id;
     const body = node('div', 'usage-widget-body');
     const footer = node('div', 'usage-widget-footer');
     const summary = Ai.claudeSummary(claudeSnapshot);
@@ -124,6 +125,7 @@
   function manualColumn(subscription) {
     const column = node('div', 'usage-col usage-col-extra');
     column.dataset.provider = 'manual';
+    column.dataset.subscription = subscription.id;
     column.dataset.level = 'cycle';
     const body = node('div', 'usage-widget-body');
     const renewal = Ai.renewalInfo(subscription.renewalDay);
@@ -209,6 +211,7 @@
     claudeSnapshot = result && result.ok ? result : null;
     render();
     renderSettings();
+    document.dispatchEvent(new CustomEvent('notch:ai-usage-updated', { detail: { provider: 'claude' } }));
   }
 
   // ---------------- Settings ----------------
@@ -378,6 +381,8 @@
     isOnHome: (id) => onHome().some((item) => item.id === id),
     subscriptions: () => subscriptions.map((item) => ({ ...item })),
     refreshClaude: () => refreshClaude(true),
+    claude: () => claudeSnapshot,
+    openSettings,
     // 刘海下沿用：Claude 开着且数据不超过 6 小时时，返回最紧额度窗口的剩余百分比。
     claudeRemaining() {
       if (!subscriptions.some((item) => item.id === 'claude' && item.enabled)) return null;

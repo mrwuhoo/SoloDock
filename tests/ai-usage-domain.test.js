@@ -56,3 +56,29 @@ test('Claude summary uses the tightest live window and never shows expired quota
   assert.equal(ai.level(18), 'low');
   assert.equal(ai.level(4), 'critical');
 });
+
+test('usage detail windows: weekly first, stale numbers hidden, low windows get an estimate', () => {
+  const Ai = require('../renderer/ai-usage-domain');
+  const at = (text) => new Date(text).getTime();
+  const now = at('2026-09-24T14:00:00'); // Thursday
+  const codex = Ai.detailWindows('codex', { buckets: [{ id: 'codex', name: 'codex', windows: [
+    { key: 'primary', remainingPercent: 70, durationMinutes: 300, resetsAt: at('2026-09-24T16:00:00') },
+    { key: 'secondary', remainingPercent: 18, durationMinutes: 10080, resetsAt: at('2026-09-26T14:00:00') },
+  ] }, { id: 'other', name: 'GPT-5 Pro', windows: [{ key: 'primary', remainingPercent: 50, durationMinutes: 1440, resetsAt: at('2026-09-23T10:00:00') }] }] }, now);
+  assert.deepEqual(codex.map((item) => [item.label, item.remaining, item.level]), [['本周', 18, 'low'], ['GPT-5 Pro · 1 天', null, 'unknown'], ['5 小时', 70, 'normal']]);
+  assert.equal(codex[1].expired, true, 'past the reset time: the old number is not shown');
+  // Weekly window started Sep 19 14:00; 82% used in 5 days → 16.4%/day → 18% lasts ~1.1 days, before Saturday's reset.
+  assert.equal(codex[0].estimate.state, 'runs-out');
+  assert.ok(Math.abs(codex[0].estimate.at - (now + 18 / 16.4 * 86400000)) < 60000);
+  assert.deepEqual(codex[2].estimate, { state: 'none' }, 'only low windows get an estimate');
+  // Plenty of time left at a slow pace: enough until the reset.
+  assert.deepEqual(Ai.exhaustEstimate({ remaining: 15, resetsAt: now + 3600000, durationMinutes: 10080 }, now), { state: 'enough' });
+  assert.deepEqual(Ai.exhaustEstimate({ remaining: 15, resetsAt: null, durationMinutes: 300 }, now), { state: 'none' });
+  const claude = Ai.detailWindows('claude', { fiveHour: { usedPercent: 96, resetsAt: at('2026-09-24T15:00:00') }, sevenDay: { usedPercent: 30, resetsAt: at('2026-09-28T09:00:00') } }, now);
+  assert.deepEqual(claude.map((item) => [item.label, item.remaining, item.level]), [['本周', 70, 'normal'], ['5 小时', 4, 'critical']]);
+  assert.equal(Ai.momentLabel(at('2026-09-24T16:40:00'), now), '今天 16:40');
+  assert.equal(Ai.momentLabel(at('2026-09-25T09:00:00'), now), '明天 09:00');
+  assert.equal(Ai.momentLabel(at('2026-09-26T09:00:00'), now), '周六 09:00');
+  assert.equal(Ai.momentLabel(at('2026-10-03T09:00:00'), now), '10月3日 09:00');
+  assert.deepEqual(Ai.detailWindows('claude', null, now), []);
+});
