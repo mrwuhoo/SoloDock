@@ -1331,6 +1331,34 @@ ipcMain.handle('claude:statusline-setup', () => {
   };
 });
 
+// 首次引导第 3 步：看 Claude Code / Codex 是否装在这台电脑上、是否已登记 SoloDock 的提醒脚本。
+// 只在主进程里读它们自己的配置文件做判断，内容不传给页面，也不替用户改写；接入设置由用户自己粘贴。
+function aiIntegrationStatus() {
+  const home = app.getPath('home');
+  const read = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch (error) { return ''; } };
+  const claudeDir = path.join(home, '.claude');
+  const codexDir = process.env.CODEX_HOME || path.join(home, '.codex');
+  return {
+    claude: { installed: fs.existsSync(claudeDir), connected: read(path.join(claudeDir, 'settings.json')).includes('claude-notify.js') },
+    codex: { installed: fs.existsSync(codexDir), connected: read(path.join(codexDir, 'config.toml')).includes('codex-notify.js') },
+  };
+}
+
+ipcMain.handle('ai:integration-status', () => aiIntegrationStatus());
+// 和状态栏设置一样，用 SoloDock 自带的运行时执行脚本，电脑上没装 Node.js 也能用。
+ipcMain.handle('ai:integration-setup', (event, tool) => {
+  if (tool === 'claude') {
+    const command = `ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(__dirname, 'scripts', 'claude-notify.js')}"`;
+    const hook = [{ hooks: [{ type: 'command', command }] }];
+    return { ok: true, file: '~/.claude/settings.json', snippet: `"hooks": ${JSON.stringify({ Stop: hook, Notification: hook }, null, 2)}` };
+  }
+  if (tool === 'codex') {
+    const script = path.join(__dirname, 'scripts', 'codex-notify.js');
+    return { ok: true, file: '~/.codex/config.toml', snippet: `notify = ${JSON.stringify(['/usr/bin/env', 'ELECTRON_RUN_AS_NODE=1', process.execPath, script])}` };
+  }
+  return { ok: false, error: 'invalid' };
+});
+
 function startTaskNotificationServer() {
   if (notificationServer) return;
   const server = http.createServer((request, response) => {
@@ -1656,6 +1684,7 @@ function readAppSettings() {
     captureShortcut: normalizeCaptureShortcut(stored.captureShortcut),
     defaultTab: normalizeDefaultTabPreference(stored.defaultTab, features),
     remindersPausedUntil: Number(stored.remindersPausedUntil) > 0 ? Number(stored.remindersPausedUntil) : 0,
+    onboardingPending: stored.onboardingPending === true,
   };
 }
 
@@ -4113,6 +4142,21 @@ ipcMain.handle('clipboard:paste', async (event, entry) => {
   return { ok: true, pasted };
 });
 
+// 首次引导只给新装用户：启动时（窗口建好之前）数据文件夹里既没有设置、也没有工作区和页面存储，
+// 才记下「待引导」；看完或跳过后清掉。升级上来的用户不会被打扰，可以在「设置 → 关于」里重看。
+function markOnboardingIfFreshInstall() {
+  const userData = app.getPath('userData');
+  const fresh = ![APP_SETTINGS_FILE, WORKSPACE_DATA_FILE, 'Local Storage'].some((name) => fs.existsSync(path.join(userData, name)))
+    && !fs.existsSync(workspacePath(WORKSPACE_DATA_FILE));
+  if (fresh) saveAppSettings({ ...readAppSettings(), onboardingPending: true });
+}
+
+ipcMain.handle('onboarding:done', () => {
+  const current = readAppSettings();
+  if (current.onboardingPending) saveAppSettings({ ...current, onboardingPending: false });
+  return { ok: true };
+});
+
 function ensureFirstRunAutoLaunch() {
   // 首次运行时默认开启开机自启；之后尊重用户在托盘菜单的选择。
   // 只对打包后的应用：源码运行与测试每次用新的数据文件夹，不能把开发用的 Electron 加进登录项。
@@ -4155,6 +4199,7 @@ app.whenReady().then(() => {
     app.dock.hide();
   }
 
+  markOnboardingIfFreshInstall();
   ensureFirstRunAutoLaunch();
   createWindow();
   createTray();

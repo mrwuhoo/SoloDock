@@ -165,6 +165,40 @@
           <button id="shortcut-recorder-cancel" type="button">取消</button>
         </div>
 
+        <!-- 首次引导：新装后第一次展开面板时出现一次（怎么唤出 · 常用功能 · 接入 AI）；「设置 → 关于」里可以重看。 -->
+        <div class="onboard" id="onboard" hidden>
+          <div class="onboard-backdrop"></div>
+          <section class="onboard-card" role="dialog" aria-modal="true" aria-labelledby="onboard-title-1">
+            <div class="onboard-progress" aria-hidden="true"><i></i><i></i><i></i></div>
+            <div class="onboard-step" data-step="1">
+              <h2 id="onboard-title-1">它在你工作旁边，不挡你的路</h2>
+              <p>SoloDock 平时收在刘海里。需要时看一眼、记一下，然后回去继续工作。</p>
+              <div class="onboard-keys">
+                <div><b id="onboard-summon-key">悬停刘海 + 空格</b><span id="onboard-summon-text">鼠标移到刘海处按空格，或直接点一下刘海；移开就收起。</span></div>
+                <div><b id="onboard-capture-key">⌥⇧N 随手记</b><span id="onboard-capture-text">在任何应用里记一条：带时间的变成待办，网址变成链接。</span></div>
+              </div>
+            </div>
+            <div class="onboard-step" data-step="2" hidden>
+              <h2 id="onboard-title-2">你最常用哪些？</h2>
+              <p>选中的会出现在页签里，随时可以在「设置 → 功能」里调整。</p>
+              <div class="onboard-picks" id="onboard-picks" role="group" aria-label="常用功能"></div>
+              <p class="onboard-note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 5.5 6.5V12c0 4 2.8 6.8 6.5 8 3.7-1.2 6.5-4 6.5-8V6.5Z" /></svg><span>剪贴板历史会在本机记录你复制的内容，默认关闭；选中后才开启，密码类内容始终不记录。</span></p>
+            </div>
+            <div class="onboard-step" data-step="3" hidden>
+              <h2 id="onboard-title-3">接入你的 AI 助手（可跳过）</h2>
+              <p>任务完成或需要你确认时，SoloDock 从刘海提醒你，点一下就能跳回对应终端。</p>
+              <div class="onboard-ai" id="onboard-ai"></div>
+              <p class="onboard-note" id="onboard-ai-note"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 5.5 6.5V12c0 4 2.8 6.8 6.5 8 3.7-1.2 6.5-4 6.5-8V6.5Z" /></svg><span>SoloDock 不会改你的配置文件：复制接入设置后自己粘贴，重启对应工具即可。</span></p>
+            </div>
+            <footer>
+              <button class="onboard-ghost" type="button" data-onboard="skip">跳过</button>
+              <span></span>
+              <button class="onboard-secondary" type="button" data-onboard="prev">上一步</button>
+              <button class="onboard-primary" type="button" data-onboard="next">下一步</button>
+            </footer>
+          </section>
+        </div>
+
         <!-- ⌘K 搜索：在记下的东西里一处搜索（待办、笔记、提示词、链接、剪贴板、密钥名称）。 -->
         <div class="palette" id="palette" hidden>
           <div class="palette-backdrop" data-palette-close></div>
@@ -898,6 +932,7 @@
                   <div class="settings-about-links">
                     <button class="workspace-button compact" type="button" data-settings-link="https://github.com/mrwuhoo/SoloDock">项目主页</button>
                     <button class="workspace-button compact" type="button" data-settings-link="https://github.com/mrwuhoo/SoloDock/issues">反馈问题</button>
+                    <button class="workspace-button compact" type="button" id="settings-onboarding">重看首次引导</button>
                   </div>
                   <p class="settings-card-note">基于 xiaopu-ai/TO-DO-Panel 开发 · MIT License</p>
                 </section>
@@ -975,6 +1010,7 @@
     <script src="life-domain.js"></script>
     <script src="capture-domain.js"></script>
     <script src="todo-domain.js"></script>
+    <script src="onboarding.js"></script>
     <script src="app.js"></script>
     <script src="todo-page.js"></script>
     <script src="notes-domain.js"></script>

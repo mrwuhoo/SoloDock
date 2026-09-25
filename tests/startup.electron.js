@@ -210,6 +210,10 @@ app.on('web-contents-created', (_event, contents) => {
       assert.equal(summaryTitle, '暂停期间有 1 条提醒');
       assert.equal(await noticeCount(), beforeNotices + 1, 'the summary is not another notice');
       assert.equal((await contents.executeJavaScript('window.notchAPI.getAppSettings()')).remindersPausedUntil, 0);
+
+      // This profile already has a workspace, so it is not treated as a fresh install: no onboarding.
+      assert.equal((await contents.executeJavaScript('window.notchAPI.getAppSettings()')).onboardingPending, false);
+      assert.deepEqual(await contents.executeJavaScript('window.notchAPI.finishOnboarding()'), { ok: true });
       assert.deepEqual(errors, []);
       console.log('Production workspace recovery checks passed');
       app.quit();

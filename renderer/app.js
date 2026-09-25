@@ -433,6 +433,7 @@ panel.addEventListener('click', (e) => {
 if (window.notchAPI && typeof window.notchAPI.onEscape === 'function') {
   window.notchAPI.onEscape(() => {
     // 浮层（⌘K 搜索等）先关自己，不收起面板。
+    if (window.NotchOnboarding?.escape?.()) return;
     if (window.NotchPalette?.close?.()) return;
     if (window.NotchTodoPage?.escape?.()) return;
     if (window.NotchLinks?.escape?.()) return;
