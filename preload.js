@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld('notchAPI', {
   onOpenApiSettings: (cb) => subscribe('app:open-api-settings', () => cb()),
   onOpenTodo: (cb) => subscribe('app:open-todo', () => cb()),
   // 随手记：面板接收要存的一条；随手记窗口提交、取消、调整高度。
+  exportNote: (note) => ipcRenderer.invoke('notes:export', note),
   onCaptureAdd: (cb) => subscribe('capture:add', (event, entry) => cb(entry)),
   setCaptureShortcut: (accelerator) => ipcRenderer.invoke('settings:set-capture-shortcut', accelerator),
   submitCapture: (entry) => ipcRenderer.invoke('capture:submit', entry),

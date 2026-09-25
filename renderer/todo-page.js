@@ -1010,7 +1010,7 @@
 
   // 点到浮层外面就收起（捕获阶段：面板会阻止冒泡）。
   document.addEventListener('pointerdown', (event) => {
-    const target = event.target;
+    const target = event.target instanceof Element ? event.target : document.body;
     if (!els.picker.hidden && !els.picker.contains(target) && !target.closest('[data-action="add-date"], [data-action="date"]')) closePicker();
     if (!els.menu.hidden && !els.menu.contains(target) && !target.closest('[data-action="menu"]')) els.menu.hidden = true;
     if (!els.manager.hidden && !els.manager.contains(target) && !target.closest('#task-manage')) closeManager();

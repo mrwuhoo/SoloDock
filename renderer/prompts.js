@@ -51,6 +51,8 @@
   let selectedId = '';
   let activeGroup = '';
   let saveTimer = null;
+  // 正在改正文的那条；其余显示成预览（变量画成主色浅底标签），点「编辑」或正文进入编辑。
+  let editingId = '';
 
   function persist() {
     writeJson(PROMPTS_KEY, prompts);
@@ -213,6 +215,15 @@
     star.setAttribute('aria-label', prompt.starred ? '取消精选' : '设为精选');
     star.title = prompt.starred ? '取消精选' : '设为精选';
     star.textContent = prompt.starred ? '★' : '☆';
+    const editing = editingId === prompt.id || !String(prompt.text || '').trim();
+    const edit = document.createElement('button');
+    edit.type = 'button';
+    edit.className = 'prompt-edit-toggle';
+    edit.dataset.action = 'edit-toggle';
+    edit.setAttribute('aria-pressed', String(editing));
+    edit.innerHTML = editing
+      ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 12.5 3.6 3.6 7.4-8"/></svg><span>完成</span>'
+      : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19h3.8L19.2 8.6a2.1 2.1 0 0 0-3-3L5.8 16v3Z"/></svg><span>编辑</span>';
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.className = 'notes-delete';
@@ -220,15 +231,34 @@
     remove.setAttribute('aria-label', '删除提示词');
     remove.title = '删除提示词';
     remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h10l1-12"/></svg>';
-    actions.append(star, remove);
+    actions.append(edit, star, remove);
     header.append(heading, actions);
 
-    const editor = document.createElement('textarea');
-    editor.className = 'notes-editor prompt-editor';
-    editor.value = prompt.text;
-    editor.placeholder = '写下提示词。用 {称呼}、{项目} 这样的变量，复制前在下方填写。';
-    editor.spellcheck = false;
-    editor.setAttribute('aria-label', `编辑提示词：${prompt.title}`);
+    let editor;
+    if (editing) {
+      editor = document.createElement('textarea');
+      editor.className = 'notes-editor prompt-editor';
+      editor.value = prompt.text;
+      editor.placeholder = '写下提示词。用 {称呼}、{项目} 这样的变量，复制前在下方填写。';
+      editor.spellcheck = false;
+      editor.setAttribute('aria-label', `编辑提示词：${prompt.title}`);
+    } else {
+      editor = document.createElement('div');
+      editor.className = 'prompt-body';
+      editor.dataset.action = 'edit-body';
+      editor.title = '点一下编辑';
+      String(prompt.text).split(/(\{[^{}\n]{1,20}\})/).forEach((part) => {
+        const variable = /^\{([^{}\n]{1,20})\}$/.exec(part);
+        if (!variable) {
+          editor.append(document.createTextNode(part));
+          return;
+        }
+        const chip = document.createElement('span');
+        chip.className = `prompt-chip${Prompts.BUILTIN_VARIABLES.includes(variable[1]) ? ' builtin' : ''}`;
+        chip.textContent = part;
+        editor.append(chip);
+      });
+    }
 
     const vars = document.createElement('div');
     vars.className = 'prompt-vars';
@@ -298,6 +328,7 @@
   function createPrompt() {
     const now = Date.now();
     const prompt = { id: uid(), title: '新提示词', text: '', group: activeGroup && activeGroup !== '★' ? activeGroup : '', createdAt: now, updatedAt: now };
+    editingId = prompt.id;
     prompts = Prompts.normalizePrompts([prompt, ...prompts]);
     persist();
     if (searchEl) searchEl.value = '';
@@ -340,7 +371,7 @@
     });
     if (searchEl) {
       searchEl.value = '';
-      searchEl.placeholder = library === 'prompts' ? '搜索提示词' : '搜索笔记';
+      searchEl.placeholder = '搜索标题和正文';
       // Let the notes library re-render with the cleared query as well.
       searchEl.dispatchEvent(new Event('input', { bubbles: true }));
     }
@@ -365,6 +396,7 @@
     const row = event.target.closest('[data-prompt-id]');
     if (!row) return;
     selectedId = row.dataset.promptId;
+    editingId = '';
     renderList();
   });
   detailEl?.addEventListener('input', (event) => {
@@ -397,6 +429,23 @@
     const action = event.target.closest('[data-action]')?.dataset.action;
     const prompt = selected();
     if (!action || !prompt) return;
+    if (action === 'edit-toggle' || action === 'edit-body') {
+      const editor = detailEl.querySelector('.prompt-editor');
+      if (editor) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+        editingId = '';
+        updatePrompt(prompt.id, { text: editor.value }, { refreshDetail: true });
+        if (!editor.value.trim()) editingId = prompt.id;
+      } else {
+        editingId = prompt.id;
+        renderDetail();
+        const next = detailEl.querySelector('.prompt-editor');
+        next?.focus({ preventScroll: true });
+        next?.setSelectionRange(next.value.length, next.value.length);
+      }
+      return;
+    }
     if (action === 'star') updatePrompt(prompt.id, { starred: !prompt.starred }, { refreshDetail: true });
     if (action === 'delete') deletePrompt();
     if (action === 'copy-filled') copyPrompt(true);

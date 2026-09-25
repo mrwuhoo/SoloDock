@@ -1638,6 +1638,32 @@ async function withSystemInteraction(task) {
   }
 }
 
+// 笔记导出成 .md：由用户在系统存储面板里选位置，只写这一个文件。
+ipcMain.handle('notes:export', async (event, note) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false };
+  const title = String(note?.title || '').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || '笔记';
+  const content = String(note?.content || '').slice(0, 2_000_000);
+  const owner = mainWindow;
+  updateTransientSystemInteraction(1);
+  let result;
+  try {
+    result = await dialog.showSaveDialog(owner, {
+      title: '导出笔记',
+      defaultPath: path.join(app.getPath('documents'), `${title}.md`),
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    });
+  } finally {
+    updateTransientSystemInteraction(-1);
+  }
+  if (result.canceled || !result.filePath) return { ok: false, canceled: true };
+  try {
+    await fs.promises.writeFile(result.filePath, content, 'utf8');
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: 'write_failed' };
+  }
+});
+
 function showOwnedOpenDialog(options) {
   const owner = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
   if (owner) {

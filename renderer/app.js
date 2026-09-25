@@ -613,7 +613,7 @@ async function setActiveTab(name) {
     const _tabNameForDeferred = name; // 闭包捕获当前目标 Tab
     const runHeavyLoads = () => {
       if (_tabNameForDeferred === 'clip') renderClipList();
-      if (_tabNameForDeferred === 'notes') renderNotesLibrary();
+      if (_tabNameForDeferred === 'notes') window.NotchNotes?.refresh?.();
     };
     if (_justExpanded) {
       // 双帧后再延迟重活，让岛体形变先完成，避免抢首帧 CPU/GPU。
@@ -1048,16 +1048,9 @@ window.NotchReminderActions = { completeTodoById, moveDueTodosToTomorrow };
 // textarea 中的原始 Markdown 始终是唯一数据源；预览只用 DOM API + textContent 构建，
 // 不执行用户输入的 HTML，也不自动加载远程图片。
 const NOTE_KEY = 'notch-home-note';
-const NOTE_ARCHIVE_KEY = 'notch-note-archive-v1';
-const NOTE_ACTIVE_ARCHIVE_KEY = 'notch-note-active-archive-v1';
-const CAPTURE_NOTE_KEY = 'notch-capture-note-v1';
 const noteInput = document.getElementById('home-note');
 const notePreview = document.getElementById('home-note-preview');
 const noteSaveButton = document.getElementById('note-save-btn');
-const notesList = document.getElementById('notes-list');
-const notesSearch = document.getElementById('notes-search');
-const notesDetail = document.getElementById('notes-detail');
-const notesCount = document.getElementById('notes-count');
 const noteFormatActions = document.getElementById('note-format-actions');
 const noteModeButtons = Array.from(document.querySelectorAll('[data-note-mode]'));
 const noteEditButton = document.getElementById('note-edit-btn');
@@ -1257,6 +1250,7 @@ function buildMarkdownPreview(source) {
         const done = match[1].toLowerCase() === 'x';
         const item = document.createElement('li');
         item.className = 'note-task-item' + (done ? ' done' : '');
+        item.dataset.line = String(index);
         item.setAttribute('role', 'checkbox');
         item.setAttribute('aria-checked', String(done));
         const box = document.createElement('span');
@@ -1619,10 +1613,11 @@ if (noteInput) {
     } catch (e) {
       // ignore quota errors
     }
+    // 首页随笔同步成笔记库里当天的「M月D日 随笔」。
+    window.NotchNotes?.syncHomeNote?.(noteInput.value);
   };
 
   noteInput.addEventListener('input', () => {
-    if (!noteInput.value.trim()) localStorage.removeItem(NOTE_ACTIVE_ARCHIVE_KEY);
     renderNotePreview();
     clearTimeout(noteTimer);
     noteTimer = setTimeout(saveNote, 300);
@@ -1651,250 +1646,17 @@ if (noteInput) {
   noteInput.hidden = false;
 }
 
-function loadNoteArchive() {
-  try {
-    const parsed = JSON.parse(localStorage.getItem(NOTE_ARCHIVE_KEY) || '[]');
-    return window.NotchDomain.normalizeNoteArchive(parsed);
-  } catch (error) {
-    return [];
-  }
-}
+// 笔记库（分组、预览 / 编辑、导出、今日随笔）在 notes-page.js（window.NotchNotes）。
 
-let selectedNoteId = '';
-
-function noteArchiveTitle(note) {
-  return String(note && note.title || '').trim() || '未命名笔记';
-}
-
-function noteArchiveExcerpt(note) {
-  const lines = String(note && note.content || '').split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-  return lines.join(' ').replace(/[#*_~`>\[\]]/g, '').slice(0, 86);
-}
-
-function noteArchiveTime(timestamp) {
-  return new Intl.DateTimeFormat('zh-CN', {
-    year: 'numeric',
-    month: 'numeric',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(timestamp));
-}
-
-function renderNotesDetail(notes = loadNoteArchive()) {
-  if (!notesDetail) return;
-  notesDetail.replaceChildren();
-  const note = notes.find((item) => item.id === selectedNoteId);
-  if (!note) {
-    const empty = document.createElement('div');
-    empty.className = 'notes-detail-empty';
-    const hasArchive = loadNoteArchive().length > 0;
-    empty.innerHTML = hasArchive
-      ? '<span class="notes-empty-mark" aria-hidden="true">⌕</span><strong>没有匹配的笔记</strong><p>试试搜索其他关键词。</p>'
-      : '<span class="notes-empty-mark" aria-hidden="true">✎</span><strong>还没有保存的笔记</strong><p>在首页的「随笔记」中写下内容，点击保存后会出现在这里。</p>';
-    notesDetail.append(empty);
-    return;
-  }
-
-  const header = document.createElement('header');
-  header.className = 'notes-detail-head';
-  const heading = document.createElement('div');
-  const title = document.createElement('input');
-  title.type = 'text';
-  title.className = 'notes-detail-title';
-  title.dataset.noteId = note.id;
-  title.value = String(note.title || '');
-  title.placeholder = '未命名笔记';
-  title.maxLength = 80;
-  title.autocomplete = 'off';
-  title.spellcheck = false;
-  title.setAttribute('aria-label', '笔记标题，可直接修改');
-  const time = document.createElement('time');
-  time.className = 'notes-detail-time';
-  time.textContent = `更新于 ${noteArchiveTime(note.updatedAt)}`;
-  heading.append(title, time);
-  const actions = document.createElement('div');
-  actions.className = 'notes-detail-actions';
-  const remove = document.createElement('button');
-  remove.type = 'button';
-  remove.className = 'notes-delete';
-  remove.dataset.action = 'delete-note';
-  remove.setAttribute('aria-label', '删除笔记');
-  remove.title = '删除笔记';
-  remove.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h10l1-12"/></svg>';
-  actions.append(remove);
-  header.append(heading, actions);
-
-  const editor = document.createElement('textarea');
-  editor.id = 'notes-editor';
-  editor.className = 'notes-editor';
-  editor.dataset.noteId = note.id;
-  editor.value = note.content;
-  editor.placeholder = '直接输入笔记内容…';
-  editor.setAttribute('aria-label', `编辑笔记：${noteArchiveTitle(note)}`);
-  editor.spellcheck = false;
-  notesDetail.append(header, editor);
-  requestNoteTitle(note);
-}
-
-let notesSaveTimer = null;
-let pendingNotesEditor = null;
-const noteTitleAttempts = new Set();
-
-async function requestNoteTitle(note) {
-  if (
-    !note
-    || note.title
-    || note.titleSource === 'user'
-    || !String(note.content || '').trim()
-    || noteTitleAttempts.has(note.id)
-    || !window.notchAPI?.organizeMaterial
-  ) return;
-  noteTitleAttempts.add(note.id);
-  const expectedContent = note.content;
-  const result = await window.notchAPI.organizeMaterial({ kind: 'note', text: expectedContent }).catch(() => null);
-  if (!result?.ok || !result.title) {
-    noteTitleAttempts.delete(note.id);
-    return;
-  }
-  const next = window.NotchDomain.applyGeneratedNoteTitle(
-    loadNoteArchive(),
-    note.id,
-    result.title,
-    expectedContent
-  );
-  const updated = next.find((item) => item.id === note.id);
-  if (!updated?.title || updated.titleSource !== 'model') {
-    noteTitleAttempts.delete(note.id);
-    return;
-  }
-  localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next.slice(0, 200)));
-  renderNotesLibrary();
-}
-
-function updateSavedNotePresentation(note) {
-  if (!note) return;
-  const title = noteArchiveTitle(note);
-  const detailTitle = notesDetail?.querySelector('.notes-detail-title');
-  const detailTime = notesDetail?.querySelector('.notes-detail-time');
-  if (detailTitle && document.activeElement !== detailTitle) detailTitle.value = note.title || '';
-  if (detailTime) detailTime.textContent = `已保存 · ${noteArchiveTime(note.updatedAt)}`;
-  const row = notesList?.querySelector(`[data-note-id="${CSS.escape(note.id)}"]`);
-  if (!row) return;
-  const rowTitle = row.querySelector('strong');
-  const rowExcerpt = row.querySelector('span');
-  const rowTime = row.querySelector('time');
-  if (rowTitle) rowTitle.textContent = title;
-  if (rowExcerpt) rowExcerpt.textContent = noteArchiveExcerpt(note);
-  if (rowTime) rowTime.textContent = noteArchiveTime(note.updatedAt);
-}
-
-function persistNotesEditor(editor) {
-  if (!editor || !editor.dataset.noteId) return;
-  const notes = window.NotchDomain.updateNoteInArchive(
-    loadNoteArchive(),
-    editor.dataset.noteId,
-    editor.value,
-    Date.now()
-  );
-  localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.slice(0, 200)));
-  const updated = notes.find((note) => note.id === editor.dataset.noteId);
-  if (localStorage.getItem(NOTE_ACTIVE_ARCHIVE_KEY) === editor.dataset.noteId && noteInput) {
-    noteInput.value = editor.value;
-    localStorage.setItem(NOTE_KEY, editor.value);
+// 首页随笔的读写口：笔记页里改今日随笔时写回这里，过了 0 点由笔记页清空。
+window.NotchHomeNote = {
+  get: () => noteInput?.value ?? '',
+  set(value) {
+    if (!noteInput) return;
+    noteInput.value = String(value || '');
     renderNotePreview();
-  }
-  updateSavedNotePresentation(updated);
-  if (pendingNotesEditor === editor) pendingNotesEditor = null;
-}
-
-function flushNotesEditorSave() {
-  if (workspaceReloadPending) return;
-  if (notesSaveTimer) clearTimeout(notesSaveTimer);
-  notesSaveTimer = null;
-  const editor = pendingNotesEditor;
-  pendingNotesEditor = null;
-  if (editor) persistNotesEditor(editor);
-}
-
-function scheduleNotesEditorSave(editor) {
-  pendingNotesEditor = editor;
-  if (notesSaveTimer) clearTimeout(notesSaveTimer);
-  const time = notesDetail?.querySelector('.notes-detail-time');
-  if (time) time.textContent = '正在保存…';
-  notesSaveTimer = setTimeout(() => {
-    notesSaveTimer = null;
-    const pending = pendingNotesEditor;
-    pendingNotesEditor = null;
-    if (pending) persistNotesEditor(pending);
-  }, 220);
-}
-
-// 从搜索打开某条笔记。
-window.NotchNotes = {
-  list: () => loadNoteArchive(),
-  async open(id) {
-    await setActiveTab('notes');
-    window.NotchPromptLibrary?.setLibrary?.('notes', { remember: false });
-    selectedNoteId = String(id || '');
-    renderNotesLibrary();
-  },
-  // 随手记的随笔：一天一条「随手记 · 9月25日」，每条前面带时间。那条被删了就另起一条。
-  appendCapture(text, at = Date.now()) {
-    const Capture = window.NotchCapture;
-    flushNotesEditorSave();
-    const day = Capture.captureDayKey(at);
-    let state = {};
-    try { state = JSON.parse(localStorage.getItem(CAPTURE_NOTE_KEY) || '{}') || {}; } catch (error) {}
-    const notes = loadNoteArchive();
-    let note = state.day === day ? notes.find((item) => item.id === state.id) : null;
-    if (note) {
-      note.content = Capture.appendCaptureLine(note.content, text, at);
-      note.updatedAt = Math.max(note.createdAt, Date.now());
-    } else {
-      note = { id: generateId(), title: Capture.captureNoteTitle(at), titleSource: 'user', content: Capture.appendCaptureLine('', text, at), createdAt: at, updatedAt: at };
-      notes.unshift(note);
-    }
-    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(window.NotchDomain.normalizeNoteArchive(notes).slice(0, 200)));
-    localStorage.setItem(CAPTURE_NOTE_KEY, JSON.stringify({ day, id: note.id }));
-    renderNotesLibrary();
-    return note.id;
   },
 };
-
-function renderNotesLibrary() {
-  if (!notesList) return;
-  const archive = loadNoteArchive();
-  const notes = window.NotchDomain.filterNotes(archive, notesSearch?.value || '');
-  if (notesCount) notesCount.textContent = String(archive.length);
-  if (!notes.some((note) => note.id === selectedNoteId)) selectedNoteId = notes[0]?.id || '';
-  notesList.replaceChildren();
-  if (!notes.length) {
-    const empty = document.createElement('div');
-    empty.className = 'notes-list-empty';
-    empty.textContent = archive.length ? '没有找到相关笔记' : '保存的笔记会出现在这里';
-    notesList.append(empty);
-    renderNotesDetail(notes);
-    return;
-  }
-  notes.forEach((note) => {
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.className = `notes-list-item${note.id === selectedNoteId ? ' active' : ''}`;
-    button.dataset.noteId = note.id;
-    button.dataset.lineSidebarItem = '';
-    button.setAttribute('aria-pressed', String(note.id === selectedNoteId));
-    const title = document.createElement('strong');
-    title.textContent = noteArchiveTitle(note);
-    const excerpt = document.createElement('span');
-    excerpt.textContent = noteArchiveExcerpt(note);
-    const time = document.createElement('time');
-    time.textContent = noteArchiveTime(note.updatedAt);
-    button.append(title, excerpt, time);
-    notesList.append(button);
-  });
-  renderNotesDetail(notes);
-}
 
 noteSaveButton?.addEventListener('click', () => {
   const content = noteInput?.value.trim() || '';
@@ -1902,101 +1664,10 @@ noteSaveButton?.addEventListener('click', () => {
     showStatusToast('先写点内容再存档');
     return;
   }
-  const notes = loadNoteArchive();
-  let activeId = localStorage.getItem(NOTE_ACTIVE_ARCHIVE_KEY) || '';
-  const existing = notes.find((item) => item.id === activeId);
-  if (existing) {
-    existing.content = content;
-    existing.updatedAt = Date.now();
-  } else {
-    activeId = generateId();
-    notes.unshift({ id: activeId, content, createdAt: Date.now(), updatedAt: Date.now() });
-  }
-  localStorage.setItem(NOTE_ACTIVE_ARCHIVE_KEY, activeId);
-  localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.slice(0, 200)));
-  localStorage.setItem(NOTE_KEY, noteInput.value);
-  selectedNoteId = activeId;
-  renderNotesLibrary();
-  showStatusToast('笔记已保存');
+  try { localStorage.setItem(NOTE_KEY, noteInput.value); } catch (error) {}
+  const id = window.NotchNotes?.syncHomeNote?.(noteInput.value);
+  showStatusToast(id ? '已存进笔记库' : '没存上，请稍后再试');
 });
-
-// 笔记页顶部的「新建」：提示词模式由 prompts.js 处理，笔记模式在这里新建空白笔记。
-document.getElementById('notes-new')?.addEventListener('click', () => {
-  if (document.getElementById('notes-page')?.dataset.library !== 'notes') return;
-  flushNotesEditorSave();
-  const now = Date.now();
-  const id = generateId();
-  const notes = [{ id, title: '', content: '', createdAt: now, updatedAt: now }, ...loadNoteArchive()];
-  localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.slice(0, 200)));
-  if (notesSearch) notesSearch.value = '';
-  selectedNoteId = id;
-  renderNotesLibrary();
-  notesDetail?.querySelector('.notes-detail-title')?.focus();
-});
-
-notesList?.addEventListener('click', (event) => {
-  const row = event.target.closest('[data-note-id]');
-  if (!row) return;
-  flushNotesEditorSave();
-  selectedNoteId = row.dataset.noteId;
-  renderNotesLibrary();
-});
-
-notesSearch?.addEventListener('input', () => {
-  flushNotesEditorSave();
-  renderNotesLibrary();
-});
-
-notesDetail?.addEventListener('input', (event) => {
-  const title = event.target.closest('.notes-detail-title');
-  if (title?.dataset.noteId) {
-    const notes = window.NotchDomain.updateNoteTitle(
-      loadNoteArchive(),
-      title.dataset.noteId,
-      title.value,
-      Date.now()
-    );
-    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(notes.slice(0, 200)));
-    updateSavedNotePresentation(notes.find((note) => note.id === title.dataset.noteId));
-    return;
-  }
-  const editor = event.target.closest('#notes-editor');
-  if (editor) scheduleNotesEditorSave(editor);
-});
-
-notesDetail?.addEventListener('focusout', (event) => {
-  const title = event.target.closest('.notes-detail-title');
-  if (title?.dataset.noteId) {
-    const note = loadNoteArchive().find((item) => item.id === title.dataset.noteId);
-    if (note) title.value = note.title;
-  }
-  if (event.target.closest('#notes-editor')) flushNotesEditorSave();
-});
-
-notesDetail?.addEventListener('click', (event) => {
-  const action = event.target.closest('[data-action]')?.dataset.action;
-  if (!action) return;
-  flushNotesEditorSave();
-  const notes = loadNoteArchive();
-  const note = notes.find((item) => item.id === selectedNoteId);
-  if (!note) return;
-  if (action === 'delete-note') {
-    const next = notes.filter((item) => item.id !== note.id);
-    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(next));
-    if (localStorage.getItem(NOTE_ACTIVE_ARCHIVE_KEY) === note.id) {
-      localStorage.removeItem(NOTE_ACTIVE_ARCHIVE_KEY);
-    }
-    selectedNoteId = next[0]?.id || '';
-    renderNotesLibrary();
-    showStatusToast('笔记已删除');
-    return;
-  }
-});
-
-document.addEventListener('notch:tabchange', (event) => {
-  if (event.detail?.tab !== 'notes') flushNotesEditorSave();
-});
-window.addEventListener('beforeunload', flushNotesEditorSave);
 
 if (noteFormatActions) {
   noteFormatActions.addEventListener('mousedown', (event) => {
