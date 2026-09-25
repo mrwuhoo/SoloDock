@@ -660,3 +660,14 @@ test('only permission requests from Claude Code count as "needs you", with a Chi
   assert.equal(needsInputDetail('Please confirm the plan'), 'Please confirm the plan');
   assert.equal(needsInputDetail(''), '等你批准后继续');
 });
+
+test('a quick capture entry keeps only text and type hints; the main process stamps the time', () => {
+  const { normalizeCaptureEntry } = require('../main-services');
+  assert.deepEqual(normalizeCaptureEntry({ text: '  明天3点 开会\r\n第二行 ', type: 'todo', category: 'P2', habitId: ' exercise ', open: true, at: 1 }, 42), {
+    text: '明天3点 开会\n第二行', type: 'todo', category: 'P2', habitId: 'exercise', open: true, at: 42,
+  });
+  assert.deepEqual(normalizeCaptureEntry({ text: 'x', type: 'script', category: 'P9', habitId: 5, open: 'yes' }, 7), { text: 'x', type: '', category: '', habitId: '', open: false, at: 7 });
+  assert.equal(normalizeCaptureEntry({ text: '   ' }), null);
+  assert.equal(normalizeCaptureEntry('text'), null);
+  assert.equal(normalizeCaptureEntry({ text: 'a'.repeat(5000) }, 1).text.length, 4000);
+});

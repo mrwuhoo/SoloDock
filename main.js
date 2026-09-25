@@ -63,6 +63,7 @@ const {
   credentialEnvName,
   needsInputMessage,
   needsInputDetail,
+  normalizeCaptureEntry,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
 const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold } = require('./reminder-rules');
@@ -1581,12 +1582,18 @@ function readAppSettings() {
   return {
     features,
     shortcut: isValidPanelShortcut(stored.shortcut) ? stored.shortcut : 'Space',
+    captureShortcut: normalizeCaptureShortcut(stored.captureShortcut),
     defaultTab: normalizeDefaultTabPreference(stored.defaultTab, features),
   };
 }
 
 function publicAppSettings() {
-  return { ...readAppSettings(), autoLaunch: isAutoLaunchEnabled(), body: readStoredBodySettings() };
+  return {
+    ...readAppSettings(),
+    autoLaunch: isAutoLaunchEnabled(),
+    body: readStoredBodySettings(),
+    captureShortcutRegistered: captureShortcutRegistered,
+  };
 }
 
 function saveAppSettings(settings) {
@@ -1733,8 +1740,201 @@ function applyAppSettings() {
     saveAppSettings(settings);
     setPanelShortcut('Space');
   }
+  // 随手记快捷键被占用时不改设置，只在「设置」里提示换一个。
+  setCaptureShortcut(settings.captureShortcut);
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', publicAppSettings());
 }
+
+// ============ 随手记 ============
+// 任何应用里按快捷键（默认 ⌥⇧N）弹出。macOS 上它是不激活应用的面板（NSPanel）：
+// 前台应用保持不变，输入直接进随手记；收起后键盘焦点自然回到原来的应用。
+// 随手记窗口只读 LocalStorage 做预览，要存的内容经这里交给面板写入。
+const CAPTURE_WIDTH = 600;
+const CAPTURE_MIN_HEIGHT = 120;
+const CAPTURE_MAX_HEIGHT = 360;
+const DEFAULT_CAPTURE_SHORTCUT = 'Alt+Shift+N';
+let captureWindow = null;
+let captureReady = false;
+let captureOpenPending = false;
+let captureHeight = 158;
+let captureShortcutRegistered = false;
+let activeCaptureShortcut = '';
+
+function normalizeCaptureShortcut(value) {
+  if (value === '') return '';
+  return isValidPanelShortcut(value) && value !== 'Space' ? value : DEFAULT_CAPTURE_SHORTCUT;
+}
+
+// 出现在鼠标所在的屏幕，紧贴菜单栏（刘海屏上就在刘海正下方）。
+function getCaptureBounds(display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint())) {
+  return {
+    x: Math.round(display.bounds.x + (display.bounds.width - CAPTURE_WIDTH) / 2),
+    y: display.bounds.y + getMenuBarHeight(display),
+    width: CAPTURE_WIDTH,
+    height: captureHeight,
+  };
+}
+
+function createCaptureWindow() {
+  if (captureWindow && !captureWindow.isDestroyed()) return captureWindow;
+  captureReady = false;
+  const win = new BrowserWindow({
+    ...getCaptureBounds(),
+    ...(process.platform === 'darwin' ? { type: 'panel' } : {}),
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    hiddenInMissionControl: true,
+    fullscreenable: false,
+    minimizable: false,
+    maximizable: false,
+    roundedCorners: false,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
+      spellcheck: false,
+    },
+  });
+  captureWindow = win;
+  installLocalWebContentsGuards(win.webContents);
+  win.setAlwaysOnTop(true, 'screen-saver', 2);
+  if (process.platform === 'darwin') win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  // Esc 可能在到达页面前被吞掉（与主窗口相同），这里转发；页面在输入法选字时会忽略。
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type === 'keyDown' && input.key === 'Escape') win.webContents.send('capture:escape');
+  });
+  // 点到别处就收起，草稿留着，下次打开还在。
+  win.on('blur', () => {
+    if (!win.isDestroyed() && win.isVisible()) hideCaptureWindow('blur');
+  });
+  win.webContents.once('did-finish-load', () => {
+    if (captureWindow !== win) return;
+    captureReady = true;
+    if (captureOpenPending) showCaptureWindow();
+  });
+  win.webContents.on('render-process-gone', () => {
+    if (!win.isDestroyed()) win.destroy();
+  });
+  win.on('closed', () => {
+    if (captureWindow !== win) return;
+    captureWindow = null;
+    captureReady = false;
+  });
+  win.loadFile(path.join(__dirname, 'renderer', 'capture.html'));
+  return win;
+}
+
+function isCaptureVisible() {
+  return Boolean(captureWindow && !captureWindow.isDestroyed() && captureWindow.isVisible());
+}
+
+function showCaptureWindow() {
+  const win = createCaptureWindow();
+  if (!captureReady) {
+    captureOpenPending = true;
+    return;
+  }
+  captureOpenPending = false;
+  win.setBounds(getCaptureBounds());
+  win.webContents.send('capture:open');
+  win.show();
+}
+
+function hideCaptureWindow(reason = 'cancel') {
+  captureOpenPending = false;
+  if (!isCaptureVisible()) return;
+  captureWindow.hide();
+  captureWindow.webContents.send('capture:hide', reason);
+}
+
+function toggleCaptureWindow() {
+  if (isCaptureVisible()) hideCaptureWindow('toggle');
+  else showCaptureWindow();
+}
+
+// 注册随手记快捷键；空字符串表示关闭。返回是否注册成功。
+function setCaptureShortcut(accelerator) {
+  const next = normalizeCaptureShortcut(accelerator);
+  if (next && next === activeCaptureShortcut && captureShortcutRegistered && globalShortcut.isRegistered(next)) return true;
+  if (activeCaptureShortcut && captureShortcutRegistered) {
+    try { globalShortcut.unregister(activeCaptureShortcut); } catch (error) {}
+  }
+  activeCaptureShortcut = next;
+  captureShortcutRegistered = false;
+  if (!next) return true;
+  if (next === configuredShortcut) return false;
+  try {
+    captureShortcutRegistered = globalShortcut.register(next, toggleCaptureWindow);
+  } catch (error) {
+    captureShortcutRegistered = false;
+  }
+  return captureShortcutRegistered;
+}
+
+function deliverCaptureEntry(entry) {
+  if (!mainWindow || mainWindow.isDestroyed()) createWindow();
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (entry.open) {
+    hideWhenCollapsed = false;
+    repositionWindow(getTargetDisplay());
+    mainWindow.show();
+    mainWindow.focus();
+  }
+  const send = () => {
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('capture:add', entry);
+  };
+  if (mainWindow.webContents.isLoadingMainFrame()) mainWindow.webContents.once('did-finish-load', send);
+  else send();
+}
+
+ipcMain.handle('capture:submit', (event, payload) => {
+  if (!captureWindow || captureWindow.isDestroyed() || event.sender !== captureWindow.webContents) return { ok: false };
+  const entry = normalizeCaptureEntry(payload, Date.now());
+  if (!entry) return { ok: false };
+  hideCaptureWindow('submit');
+  deliverCaptureEntry(entry);
+  return { ok: true };
+});
+
+ipcMain.handle('capture:cancel', (event, reason) => {
+  if (!captureWindow || captureWindow.isDestroyed() || event.sender !== captureWindow.webContents) return false;
+  hideCaptureWindow(reason === 'escape' ? 'escape' : 'cancel');
+  return true;
+});
+
+ipcMain.on('capture:resize', (event, height) => {
+  if (!captureWindow || captureWindow.isDestroyed() || event.sender !== captureWindow.webContents) return;
+  const next = Math.round(Math.max(CAPTURE_MIN_HEIGHT, Math.min(CAPTURE_MAX_HEIGHT, Number(height) || 0)));
+  if (!Number.isFinite(next) || next === captureHeight) return;
+  captureHeight = next;
+  const bounds = captureWindow.getBounds();
+  captureWindow.setBounds({ ...bounds, height: next });
+});
+
+ipcMain.handle('settings:set-capture-shortcut', (event, accelerator) => {
+  const value = accelerator === '' ? '' : String(accelerator || '');
+  if (value && (!isValidPanelShortcut(value) || value === 'Space')) return { ok: false, error: 'invalid' };
+  if (value && value === configuredShortcut) return { ok: false, error: 'same-as-panel' };
+  if (!setCaptureShortcut(value)) {
+    setCaptureShortcut(readAppSettings().captureShortcut);
+    return { ok: false, error: 'occupied' };
+  }
+  const next = readAppSettings();
+  next.captureShortcut = value;
+  if (!saveAppSettings(next)) return { ok: false, error: 'save_failed' };
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('settings:changed', publicAppSettings());
+  refreshTrayMenu();
+  return { ok: true, shortcut: value };
+});
 
 function openRendererPanel(channel) {
   if (!mainWindow || mainWindow.isDestroyed()) createWindow();
@@ -1811,6 +2011,10 @@ function refreshTrayMenu() {
     {
       label: `设置快捷键…  当前：${settings.shortcut}`,
       click: () => openRendererPanel('app:record-shortcut'),
+    },
+    {
+      label: settings.captureShortcut ? `随手记  ${settings.captureShortcut}` : '随手记',
+      click: () => showCaptureWindow(),
     },
     {
       label: '数据文件夹',
@@ -1993,6 +2197,7 @@ ipcMain.handle('settings:set-auto-launch', (event, enabled) => {
 });
 ipcMain.handle('settings:set-shortcut', (event, accelerator) => {
   if (!isValidPanelShortcut(accelerator)) return { ok: false, error: 'invalid' };
+  if (accelerator === activeCaptureShortcut) return { ok: false, error: 'same-as-capture' };
   if (!setPanelShortcut(accelerator)) return { ok: false, error: 'occupied' };
   const next = readAppSettings();
   next.shortcut = accelerator;
@@ -3929,6 +4134,10 @@ app.whenReady().then(() => {
     });
   }
   startBodyTracking();
+  // 随手记窗口提前建好并隐藏，按下快捷键立刻出现。
+  setTimeout(() => {
+    if (!isQuitting) createCaptureWindow();
+  }, 1500);
   // 不在启动时索要权限：只有用户在「当前窗口」卡片里点了授权按钮才申请，
   // 那条路径会先调用 desktopCapturer，让 SoloDock 出现在系统的录屏权限列表里。
 

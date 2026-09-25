@@ -21,6 +21,10 @@
   let shown = false;
   let generation = 0;
   let pendingTarget = '';
+  // 随手记存好后的短暂确认，盖过其他状态 1.6 秒。
+  let transient = null;
+  let transientTimer = null;
+  const TRANSIENT_MS = 1600;
 
   function gather() {
     const quota = [
@@ -77,7 +81,8 @@
   }
 
   function tick() {
-    const status = Status.pickNotchStatus(gather(), Date.now());
+    if (transient && transient.until <= Date.now()) transient = null;
+    const status = transient ? transient.status : Status.pickNotchStatus(gather(), Date.now());
     current = status;
     if (status) show(status);
     else hide();
@@ -154,5 +159,12 @@
     current: () => (current ? { ...current } : null),
     setOffwork: (value) => { offwork = value; tick(); },
     setNeedsYou: (value) => { needsYou = value; tick(); },
+    // 面板收起时在刘海下沿闪一句确认（如「已存入随手记」），点一下去对应页面。
+    flash(text, target = '') {
+      transient = { status: { kind: 'saved', icon: 'check', text: String(text || ''), detail: '', tone: 'calm', progress: null, target }, until: Date.now() + TRANSIENT_MS };
+      clearTimeout(transientTimer);
+      transientTimer = setTimeout(tick, TRANSIENT_MS + 20);
+      tick();
+    },
   };
 })();

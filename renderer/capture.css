@@ -1,0 +1,356 @@
+/*
+ * 随手记 · 冰蓝玻璃卡片（与提醒卡片同一套材质，见 notification.css 与 tokens.css）。
+ * 结构：类型图标 | 输入框 → 类型 · 存到哪里 · 存入。
+ * 透明窗口里 backdrop-filter 模糊不到桌面，所以底色不透明，玻璃感来自冰蓝渐变、顶部高光与白色描边。
+ */
+:root {
+  color-scheme: light;
+  --card-width: 552px;
+  --line: 24px;
+  --tint: var(--sd-accent);
+  --tint-soft: var(--sd-accent-soft);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--sd-text-1);
+  font-family: var(--sd-font);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 窗口四周是阴影空间：上 8（与菜单栏、刘海的间距），左右 24，下 40。 */
+.capture-root {
+  display: flex;
+  justify-content: center;
+  padding: 8px 24px 0;
+}
+
+.capture-card {
+  position: relative;
+  width: var(--card-width);
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: var(--sd-radius-card);
+  background:
+    radial-gradient(120% 160% at 0% 0%, rgba(255, 255, 255, 0.82), transparent 55%),
+    linear-gradient(160deg, rgb(249, 252, 255), rgb(229, 239, 252));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 0 rgba(89, 115, 145, 0.08),
+    0 16px 40px rgba(28, 51, 77, 0.24),
+    0 2px 8px rgba(28, 51, 77, 0.1);
+  opacity: 0;
+  transform: translateY(-12px) scale(0.97);
+  transform-origin: 50% 0;
+  transition:
+    opacity 180ms var(--sd-ease-out),
+    transform 340ms var(--sd-ease-spring);
+}
+
+/* 隐藏与重新打开时不播过渡，免得残影一闪。 */
+.capture-root.no-motion .capture-card {
+  transition: none;
+}
+
+.capture-root.is-open .capture-card {
+  opacity: 1;
+  transform: none;
+}
+
+/* 存入：卡片朝刘海收上去。 */
+.capture-root.is-sent .capture-card {
+  opacity: 0;
+  transform: translateY(-18px) scale(0.92);
+  transition:
+    opacity 170ms ease,
+    transform 200ms var(--sd-ease-out);
+}
+
+.capture-root.is-closing .capture-card {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+  transition: opacity 120ms ease, transform 140ms ease;
+}
+
+.capture-sheen {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  background: linear-gradient(110deg, transparent 32%, rgba(255, 255, 255, 0.85) 48%, transparent 62%);
+  background-size: 260% 100%;
+  background-position: 130% 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.capture-root.is-open .capture-sheen {
+  animation: capture-sheen 1.2s var(--sd-ease-out) 0.12s both;
+}
+
+@keyframes capture-sheen {
+  0% { background-position: 130% 0; opacity: 1; }
+  80% { opacity: 1; }
+  100% { background-position: -40% 0; opacity: 0; }
+}
+
+/* ---------------- 输入 ---------------- */
+.capture-main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sd-space-3);
+  padding: 16px 20px 14px 16px;
+}
+
+.capture-glyph {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--sd-radius-control);
+  background: var(--tint-soft);
+  color: var(--tint);
+  transition: background-color 200ms ease, color 200ms ease;
+}
+
+.capture-glyph svg {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0;
+  transform: scale(0.6) rotate(-12deg);
+  transition: opacity 160ms ease, transform 260ms var(--sd-ease-spring);
+}
+
+.capture-card[data-type='note'] [data-glyph='note'],
+.capture-card[data-type='todo'] [data-glyph='todo'],
+.capture-card[data-type='link'] [data-glyph='link'],
+.capture-card[data-type='life'][data-icon='run'] [data-life='run'],
+.capture-card[data-type='life'][data-icon='lotus'] [data-life='lotus'],
+.capture-card[data-type='life'][data-icon='book'] [data-life='book'],
+.capture-card[data-type='life'][data-icon='moon'] [data-life='moon'],
+.capture-card[data-type='life'][data-icon='drop'] [data-life='drop'],
+.capture-card[data-type='life'][data-icon='leaf'] [data-life='leaf'] {
+  opacity: 1;
+  transform: none;
+}
+
+/* 待办用分类色、生活用习惯色（分类色只给分类与习惯，从不给按钮）。 */
+.capture-card[data-color='cat-1'] { --tint: var(--sd-cat-1); }
+.capture-card[data-color='cat-2'] { --tint: var(--sd-cat-2); }
+.capture-card[data-color='cat-3'] { --tint: var(--sd-cat-3); }
+.capture-card[data-color='cat-4'] { --tint: var(--sd-cat-4); }
+.capture-card[data-color='cat-5'] { --tint: var(--sd-cat-5); }
+.capture-card[data-color='cat-6'] { --tint: var(--sd-cat-6); }
+.capture-card[data-color^='cat-'] { --tint-soft: color-mix(in srgb, var(--tint) 14%, transparent); }
+
+#capture-input {
+  flex: 1;
+  min-width: 0;
+  height: var(--line);
+  max-height: calc(var(--line) * 6);
+  margin: 4px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--sd-text-1);
+  caret-color: var(--sd-accent);
+  font: var(--sd-fw-regular) var(--sd-fs-section) / var(--line) var(--sd-font);
+  letter-spacing: 0.01em;
+}
+
+#capture-input::placeholder {
+  color: var(--sd-text-4);
+}
+
+#capture-input::-webkit-scrollbar {
+  width: 0;
+}
+
+/* ---------------- 下方一行 ---------------- */
+.capture-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--sd-space-2);
+  min-width: 0;
+  padding: 8px 10px 10px 12px;
+  border-top: 1px solid var(--sd-divider);
+  background: rgba(255, 255, 255, 0.34);
+}
+
+.capture-bar button {
+  border: 0;
+  font-family: inherit;
+  cursor: default;
+}
+
+.capture-types {
+  flex: none;
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--sd-radius-pill);
+  background: rgba(23, 50, 80, 0.05);
+}
+
+.capture-types button {
+  height: 24px;
+  padding: 0 10px;
+  border-radius: var(--sd-radius-pill);
+  background: transparent;
+  color: var(--sd-text-3);
+  font-size: var(--sd-fs-secondary);
+  font-weight: var(--sd-fw-medium);
+  transition: background-color 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.capture-types button:hover {
+  color: var(--sd-text-1);
+}
+
+.capture-types button[aria-selected='true'] {
+  background: var(--sd-surface-selected);
+  color: var(--sd-text-1);
+  box-shadow: 0 1px 2px rgba(28, 51, 77, 0.12), var(--sd-highlight);
+}
+
+.capture-types button[data-unavailable='true'] {
+  display: none;
+}
+
+/* 存到哪里：待办是「分类 · 截止」，生活是「习惯 · 项目 · 时长」；点一下换分类 / 习惯。 */
+.capture-target {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border-radius: var(--sd-radius-small);
+  background: transparent;
+  color: var(--sd-text-2);
+  font-size: var(--sd-fs-secondary);
+  text-align: left;
+}
+
+.capture-target span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.capture-target[data-pickable='true']:hover {
+  background: var(--sd-surface-hover);
+}
+
+.capture-target[data-state='hint'] {
+  color: var(--sd-text-4);
+}
+
+.capture-target[data-state='invalid'] {
+  color: var(--sd-warning);
+}
+
+.capture-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tint);
+  display: none;
+}
+
+.capture-target[data-pickable='true'] .capture-dot {
+  display: block;
+}
+
+.capture-target[data-state='invalid'] .capture-dot {
+  display: none;
+}
+
+.capture-save {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 8px 0 12px;
+  border-radius: var(--sd-radius-pill);
+  background: var(--sd-accent);
+  color: #fff;
+  font-size: var(--sd-fs-secondary);
+  font-weight: var(--sd-fw-semibold);
+  box-shadow: 0 1px 2px rgba(44, 105, 196, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  transition: background-color 160ms ease, opacity 160ms ease;
+}
+
+.capture-save:hover {
+  background: var(--sd-accent-strong);
+}
+
+.capture-save:disabled {
+  opacity: 0.45;
+}
+
+.capture-save kbd {
+  display: grid;
+  place-items: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: var(--sd-radius-small);
+  background: rgba(255, 255, 255, 0.2);
+  font: var(--sd-fw-medium) var(--sd-fs-caption) / 1 var(--sd-font);
+}
+
+/* 待办没写要做什么：轻轻摇一下。 */
+.capture-card.is-shaking {
+  animation: capture-shake 320ms ease;
+}
+
+@keyframes capture-shake {
+  20% { translate: -6px 0; }
+  45% { translate: 5px 0; }
+  70% { translate: -3px 0; }
+  100% { translate: 0 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .capture-card,
+  .capture-root.is-sent .capture-card,
+  .capture-root.is-closing .capture-card,
+  .capture-glyph svg {
+    transform: none;
+    transition: opacity 80ms linear;
+  }
+
+  .capture-root.is-open .capture-sheen,
+  .capture-card.is-shaking {
+    animation: none;
+  }
+}

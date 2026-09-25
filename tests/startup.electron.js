@@ -146,6 +146,39 @@ app.on('web-contents-created', (_event, contents) => {
       assert.equal(idleBounds.width, 200);
       assert.deepEqual([statusBounds.width, statusBounds.height - idleBounds.height, statusBounds.x, statusBounds.y], [200, 24, idleBounds.x, idleBounds.y]);
       assert.deepEqual(restoredBounds, idleBounds);
+
+      // Quick capture: a hidden panel window is ready ahead of time; what it submits lands in the panel;
+      // no other window can submit on its behalf.
+      let captureWindow = null;
+      for (let attempt = 0; attempt < 40 && !captureWindow; attempt += 1) {
+        captureWindow = Windows.getAllWindows().find((win) => win.webContents.getURL().endsWith('/renderer/capture.html'));
+        if (!captureWindow) await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      assert.ok(captureWindow, 'the capture window is created ahead of time');
+      assert.equal(captureWindow.isVisible(), false);
+      assert.equal(captureWindow.isAlwaysOnTop(), true);
+      assert.equal(captureWindow.getBounds().width, 600);
+      const captureSettings = await contents.executeJavaScript('window.notchAPI.getAppSettings()');
+      assert.equal(captureSettings.captureShortcut, 'Alt+Shift+N');
+      assert.equal(captureSettings.captureShortcutRegistered, globalShortcut.isRegistered('Alt+Shift+N'));
+      assert.deepEqual(await contents.executeJavaScript(`window.notchAPI.submitCapture({ text: '面板不能冒充随手记' })`), { ok: false });
+      assert.deepEqual(await captureWindow.webContents.executeJavaScript(`window.notchAPI.submitCapture({ text: '明天下午3点 给王总回电话', type: 'todo', category: 'P1' })`), { ok: true });
+      let captured = '';
+      for (let attempt = 0; attempt < 30 && !captured; attempt += 1) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+        captured = await contents.executeJavaScript(`window.NotchTodos.items().P1.find((item) => item.text === '给王总回电话')?.deadline || ''`);
+      }
+      assert.equal(new Date(captured).getHours(), 15, 'the panel parsed and stored the todo');
+      const changed = await contents.executeJavaScript(`window.notchAPI.setCaptureShortcut('Control+Alt+Shift+F19')`);
+      assert.deepEqual(changed, { ok: true, shortcut: 'Control+Alt+Shift+F19' });
+      assert.equal(globalShortcut.isRegistered('Control+Alt+Shift+F19'), true);
+      assert.equal(globalShortcut.isRegistered('Alt+Shift+N'), false, 'the old shortcut is released');
+      assert.deepEqual(await contents.executeJavaScript(`window.notchAPI.setCaptureShortcut('Space')`), { ok: false, error: 'invalid' });
+      assert.deepEqual(await contents.executeJavaScript(`window.notchAPI.setCaptureShortcut('')`), { ok: true, shortcut: '' });
+      assert.equal(globalShortcut.isRegistered('Control+Alt+Shift+F19'), false);
+      assert.equal((await contents.executeJavaScript('window.notchAPI.getAppSettings()')).captureShortcut, '', 'off stays off');
+      const restored = await contents.executeJavaScript(`window.notchAPI.setCaptureShortcut('Alt+Shift+N')`);
+      assert.equal(restored.ok, captureSettings.captureShortcutRegistered);
       assert.deepEqual(errors, []);
       console.log('Production workspace recovery checks passed');
       app.quit();

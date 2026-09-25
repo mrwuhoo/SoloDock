@@ -34,6 +34,7 @@
             <svg data-icon="calendar" viewBox="0 0 24 24"><rect x="4.5" y="5.5" width="15" height="14" rx="3"/><path d="M4.5 10h15M9 3.5v4M15 3.5v4"/></svg>
             <svg data-icon="bell" viewBox="0 0 24 24"><path d="M7 16.5V11a5 5 0 0 1 10 0v5.5l1.5 1.5h-13Z"/><path d="M10.2 20.2a2 2 0 0 0 3.6 0"/></svg>
             <svg data-icon="moon" viewBox="0 0 24 24"><path d="M19 14.5A7.5 7.5 0 0 1 9.5 5a7.5 7.5 0 1 0 9.5 9.5Z"/></svg>
+            <svg data-icon="check" viewBox="0 0 24 24"><path d="m5.5 12.5 4 4 9-9"/></svg>
           </span>
           <span class="notch-status-text" id="notch-status-text"></span>
           <span class="notch-status-detail" id="notch-status-detail"></span>
@@ -149,9 +150,9 @@
         </header>
 
         <div class="shortcut-recorder" id="shortcut-recorder" tabindex="-1" hidden>
-          <span>按下新的唤出快捷键</span>
+          <span id="shortcut-recorder-title">按下新的唤出快捷键</span>
           <kbd id="shortcut-recorder-value">等待输入…</kbd>
-          <small>可直接使用空格；其他按键建议搭配 ⌘ / ⌥ / ⌃ / ⇧</small>
+          <small id="shortcut-recorder-hint">可直接使用空格；其他按键建议搭配 ⌘ / ⌥ / ⌃ / ⇧</small>
           <button id="shortcut-recorder-cancel" type="button">取消</button>
         </div>
 
@@ -811,6 +812,10 @@
                     <div><span>唤出快捷键</span><strong id="settings-shortcut-value">Space</strong></div>
                     <button id="settings-shortcut-change" type="button">重新设置</button>
                   </div>
+                  <div class="settings-device-row">
+                    <div><span>随手记快捷键</span><strong id="settings-capture-value">⌥⇧N</strong></div>
+                    <button id="settings-capture-change" type="button">重新设置</button>
+                  </div>
                   <label class="settings-device-row settings-default-tab-row">
                     <div><span>默认展开页</span><strong>每次唤出面板时显示</strong></div>
                     <select id="settings-default-tab" aria-label="默认展开页">
@@ -947,6 +952,8 @@
     <script src="life-page.js"></script>
     <script src="search-domain.js"></script>
     <script src="command-palette.js"></script>
+    <script src="capture-domain.js"></script>
+    <script src="capture-apply.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

@@ -195,7 +195,8 @@
     });
   }
 
-  function addLink(rawValue, requestedGroupId = '') {
+  // title：随手记里网址旁边写的字，作为标题保留，不被自动获取的标题覆盖。
+  function addLink(rawValue, requestedGroupId = '', presetTitle = '') {
     const normalized = Domain.normalizeHttpUrl(rawValue);
     if (!normalized) {
       setLinksStatus('请输入有效的公开网址', 'error');
@@ -205,7 +206,7 @@
       setLinksStatus('这个链接已经收藏过了', 'error');
       return false;
     }
-    const link = { id: uid('link'), url: normalized, title: '未命名', icon: '', createdAt: Date.now() };
+    const link = { id: uid('link'), url: normalized, title: presetTitle || '未命名', icon: '', createdAt: Date.now() };
     const preferredGroupId = requestedGroupId || Domain.preferredLinkGroupId(linkGroups, normalized);
     const preferredGroup = linkGroups.find((group) => group.id === preferredGroupId);
     if (preferredGroup) {
@@ -233,7 +234,7 @@
       });
       if (!savedLink || !sourceGroup) return;
       savedLink.url = inspected.url || savedLink.url;
-      savedLink.title = inspected.title || savedLink.title || '未命名';
+      savedLink.title = presetTitle || inspected.title || savedLink.title || '未命名';
       savedLink.icon = inspected.icon || savedLink.icon || '';
       // 手动定向或同站点复用后锁定分组；自动分类只使用可预测的本地规则，
       // 避免模型自由命名生成多个近义分组。
@@ -578,6 +579,8 @@
   const settingsHomeModuleList = document.getElementById('settings-home-module-list');
   const settingsShortcutValue = document.getElementById('settings-shortcut-value');
   const settingsShortcutChange = document.getElementById('settings-shortcut-change');
+  const settingsCaptureValue = document.getElementById('settings-capture-value');
+  const settingsCaptureChange = document.getElementById('settings-capture-change');
   const settingsDefaultTab = document.getElementById('settings-default-tab');
   const settingsWorkspaceKind = document.getElementById('settings-workspace-kind');
   const settingsWorkspacePath = document.getElementById('settings-workspace-path');
@@ -788,6 +791,13 @@
       settingsLlmStatus.dataset.state = summary.llm.state;
     }
     if (settingsShortcutValue) settingsShortcutValue.textContent = summary.shortcut;
+    if (settingsCaptureValue && settingsAppSettings) {
+      const accelerator = settingsAppSettings.captureShortcut;
+      const label = window.NotchCapture?.shortcutLabel?.(accelerator) || accelerator;
+      const taken = Boolean(accelerator) && settingsAppSettings.captureShortcutRegistered === false;
+      settingsCaptureValue.textContent = !accelerator ? '已关闭' : taken ? `${label} 被其他应用占用，换一个` : `${label} · 在任何应用里记一条`;
+      settingsCaptureValue.dataset.state = taken ? 'warning' : '';
+    }
     if (settingsDefaultTab) {
       const visibleTabs = new Set(Domain.visiblePanelTabs(
         ['home', 'todo', 'notes', 'links', 'recordings', 'credentials', 'clip', 'resets', 'time', 'life', 'settings'],
@@ -1552,6 +1562,9 @@
   });
   settingsShortcutChange?.addEventListener('click', () => {
     document.dispatchEvent(new CustomEvent('notch:record-shortcut'));
+  });
+  settingsCaptureChange?.addEventListener('click', () => {
+    document.dispatchEvent(new CustomEvent('notch:record-shortcut', { detail: { target: 'capture' } }));
   });
   settingsDefaultTab?.addEventListener('change', async () => {
     if (!window.notchAPI?.setDefaultTab) return;
@@ -2583,5 +2596,12 @@
     stopRecording,
     isRecordingActive: isRecordingBusy,
     recordingState: () => ({ status: recordingStatus, durationMs: isRecordingActive() ? currentDuration() : 0 }),
+    // 随手记收藏链接：'saved' / 'duplicate' / 'invalid'。
+    addLink(url, title = '') {
+      const normalized = Domain.normalizeHttpUrl(url);
+      if (!normalized) return 'invalid';
+      if (allLinks().some((link) => link.url === normalized)) return 'duplicate';
+      return addLink(normalized, '', String(title || '').slice(0, 80)) ? 'saved' : 'invalid';
+    },
   };
 })();

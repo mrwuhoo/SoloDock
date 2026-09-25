@@ -644,6 +644,22 @@ function needsInputDetail(message, project = '') {
   return project ? `${text} · ${project}` : text;
 }
 
+// 随手记窗口提交的一条：只收文字与类型提示，时间由主进程盖戳；真正怎么存由面板按同一套规则再解析一次。
+const CAPTURE_TYPES = ['note', 'todo', 'link', 'life'];
+function normalizeCaptureEntry(value, now = Date.now()) {
+  if (!value || typeof value !== 'object') return null;
+  const text = String(value.text == null ? '' : value.text).replace(/\r\n?/g, '\n').trim().slice(0, 4000);
+  if (!text) return null;
+  return {
+    text,
+    type: CAPTURE_TYPES.includes(value.type) ? value.type : '',
+    category: ['P0', 'P1', 'P2', 'P3'].includes(value.category) ? value.category : '',
+    habitId: typeof value.habitId === 'string' ? value.habitId.trim().slice(0, 40) : '',
+    open: value.open === true,
+    at: Number(now) || Date.now(),
+  };
+}
+
 // Windows Hello via Windows PowerShell 5.1 (WinRT UserConsentVerifier); Electron has no API for it.
 // action 'check' prints the availability (e.g. "Available"), 'verify' prints the result (e.g. "Verified").
 function windowsHelloScript(action, reason = '') {
@@ -683,6 +699,7 @@ function framePhotoSize(size, maxEdge) {
 module.exports = {
   needsInputMessage,
   needsInputDetail,
+  normalizeCaptureEntry,
   deriveEnvName,
   credentialEnvName,
   windowsHelloScript,

@@ -184,6 +184,8 @@ window.NotchTodos = {
   items: () => data,
   categoryName: (priority) => todoCategoryNames[priority] || '',
   open: () => setActiveTab('todo'),
+  // 随手记新建待办：返回新待办的 id，失败返回空字符串。
+  add: (priority, text, deadline) => (PRIORITIES.includes(priority) ? addTodo(priority, text, deadline) || '' : ''),
   // 从搜索或提醒打开某一条：切到待办页，滚到那一条并闪一下。
   async focus(id) {
     await setActiveTab('todo');
@@ -512,7 +514,7 @@ function addTodo(priority, text, deadline) {
       added.scrollIntoView({ block: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
     });
   }
-  return true;
+  return item.id;
 }
 
 function editTodo(priority, id, text, deadline) {
@@ -1033,7 +1035,16 @@ Array.from(document.querySelectorAll('.tab[data-tab]')).forEach((btn) => {
 const shortcutRecorder = document.getElementById('shortcut-recorder');
 const shortcutRecorderValue = document.getElementById('shortcut-recorder-value');
 const shortcutRecorderCancel = document.getElementById('shortcut-recorder-cancel');
+const shortcutRecorderTitle = document.getElementById('shortcut-recorder-title');
+const shortcutRecorderHint = document.getElementById('shortcut-recorder-hint');
 let shortcutRecorderActive = false;
+// 'panel'：唤出面板；'capture'：随手记（不能用空格，⌫ 关闭）。
+let shortcutRecorderTarget = 'panel';
+const SHORTCUT_ERRORS = {
+  occupied: '该快捷键已被占用',
+  'same-as-panel': '和唤出快捷键重复了',
+  'same-as-capture': '和随手记快捷键重复了',
+};
 
 function closeShortcutRecorder() {
   shortcutRecorderActive = false;
@@ -1065,34 +1076,51 @@ shortcutRecorder?.addEventListener('keydown', async (event) => {
     closeShortcutRecorder();
     return;
   }
+  const capture = shortcutRecorderTarget === 'capture';
+  if (capture && ['Backspace', 'Delete'].includes(event.key) && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+    const off = await window.notchAPI?.setCaptureShortcut?.('').catch(() => ({ ok: false }));
+    if (off?.ok) {
+      showStatusToast('随手记快捷键已关闭');
+      setTimeout(closeShortcutRecorder, 420);
+    }
+    return;
+  }
   const accelerator = keyEventToAccelerator(event);
   if (!accelerator) {
     if (shortcutRecorderValue) shortcutRecorderValue.textContent = '请按下完整按键组合';
     return;
   }
-  if (accelerator !== 'Space' && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
-    if (shortcutRecorderValue) shortcutRecorderValue.textContent = '单键仅支持空格';
+  const bare = !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
+  if (bare && (capture || accelerator !== 'Space')) {
+    if (shortcutRecorderValue) shortcutRecorderValue.textContent = capture ? '请搭配 ⌥ / ⌃ / ⇧ / ⌘' : '单键仅支持空格';
     return;
   }
-  if (shortcutRecorderValue) shortcutRecorderValue.textContent = accelerator;
-  const result = await window.notchAPI?.setPanelShortcut?.(accelerator).catch(() => ({ ok: false }));
+  const label = capture ? window.NotchCapture?.shortcutLabel?.(accelerator) || accelerator : accelerator;
+  if (shortcutRecorderValue) shortcutRecorderValue.textContent = label;
+  const result = await (capture
+    ? window.notchAPI?.setCaptureShortcut?.(accelerator)
+    : window.notchAPI?.setPanelShortcut?.(accelerator))?.catch?.(() => ({ ok: false }));
   if (!result?.ok) {
-    if (shortcutRecorderValue) shortcutRecorderValue.textContent = result?.error === 'occupied' ? '该快捷键已被占用' : '无法使用该快捷键';
+    if (shortcutRecorderValue) shortcutRecorderValue.textContent = SHORTCUT_ERRORS[result?.error] || '无法使用该快捷键';
     return;
   }
-  showStatusToast(`快捷键已设为 ${accelerator}`);
+  showStatusToast(capture ? `随手记快捷键已设为 ${label}` : `快捷键已设为 ${accelerator}`);
   setTimeout(closeShortcutRecorder, 420);
 });
 
 shortcutRecorderCancel?.addEventListener('click', closeShortcutRecorder);
-function openShortcutRecorder() {
+function openShortcutRecorder(event) {
   if (!isExpanded) setMode(true);
+  shortcutRecorderTarget = event?.detail?.target === 'capture' ? 'capture' : 'panel';
+  const capture = shortcutRecorderTarget === 'capture';
+  if (shortcutRecorderTitle) shortcutRecorderTitle.textContent = capture ? '按下新的随手记快捷键' : '按下新的唤出快捷键';
+  if (shortcutRecorderHint) shortcutRecorderHint.textContent = capture ? '搭配 ⌥ / ⌃ / ⇧ / ⌘；按 ⌫ 关闭随手记快捷键' : '可直接使用空格；其他按键建议搭配 ⌘ / ⌥ / ⌃ / ⇧';
   shortcutRecorderActive = true;
   shortcutRecorder.hidden = false;
   shortcutRecorderValue.textContent = '等待输入…';
   requestAnimationFrame(() => shortcutRecorder.focus({ preventScroll: true }));
 }
-window.notchAPI?.onRecordShortcut?.(openShortcutRecorder);
+window.notchAPI?.onRecordShortcut?.(() => openShortcutRecorder());
 document.addEventListener('notch:record-shortcut', openShortcutRecorder);
 
 if (collapseBtn) {
@@ -1744,6 +1772,7 @@ window.NotchReminderActions = { completeTodoById, moveDueTodosToTomorrow };
 const NOTE_KEY = 'notch-home-note';
 const NOTE_ARCHIVE_KEY = 'notch-note-archive-v1';
 const NOTE_ACTIVE_ARCHIVE_KEY = 'notch-note-active-archive-v1';
+const CAPTURE_NOTE_KEY = 'notch-capture-note-v1';
 const noteInput = document.getElementById('home-note');
 const notePreview = document.getElementById('home-note-preview');
 const noteSaveButton = document.getElementById('note-save-btn');
@@ -2531,6 +2560,27 @@ window.NotchNotes = {
     window.NotchPromptLibrary?.setLibrary?.('notes', { remember: false });
     selectedNoteId = String(id || '');
     renderNotesLibrary();
+  },
+  // 随手记的随笔：一天一条「随手记 · 9月25日」，每条前面带时间。那条被删了就另起一条。
+  appendCapture(text, at = Date.now()) {
+    const Capture = window.NotchCapture;
+    flushNotesEditorSave();
+    const day = Capture.captureDayKey(at);
+    let state = {};
+    try { state = JSON.parse(localStorage.getItem(CAPTURE_NOTE_KEY) || '{}') || {}; } catch (error) {}
+    const notes = loadNoteArchive();
+    let note = state.day === day ? notes.find((item) => item.id === state.id) : null;
+    if (note) {
+      note.content = Capture.appendCaptureLine(note.content, text, at);
+      note.updatedAt = Math.max(note.createdAt, Date.now());
+    } else {
+      note = { id: generateId(), title: Capture.captureNoteTitle(at), titleSource: 'user', content: Capture.appendCaptureLine('', text, at), createdAt: at, updatedAt: at };
+      notes.unshift(note);
+    }
+    localStorage.setItem(NOTE_ARCHIVE_KEY, JSON.stringify(window.NotchDomain.normalizeNoteArchive(notes).slice(0, 200)));
+    localStorage.setItem(CAPTURE_NOTE_KEY, JSON.stringify({ day, id: note.id }));
+    renderNotesLibrary();
+    return note.id;
   },
 };
 
