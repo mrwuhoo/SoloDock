@@ -30,12 +30,12 @@
 
   /**
    * @returns {null | { kind, icon, text, detail, tone, progress, target }}
-   *   target 是点击后要去的页面：home / recordings / todo / settings。
+   *   target 是点击后要去的地方：home / recordings / notices（通知中心）。
    */
   function pickNotchStatus(input = {}, now = Date.now()) {
     const needsYou = input.needsYou;
     if (needsYou && needsYou.title) {
-      return { kind: 'needs-you', icon: 'alert', text: needsYou.title, detail: '', tone: 'needs', progress: null, target: 'home' };
+      return { kind: 'needs-you', icon: 'alert', text: needsYou.title, detail: '', tone: 'needs', progress: null, target: 'notices' };
     }
 
     const recording = input.recording;

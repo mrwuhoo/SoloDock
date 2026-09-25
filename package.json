@@ -34,6 +34,7 @@
       "frame-store.js",
       "vault-lock.js",
       "reminder-rules.js",
+      "notice-store.js",
       "codex-usage.js",
       "reset-news.js",
       "platform.js",

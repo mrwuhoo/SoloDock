@@ -66,6 +66,7 @@ const {
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
 const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold } = require('./reminder-rules');
+const { createNoticeStore } = require('./notice-store');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
 
 // Keep the glass edition isolated from the official app so both builds can be
@@ -608,6 +609,67 @@ ipcMain.on('focus:state', (event, payload) => {
   }
 });
 
+// ============ 通知中心 ============
+let noticeStore = null;
+function getNoticeStore() {
+  if (!noticeStore) {
+    noticeStore = createNoticeStore({
+      file: path.join(app.getPath('userData'), 'notices.json'),
+      onChange: (summary) => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('notices:changed', summary);
+      },
+    });
+  }
+  return noticeStore;
+}
+
+// 按项目名找到对应的终端 / IDE 窗口并切到前台（提醒卡片与通知中心共用）。
+async function focusWindowForNotice(notice) {
+  if (!notice || !notice.project) return false;
+  const result = await scanCurrentWindows();
+  const target = (result.items || [])
+    .map((item) => ({ item, score: taskWindowMatchScore(notice, item) }))
+    .filter((candidate) => candidate.score > 0)
+    .sort((a, b) => b.score - a.score)[0]?.item;
+  if (!target) return false;
+  try {
+    return (await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true';
+  } catch (error) {
+    return false;
+  }
+}
+
+ipcMain.handle('notices:list', () => ({ items: getNoticeStore().list(), summary: getNoticeStore().summary() }));
+ipcMain.handle('notices:summary', () => getNoticeStore().summary());
+ipcMain.handle('notices:read-all', () => getNoticeStore().markAllRead());
+ipcMain.handle('notices:clear', () => { getNoticeStore().clear(); return true; });
+ipcMain.handle('notices:act', async (event, payload) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false };
+  const store = getNoticeStore();
+  const notice = store.get(String(payload && payload.id || ''));
+  if (!notice) return { ok: false, error: 'not_found' };
+  const action = String(payload && payload.action || '');
+  if (action === 'open') {
+    const focused = await focusWindowForNotice(notice);
+    if (focused) {
+      store.markHandled(notice.id);
+      if (notice.source === 'needs-you') clearNeedsYou(notice.agent || null);
+    }
+    return { ok: focused, error: focused ? undefined : 'window_not_found' };
+  }
+  if (action === 'todo-done') {
+    sendReminderAction('todo-done', notice);
+    store.markHandled(notice.id);
+    return { ok: true };
+  }
+  if (action === 'dismiss') {
+    store.markHandled(notice.id);
+    if (notice.source === 'needs-you') clearNeedsYou(notice.agent || null);
+    return { ok: true };
+  }
+  return { ok: false, error: 'invalid_action' };
+});
+
 function sendReminderAction(action, notification) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   mainWindow.webContents.send('reminder:action', { action, taskId: notification.taskId || '', source: notification.source });
@@ -627,6 +689,8 @@ async function handleTaskNotificationAction(eventId, actionId) {
   if (!notification.actions.some((item) => item.id === actionId)) return false;
   const now = Date.now();
   if (notification.source === 'needs-you' && actionId === 'open') clearNeedsYou();
+  // 在卡片上处理过就不算「错过」；「稍后提醒」还没处理。
+  if (!/snooze/.test(actionId)) getNoticeStore().markHandled(notification.eventId);
   switch (actionId) {
     case 'open':
       await activateActiveTaskNotification(eventId);
@@ -776,6 +840,8 @@ function enqueueTaskNotification(notification) {
     visibleMs: Number.isFinite(notification.visibleMs) ? notification.visibleMs : presentation.visibleMs,
     style: notification.style || presentation.style || 'standard',
   };
+
+  getNoticeStore().add(notification);
 
   // 完成记录只收 AI 任务完成（首页时间线的绿点），不收待办、日程、番茄钟与身体提醒。
   if (isAiSource(notification.source)) {
@@ -1804,6 +1870,7 @@ function publishNeedsYou() {
 
 function setNeedsYou(state) {
   if (needsYouTimer) clearTimeout(needsYouTimer);
+  if (noticeStore) noticeStore.flush();
   needsYouTimer = null;
   needsYouState = state;
   if (state) {
@@ -1814,6 +1881,7 @@ function setNeedsYou(state) {
 }
 
 function clearNeedsYou(agent = null) {
+  getNoticeStore().resolveNeedsYou(agent || '');
   if (!needsYouState || (agent && needsYouState.agent !== agent)) return;
   setNeedsYou(null);
 }
@@ -2457,7 +2525,10 @@ async function activateActiveTaskNotification(eventId = null) {
   if (!target) return false;
   try {
     const focused = (await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true';
-    if (focused) beginTaskNotificationDismiss();
+    if (focused) {
+      getNoticeStore().markHandled(notification.eventId);
+      beginTaskNotificationDismiss();
+    }
     return focused;
   } catch (error) {
     return false;
@@ -3854,6 +3925,7 @@ app.on('will-quit', () => {
   if (vaultLock) vaultLock.dispose();
   if (bodySampleTimer) clearInterval(bodySampleTimer);
   if (needsYouTimer) clearTimeout(needsYouTimer);
+  if (noticeStore) noticeStore.flush();
   if (focusFlushTimer) clearTimeout(focusFlushTimer);
   stopHoverSpaceShortcut();
   clearTaskNotificationTimers();

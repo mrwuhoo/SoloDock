@@ -91,7 +91,8 @@
     if (event.detail?.expanded && pendingTarget) {
       const target = pendingTarget;
       pendingTarget = '';
-      if (typeof window.setActiveTab === 'function') window.setActiveTab(target);
+      if (target === 'notices') window.NotchNoticeCenter?.open?.({ highlight: 'needs-you' });
+      else if (typeof window.setActiveTab === 'function') window.setActiveTab(target);
     }
     if (!event.detail?.expanded) tick();
   });

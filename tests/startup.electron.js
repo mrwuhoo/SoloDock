@@ -127,6 +127,11 @@ app.on('web-contents-created', (_event, contents) => {
       assert.equal(pomodoro.session, 300);
       await new Promise((resolve) => setTimeout(resolve, 700));
       assert.equal(globalShortcut.isRegistered('Control+Alt+Return'), false, 'and released once it is dismissed');
+      const notices = await contents.executeJavaScript('window.notchAPI.listNotices()');
+      const pomodoroNotice = notices.items.find((item) => item.source === 'pomodoro');
+      assert.equal(pomodoroNotice && pomodoroNotice.handled, true, 'the reminder is kept in the notice center, marked handled');
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      assert.equal(fs.existsSync(path.join(profile, 'notices.json')), true, 'notices are saved for 7 days');
       await contents.executeJavaScript(`document.getElementById('pomodoro-reset').click()`);
 
       // The collapsed notch grows 24pt downward for a status and keeps its 200pt width.

@@ -17,6 +17,19 @@ const known = {
   listFramePhotos: async () => [],
   scheduleReminders: async () => true,
   scheduleTodoReminders: async () => ({ ok: true }),
+  // Notice center: a tiny in-memory store the tests fill through window.__notices.
+  listNotices: async () => {
+    const items = window.__notices || [];
+    return { items, summary: { unread: items.filter((item) => !item.read).length, needsYou: items.filter((item) => item.source === 'needs-you' && !item.handled).length } };
+  },
+  readAllNotices: async () => { (window.__notices || []).forEach((item) => { item.read = true; }); window.__calls.push(['read-all']); return true; },
+  clearNotices: async () => { window.__notices = []; window.__calls.push(['clear']); return true; },
+  actOnNotice: async (id, action) => {
+    window.__calls.push(['act', id, action]);
+    const item = (window.__notices || []).find((entry) => entry.id === id);
+    if (item && action !== 'open') item.handled = true;
+    return { ok: action !== 'open' || Boolean(window.__openWorks), error: action === 'open' && !window.__openWorks ? 'window_not_found' : undefined };
+  },
 };
 window.notchAPI = new Proxy(known, {
   get(target, key) {

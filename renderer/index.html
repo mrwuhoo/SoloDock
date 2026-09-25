@@ -109,9 +109,24 @@
                 </svg>
                 <span class="tab-label">设置</span>
               </button>
+              <!-- 通知中心：找回错过的提醒；琥珀徽章表示有「需要你确认」的事。 -->
+              <button class="notice-bell" id="notice-bell" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="notice-center" aria-label="通知中心">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 16.5V11a5 5 0 0 1 10 0v5.5l1.5 1.5h-13Z"/><path d="M10.2 20.2a2 2 0 0 0 3.6 0"/></svg>
+                <span class="notice-badge" id="notice-badge" hidden></span>
+              </button>
             </div>
             <span class="tab-indicator" id="tab-indicator" aria-hidden="true"></span>
           </div>
+          <section class="notice-center" id="notice-center" role="dialog" aria-labelledby="notice-center-title" hidden>
+            <header class="notice-center-head">
+              <strong id="notice-center-title">通知</strong>
+              <span class="notice-center-meta" id="notice-center-meta"></span>
+              <button class="notice-center-link" id="notice-read-all" type="button">全部已读</button>
+              <button class="notice-center-link" id="notice-clear" type="button">清空</button>
+            </header>
+            <div class="notice-center-list" id="notice-center-list"></div>
+            <footer class="notice-center-foot">保留 7 天 · 错过的提醒都在这里</footer>
+          </section>
 
         </header>
 
@@ -798,6 +813,7 @@
     <script src="body-settings.js"></script>
     <script src="notch-status-domain.js"></script>
     <script src="notch-status.js"></script>
+    <script src="notice-center.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

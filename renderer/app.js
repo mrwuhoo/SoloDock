@@ -1092,7 +1092,7 @@ if (collapseBtn) {
 const topbarEl = document.querySelector('.topbar');
 if (topbarEl) {
   topbarEl.addEventListener('click', (e) => {
-    if (e.target.closest('.tabs, button, input')) return;
+    if (e.target.closest('.tabs, button, input, .notice-center')) return;
     e.stopPropagation();
     setMode(false);
   });
