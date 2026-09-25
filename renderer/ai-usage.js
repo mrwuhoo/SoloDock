@@ -84,7 +84,7 @@
 
   function openSettings() {
     get('tab-button-settings')?.click();
-    setTimeout(() => get('settings-ai-card')?.scrollIntoView({ block: 'nearest' }), 220);
+    setTimeout(() => { if (!window.NotchSettings?.reveal?.('settings-ai-card')) get('settings-ai-card')?.scrollIntoView({ block: 'nearest' }); }, 220);
   }
 
   function claudeColumn(subscription) {

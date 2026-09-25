@@ -663,146 +663,24 @@
           </section>
 
           <section id="tab-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-settings" aria-hidden="true" inert>
+            <!-- 设置：左侧分组导航，右侧一组一页；各卡片的内容与行为由各自模块负责。 -->
             <div class="settings-page" id="settings-page" aria-label="SoloDock 设置">
-              <div class="settings-column settings-column-primary">
-                <section class="tile settings-card settings-api-card">
+              <nav class="settings-nav tile" id="settings-nav" aria-label="设置分组">
+                <button type="button" data-settings-group="general" aria-pressed="true"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="6" width="16" height="12" rx="2.5"/><path d="M7.5 10h1M11.5 10h1M15.5 10h1M8 14h8"/></svg><span>常规</span></button>
+                <button type="button" data-settings-group="home" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 11 12 5l7.5 6"/><path d="M6.5 9.5V19h11V9.5"/></svg><span>首页</span></button>
+                <button type="button" data-settings-group="body" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5.5 18.5c0-7.5 5-12 13-12 0 8-4.5 13-12 13Z"/><path d="M5.5 18.5 13 11"/></svg><span>身体与作息</span></button>
+                <button type="button" data-settings-group="feat" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="6" height="6" rx="1.5"/><rect x="13.5" y="4.5" width="6" height="6" rx="1.5"/><rect x="4.5" y="13.5" width="6" height="6" rx="1.5"/><rect x="13.5" y="13.5" width="6" height="6" rx="1.5"/></svg><span>功能</span></button>
+                <button type="button" data-settings-group="ai" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2.5"/><path d="m8 10 2.5 2L8 14M12.5 14.5H16"/></svg><span>AI 与 API</span></button>
+                <button type="button" data-settings-group="privacy" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4 5.5 6.5V12c0 4 2.8 6.8 6.5 8 3.7-1.2 6.5-4 6.5-8V6.5Z"/></svg><span>隐私与安全</span></button>
+                <button type="button" data-settings-group="data" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6.5" rx="6.5" ry="2.5"/><path d="M5.5 6.5v11c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5v-11M5.5 12c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5"/></svg><span>数据</span></button>
+                <button type="button" data-settings-group="about" aria-pressed="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19.5s-7-4.3-7-9.5a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.2-7 9.5-7 9.5Z"/></svg><span>关于</span></button>
+              </nav>
+              <div class="settings-pane tile">
+                <header class="settings-pane-head"><h2 id="settings-pane-title">常规</h2><p id="settings-pane-desc"></p></header>
+                <div class="settings-pane-body" id="settings-pane-body">
+                <section data-settings-group="general" class="tile settings-card settings-device-card">
                   <div class="settings-card-heading">
-                    <div><span class="tile-label">智能能力</span><strong>API 配置</strong></div>
-                    <button class="workspace-button compact" id="settings-api-configure" type="button">配置或替换</button>
-                  </div>
-                  <div class="settings-status-list">
-                    <div><span>通义百炼实时转写</span><small id="settings-transcription-status" data-state="empty">未配置</small></div>
-                    <div><span>DeepSeek 智能命名</span><small id="settings-llm-status" data-state="empty">未配置</small></div>
-                  </div>
-                  <p>密钥由系统安全存储加密，仅在你主动查看或复制时解密。</p>
-                </section>
-
-                <section class="tile settings-card settings-features-card">
-                  <div class="settings-card-heading">
-                    <div><span class="tile-label">工作区</span><strong>显示功能</strong></div>
-                    <small>首页与设置始终显示</small>
-                  </div>
-                  <div class="settings-feature-grid" id="settings-feature-list">
-                    <label><span><b>待办</b><small>四象限任务</small></span><input type="checkbox" data-settings-feature="todo" aria-label="显示待办" /><i aria-hidden="true"></i></label>
-                    <label><span><b>笔记</b><small>随笔与资料库</small></span><input type="checkbox" data-settings-feature="notes" aria-label="显示笔记" /><i aria-hidden="true"></i></label>
-                    <label><span><b>链接</b><small>收藏与分组</small></span><input type="checkbox" data-settings-feature="links" aria-label="显示链接" /><i aria-hidden="true"></i></label>
-                    <label><span><b>录制</b><small>录音与转写</small></span><input type="checkbox" data-settings-feature="recordings" aria-label="显示录制" /><i aria-hidden="true"></i></label>
-                    <label><span><b>密钥</b><small>本机安全存储</small></span><input type="checkbox" data-settings-feature="credentials" aria-label="显示密钥" /><i aria-hidden="true"></i></label>
-                    <label><span><b>剪贴板</b><small>默认关闭</small></span><input type="checkbox" data-settings-feature="clip" aria-label="显示剪贴板" /><i aria-hidden="true"></i></label>
-                    <label><span><b>重置资讯</b><small>独立日历页面</small></span><input type="checkbox" data-settings-feature="resets" aria-label="显示重置资讯" /><i aria-hidden="true"></i></label>
-                    <label><span><b>时间</b><small>每天工作时长月历</small></span><input type="checkbox" data-settings-feature="time" aria-label="显示时间页" /><i aria-hidden="true"></i></label>
-                    <label><span><b>生活</b><small>运动、冥想、阅读的次数</small></span><input type="checkbox" data-settings-feature="life" aria-label="显示生活页" /><i aria-hidden="true"></i></label>
-                  </div>
-                </section>
-
-                <section class="tile settings-card settings-home-modules-card">
-                  <div class="settings-card-heading">
-                    <div><span class="tile-label">首页</span><strong>首页组件</strong></div>
-                    <small id="settings-home-module-status">隐藏后自动填充 · 至少保留一个</small>
-                  </div>
-                  <label class="settings-strip-toggle"><span><b>今天时间线</b><small>首页顶部的日程、截止、专注与 AI 完成</small></span><input type="checkbox" id="settings-today-strip" aria-label="显示今天时间线" /><i aria-hidden="true"></i></label>
-                  <div class="settings-home-module-grid" id="settings-home-module-list">
-                    <label><span><b>随笔记</b><small>首页快速记录</small></span><input type="checkbox" data-settings-home-module="note" aria-label="显示随笔记" /><i aria-hidden="true"></i></label>
-                    <label><span><b>今天</b><small>今天到期的待办</small></span><input type="checkbox" data-settings-home-module="today" aria-label="显示今天的待办" /><i aria-hidden="true"></i></label>
-                    <label><span><b>番茄钟</b><small>专注计时</small></span><input type="checkbox" data-settings-home-module="pomodoro" aria-label="显示番茄钟" /><i aria-hidden="true"></i></label>
-                    <label><span><b>订阅用量</b><small>AI 订阅额度与续费</small></span><input type="checkbox" data-settings-home-module="usage" aria-label="显示订阅用量" /><i aria-hidden="true"></i></label>
-                    <label><span><b>相框</b><small>你喜欢的照片</small></span><input type="checkbox" data-settings-home-module="mirror" aria-label="显示相框" /><i aria-hidden="true"></i></label>
-                    <label><span><b>快速录音</b><small data-home-module-setting-note="recorder">默认隐藏 · 录音与转写</small></span><input type="checkbox" data-settings-home-module="recorder" aria-label="显示快速录音" /><i aria-hidden="true"></i></label>
-                    <label><span><b>当前窗口</b><small>默认隐藏 · 使用时才申请权限</small></span><input type="checkbox" data-settings-home-module="windows" aria-label="显示当前窗口" /><i aria-hidden="true"></i></label>
-                  </div>
-                </section>
-              </div>
-
-              <div class="settings-column settings-column-secondary">
-                <section class="tile settings-card settings-ai-card" id="settings-ai-card" aria-labelledby="settings-ai-title">
-                  <div class="settings-card-heading"><div><span class="tile-label">AI 用量</span><strong id="settings-ai-title">订阅</strong></div><small>首页最多显示 3 个 · 用箭头调整顺序</small></div>
-                  <div class="ai-sub-list" id="ai-sub-list"></div>
-                  <form class="ai-sub-add" id="ai-sub-add" autocomplete="off">
-                    <input id="ai-sub-name" maxlength="16" placeholder="添加订阅，如 Grok" aria-label="订阅名称" />
-                    <input id="ai-sub-plan" maxlength="16" placeholder="套餐（可选）" aria-label="套餐" />
-                    <select id="ai-sub-day" aria-label="每月续费日"></select>
-                    <button class="workspace-button compact" type="submit">添加</button>
-                  </form>
-                  <p class="ai-sub-note">Codex 自动读取本机登录账号；Claude 通过 Claude Code 状态栏上报；其他订阅没有可读取的额度接口，只显示套餐和续费倒计时。</p>
-                </section>
-
-                <section class="tile settings-card settings-usage-card" id="settings-usage-card" tabindex="-1" aria-labelledby="settings-usage-title">
-                  <div class="settings-card-heading"><div><span class="tile-label">订阅</span><strong id="settings-usage-title">Codex 连接</strong></div><button class="workspace-button compact" id="codex-usage-refresh" type="button">连接并读取</button></div>
-                  <div class="usage-setting-row"><span>已连接账号</span><span id="usage-account">Codex · 未连接</span></div>
-                  <label class="usage-setting-row" for="usage-sync"><span>自动同步</span><select id="usage-sync"><option value="0">仅手动</option><option value="1">每 1 分钟</option><option value="5">每 5 分钟</option><option value="15">每 15 分钟</option></select></label>
-                  <div class="usage-setting-row"><span>公开动态源</span><button class="usage-text-button" id="usage-source" type="button">AIHOT · Tibo公开动态 <span aria-hidden="true">↗</span></button></div>
-                  <p id="codex-usage-status" role="status">使用本机 Codex 当前登录账号，无需填写密码。</p>
-                  <p id="codex-usage-updated"></p>
-                  <div id="usage-details" class="usage-details"></div>
-                  <small class="usage-config-note">自动同步仅在首页组件可见或查看此配置时进行。公开发卡消息以 AIHOT 标注为准，个人余额以账号返回为准。</small>
-                </section>
-
-                <section class="tile settings-card settings-body-card" id="settings-body-card">
-                  <div class="settings-card-heading">
-                    <div><span class="tile-label">提醒</span><strong>身体与作息</strong></div>
-                    <small>按真实使用电脑的时间计算</small>
-                  </div>
-                  <label class="settings-strip-toggle"><span><b>久坐提醒</b><small id="settings-body-sit-hint">连续用电脑 50 分钟，提醒起来活动</small></span><input type="checkbox" id="settings-body-sit" aria-label="久坐提醒" /><i aria-hidden="true"></i></label>
-                  <label class="settings-strip-toggle"><span><b>护眼提醒</b><small>每连续用 20 分钟，看看远处 20 秒（安静样式）</small></span><input type="checkbox" id="settings-body-eye" aria-label="护眼提醒" /><i aria-hidden="true"></i></label>
-                  <label class="settings-strip-toggle"><span><b>收工提醒</b><small id="settings-body-offwork-hint">22:30 还在用电脑时，提醒把剩下的挪到明天</small></span><input type="checkbox" id="settings-body-offwork" aria-label="收工提醒" /><i aria-hidden="true"></i></label>
-                  <div class="settings-frame-row">
-                    <label>久坐间隔<select id="settings-body-sit-minutes"><option value="30">30 分钟</option><option value="45">45 分钟</option><option value="50">50 分钟</option><option value="60">1 小时</option><option value="90">1.5 小时</option></select></label>
-                    <label>收工时间<input id="settings-body-offwork-time" type="time" /></label>
-                  </div>
-                  <label class="settings-strip-toggle"><span><b>记录工作时间</b><small>时间页的月历：只记在用电脑与专注的时间段，不记任何应用或内容</small></span><input type="checkbox" id="settings-body-worklog" aria-label="记录工作时间" /><i aria-hidden="true"></i></label>
-                  <div class="settings-body-worklog-row"><span>保留 13 个月，只存在本机</span><button class="workspace-button compact danger" id="settings-body-worklog-clear" type="button">清除记录</button></div>
-                  <p class="settings-body-note">离开电脑 5 分钟、锁屏或休眠都算休息过；番茄钟专注期间不打扰，结束后再提醒。</p>
-                </section>
-
-                <section class="tile settings-card settings-vault-card" id="settings-vault-card">
-                  <div class="settings-card-heading">
-                    <div><span class="tile-label">密钥</span><strong>密钥锁</strong></div>
-                    <small id="settings-vault-status">未开启</small>
-                  </div>
-                  <p class="settings-vault-hint" id="settings-vault-hint">防的是别人趁你离开时打开密钥页；密钥本身始终由系统钥匙串加密。忘记主密码可以用 Touch ID 或电脑登录密码重置，不会丢失任何密钥。</p>
-                  <label class="settings-strip-toggle"><span><b>开启密钥锁</b><small id="settings-vault-method">用 Touch ID 解锁</small></span><input type="checkbox" id="settings-vault-enabled" aria-label="开启密钥锁" /><i aria-hidden="true"></i></label>
-                  <div class="settings-frame-row">
-                    <label>自动锁定<select id="settings-vault-auto"><option value="1">1 分钟未使用</option><option value="5">5 分钟未使用</option><option value="10">10 分钟未使用</option><option value="30">30 分钟未使用</option><option value="60">1 小时未使用</option></select></label>
-                  </div>
-                  <div class="settings-vault-password">
-                    <div class="settings-vault-password-head"><span>主密码<small>备用解锁方式</small></span><b id="settings-vault-password-state">未设置</b><button class="workspace-button compact" id="settings-vault-password-edit" type="button">设置</button><button class="workspace-button compact danger" id="settings-vault-password-remove" type="button" hidden>移除</button></div>
-                    <form class="settings-vault-password-form" id="settings-vault-password-form" hidden>
-                      <input id="settings-vault-password-new" type="password" placeholder="至少 6 位" autocomplete="new-password" aria-label="新的主密码" />
-                      <input id="settings-vault-password-confirm" type="password" placeholder="再输入一次" autocomplete="new-password" aria-label="再次输入主密码" />
-                      <button class="workspace-button compact" id="settings-vault-password-cancel" type="button">取消</button>
-                      <button class="workspace-button compact primary" type="submit">保存</button>
-                    </form>
-                  </div>
-                  <p class="settings-vault-note" id="settings-vault-note" role="status" aria-live="polite"></p>
-                </section>
-
-                <section class="tile settings-card settings-frame-card" id="settings-frame-card">
-                  <div class="settings-card-heading">
-                    <div><span class="tile-label">首页</span><strong>相框</strong></div>
-                    <small id="settings-frame-count">0 / 50</small>
-                  </div>
-                  <p class="settings-frame-hint">放几张让你开心的照片：家人合照、想去的地方。照片复制进数据文件夹，只保存在本机；支持 PNG、JPG、WebP 与 HEIC。</p>
-                  <div class="settings-frame-row">
-                    <label>切换方式<select id="settings-frame-rotate"><option value="open">每次展开面板换一张</option><option value="daily">每天换一张</option></select></label>
-                    <button class="workspace-button compact primary" id="settings-frame-add" type="button">添加照片…</button>
-                  </div>
-                  <div class="settings-frame-grid" id="settings-frame-grid" role="listbox" aria-label="相框照片"></div>
-                  <div class="settings-frame-editor" id="settings-frame-editor" hidden>
-                    <img id="settings-frame-editor-thumb" alt="" draggable="false" />
-                    <div class="settings-frame-fields">
-                      <label>说明文字<input id="settings-frame-caption" maxlength="24" placeholder="如：京都，明年春天" autocomplete="off" /></label>
-                      <label>倒数日（可选）<input id="settings-frame-countdown" type="date" /></label>
-                    </div>
-                    <div class="settings-frame-actions">
-                      <button class="workspace-button compact" id="settings-frame-pin" type="button">固定这张</button>
-                      <button class="workspace-button compact danger" id="settings-frame-remove" type="button">移除</button>
-                    </div>
-                  </div>
-                </section>
-
-                <section class="tile settings-card settings-device-card">
-                  <div class="settings-card-heading">
-                    <div><span class="tile-label">这台电脑</span><strong>本机与唤出</strong></div>
+                    <div><span class="tile-label">唤出与面板</span><strong>快捷键与默认页</strong></div>
                   </div>
                   <div class="settings-device-row">
                     <div><span>唤出快捷键</span><strong id="settings-shortcut-value">Space</strong></div>
@@ -828,13 +706,6 @@
                       <option value="settings">设置</option>
                     </select>
                   </label>
-                  <div class="settings-device-row settings-workspace-row">
-                    <div><span>数据文件夹 · <em id="settings-workspace-kind">默认文件夹</em></span><strong id="settings-workspace-path">读取中…</strong></div>
-                    <span class="settings-device-actions">
-                      <button id="settings-workspace-open" type="button">打开文件夹</button>
-                      <button id="settings-workspace-choose" type="button">更换…</button>
-                    </span>
-                  </div>
                   <label class="settings-device-row settings-auto-launch-row">
                     <div><span>开机自动启动</span><strong>登录后自动运行 SoloDock</strong></div>
                     <input id="settings-auto-launch" type="checkbox" aria-label="开机自动启动" />
@@ -842,6 +713,170 @@
                   </label>
                   <p class="settings-inline-note" id="settings-inline-note" role="status" aria-live="polite"></p>
                 </section>
+                <section data-settings-group="home" class="tile settings-card settings-home-modules-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">首页</span><strong>首页组件</strong></div>
+                    <small id="settings-home-module-status">隐藏后自动填充 · 至少保留一个</small>
+                  </div>
+                  <label class="settings-strip-toggle"><span><b>今天时间线</b><small>首页顶部的日程、截止、专注与 AI 完成</small></span><input type="checkbox" id="settings-today-strip" aria-label="显示今天时间线" /><i aria-hidden="true"></i></label>
+                  <div class="settings-home-module-grid" id="settings-home-module-list">
+                    <label><span><b>随笔记</b><small>首页快速记录</small></span><input type="checkbox" data-settings-home-module="note" aria-label="显示随笔记" /><i aria-hidden="true"></i></label>
+                    <label><span><b>今天</b><small>今天到期的待办</small></span><input type="checkbox" data-settings-home-module="today" aria-label="显示今天的待办" /><i aria-hidden="true"></i></label>
+                    <label><span><b>番茄钟</b><small>专注计时</small></span><input type="checkbox" data-settings-home-module="pomodoro" aria-label="显示番茄钟" /><i aria-hidden="true"></i></label>
+                    <label><span><b>订阅用量</b><small>AI 订阅额度与续费</small></span><input type="checkbox" data-settings-home-module="usage" aria-label="显示订阅用量" /><i aria-hidden="true"></i></label>
+                    <label><span><b>相框</b><small>你喜欢的照片</small></span><input type="checkbox" data-settings-home-module="mirror" aria-label="显示相框" /><i aria-hidden="true"></i></label>
+                    <label><span><b>快速录音</b><small data-home-module-setting-note="recorder">默认隐藏 · 录音与转写</small></span><input type="checkbox" data-settings-home-module="recorder" aria-label="显示快速录音" /><i aria-hidden="true"></i></label>
+                    <label><span><b>当前窗口</b><small>默认隐藏 · 使用时才申请权限</small></span><input type="checkbox" data-settings-home-module="windows" aria-label="显示当前窗口" /><i aria-hidden="true"></i></label>
+                  </div>
+                </section>
+                <section data-settings-group="home" class="tile settings-card settings-frame-card" id="settings-frame-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">首页</span><strong>相框</strong></div>
+                    <small id="settings-frame-count">0 / 50</small>
+                  </div>
+                  <p class="settings-frame-hint">放几张让你开心的照片：家人合照、想去的地方。照片复制进数据文件夹，只保存在本机；支持 PNG、JPG、WebP 与 HEIC。</p>
+                  <div class="settings-frame-row">
+                    <label>切换方式<select id="settings-frame-rotate"><option value="open">每次展开面板换一张</option><option value="daily">每天换一张</option></select></label>
+                    <button class="workspace-button compact primary" id="settings-frame-add" type="button">添加照片…</button>
+                  </div>
+                  <div class="settings-frame-grid" id="settings-frame-grid" role="listbox" aria-label="相框照片"></div>
+                  <div class="settings-frame-editor" id="settings-frame-editor" hidden>
+                    <img id="settings-frame-editor-thumb" alt="" draggable="false" />
+                    <div class="settings-frame-fields">
+                      <label>说明文字<input id="settings-frame-caption" maxlength="24" placeholder="如：京都，明年春天" autocomplete="off" /></label>
+                      <label>倒数日（可选）<input id="settings-frame-countdown" type="date" /></label>
+                    </div>
+                    <div class="settings-frame-actions">
+                      <button class="workspace-button compact" id="settings-frame-pin" type="button">固定这张</button>
+                      <button class="workspace-button compact danger" id="settings-frame-remove" type="button">移除</button>
+                    </div>
+                  </div>
+                </section>
+                <section data-settings-group="body" class="tile settings-card settings-body-card" id="settings-body-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">提醒</span><strong>身体与作息</strong></div>
+                    <small>按真实使用电脑的时间计算</small>
+                  </div>
+                  <label class="settings-strip-toggle"><span><b>久坐提醒</b><small id="settings-body-sit-hint">连续用电脑 50 分钟，提醒起来活动</small></span><input type="checkbox" id="settings-body-sit" aria-label="久坐提醒" /><i aria-hidden="true"></i></label>
+                  <label class="settings-strip-toggle"><span><b>护眼提醒</b><small>每连续用 20 分钟，看看远处 20 秒（安静样式）</small></span><input type="checkbox" id="settings-body-eye" aria-label="护眼提醒" /><i aria-hidden="true"></i></label>
+                  <label class="settings-strip-toggle"><span><b>收工提醒</b><small id="settings-body-offwork-hint">22:30 还在用电脑时，提醒把剩下的挪到明天</small></span><input type="checkbox" id="settings-body-offwork" aria-label="收工提醒" /><i aria-hidden="true"></i></label>
+                  <div class="settings-frame-row">
+                    <label>久坐间隔<select id="settings-body-sit-minutes"><option value="30">30 分钟</option><option value="45">45 分钟</option><option value="50">50 分钟</option><option value="60">1 小时</option><option value="90">1.5 小时</option></select></label>
+                    <label>收工时间<input id="settings-body-offwork-time" type="time" /></label>
+                  </div>
+                  <label class="settings-strip-toggle"><span><b>记录工作时间</b><small>时间页的月历：只记在用电脑与专注的时间段，不记任何应用或内容</small></span><input type="checkbox" id="settings-body-worklog" aria-label="记录工作时间" /><i aria-hidden="true"></i></label>
+                  <div class="settings-body-worklog-row"><span>保留 13 个月，只存在本机</span><button class="workspace-button compact danger" id="settings-body-worklog-clear" type="button">清除记录</button></div>
+                  <p class="settings-body-note">离开电脑 5 分钟、锁屏或休眠都算休息过；番茄钟专注期间不打扰，结束后再提醒。</p>
+                </section>
+                <section data-settings-group="feat" class="tile settings-card settings-features-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">工作区</span><strong>显示功能</strong></div>
+                    <small>首页与设置始终显示</small>
+                  </div>
+                  <div class="settings-feature-grid" id="settings-feature-list">
+                    <label><span><b>待办</b><small>四象限任务</small></span><input type="checkbox" data-settings-feature="todo" aria-label="显示待办" /><i aria-hidden="true"></i></label>
+                    <label><span><b>笔记</b><small>随笔与资料库</small></span><input type="checkbox" data-settings-feature="notes" aria-label="显示笔记" /><i aria-hidden="true"></i></label>
+                    <label><span><b>链接</b><small>收藏与分组</small></span><input type="checkbox" data-settings-feature="links" aria-label="显示链接" /><i aria-hidden="true"></i></label>
+                    <label><span><b>录制</b><small>录音与转写</small></span><input type="checkbox" data-settings-feature="recordings" aria-label="显示录制" /><i aria-hidden="true"></i></label>
+                    <label><span><b>密钥</b><small>本机安全存储</small></span><input type="checkbox" data-settings-feature="credentials" aria-label="显示密钥" /><i aria-hidden="true"></i></label>
+                    <label><span><b>剪贴板</b><small>默认关闭</small></span><input type="checkbox" data-settings-feature="clip" aria-label="显示剪贴板" /><i aria-hidden="true"></i></label>
+                    <label><span><b>重置资讯</b><small>独立日历页面</small></span><input type="checkbox" data-settings-feature="resets" aria-label="显示重置资讯" /><i aria-hidden="true"></i></label>
+                    <label><span><b>时间</b><small>每天工作时长月历</small></span><input type="checkbox" data-settings-feature="time" aria-label="显示时间页" /><i aria-hidden="true"></i></label>
+                    <label><span><b>生活</b><small>运动、冥想、阅读的次数</small></span><input type="checkbox" data-settings-feature="life" aria-label="显示生活页" /><i aria-hidden="true"></i></label>
+                  </div>
+                </section>
+                <section data-settings-group="ai" class="tile settings-card settings-api-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">智能能力</span><strong>API 配置</strong></div>
+                    <button class="workspace-button compact" id="settings-api-configure" type="button">配置或替换</button>
+                  </div>
+                  <div class="settings-status-list">
+                    <div><span>通义百炼实时转写</span><small id="settings-transcription-status" data-state="empty">未配置</small></div>
+                    <div><span>DeepSeek 智能命名</span><small id="settings-llm-status" data-state="empty">未配置</small></div>
+                  </div>
+                  <p>密钥由系统安全存储加密，仅在你主动查看或复制时解密。</p>
+                </section>
+                <section data-settings-group="ai" class="tile settings-card settings-ai-card" id="settings-ai-card" aria-labelledby="settings-ai-title">
+                  <div class="settings-card-heading"><div><span class="tile-label">AI 用量</span><strong id="settings-ai-title">订阅</strong></div><small>首页最多显示 3 个 · 用箭头调整顺序</small></div>
+                  <div class="ai-sub-list" id="ai-sub-list"></div>
+                  <form class="ai-sub-add" id="ai-sub-add" autocomplete="off">
+                    <input id="ai-sub-name" maxlength="16" placeholder="添加订阅，如 Grok" aria-label="订阅名称" />
+                    <input id="ai-sub-plan" maxlength="16" placeholder="套餐（可选）" aria-label="套餐" />
+                    <select id="ai-sub-day" aria-label="每月续费日"></select>
+                    <button class="workspace-button compact" type="submit">添加</button>
+                  </form>
+                  <p class="ai-sub-note">Codex 自动读取本机登录账号；Claude 通过 Claude Code 状态栏上报；其他订阅没有可读取的额度接口，只显示套餐和续费倒计时。</p>
+                </section>
+                <section data-settings-group="ai" class="tile settings-card settings-usage-card" id="settings-usage-card" tabindex="-1" aria-labelledby="settings-usage-title">
+                  <div class="settings-card-heading"><div><span class="tile-label">订阅</span><strong id="settings-usage-title">Codex 连接</strong></div><button class="workspace-button compact" id="codex-usage-refresh" type="button">连接并读取</button></div>
+                  <div class="usage-setting-row"><span>已连接账号</span><span id="usage-account">Codex · 未连接</span></div>
+                  <label class="usage-setting-row" for="usage-sync"><span>自动同步</span><select id="usage-sync"><option value="0">仅手动</option><option value="1">每 1 分钟</option><option value="5">每 5 分钟</option><option value="15">每 15 分钟</option></select></label>
+                  <div class="usage-setting-row"><span>公开动态源</span><button class="usage-text-button" id="usage-source" type="button">AIHOT · Tibo公开动态 <span aria-hidden="true">↗</span></button></div>
+                  <p id="codex-usage-status" role="status">使用本机 Codex 当前登录账号，无需填写密码。</p>
+                  <p id="codex-usage-updated"></p>
+                  <div id="usage-details" class="usage-details"></div>
+                  <small class="usage-config-note">自动同步仅在首页组件可见或查看此配置时进行。公开发卡消息以 AIHOT 标注为准，个人余额以账号返回为准。</small>
+                </section>
+                <section data-settings-group="privacy" class="tile settings-card settings-vault-card" id="settings-vault-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">密钥</span><strong>密钥锁</strong></div>
+                    <small id="settings-vault-status">未开启</small>
+                  </div>
+                  <p class="settings-vault-hint" id="settings-vault-hint">防的是别人趁你离开时打开密钥页；密钥本身始终由系统钥匙串加密。忘记主密码可以用 Touch ID 或电脑登录密码重置，不会丢失任何密钥。</p>
+                  <label class="settings-strip-toggle"><span><b>开启密钥锁</b><small id="settings-vault-method">用 Touch ID 解锁</small></span><input type="checkbox" id="settings-vault-enabled" aria-label="开启密钥锁" /><i aria-hidden="true"></i></label>
+                  <div class="settings-frame-row">
+                    <label>自动锁定<select id="settings-vault-auto"><option value="1">1 分钟未使用</option><option value="5">5 分钟未使用</option><option value="10">10 分钟未使用</option><option value="30">30 分钟未使用</option><option value="60">1 小时未使用</option></select></label>
+                  </div>
+                  <div class="settings-vault-password">
+                    <div class="settings-vault-password-head"><span>主密码<small>备用解锁方式</small></span><b id="settings-vault-password-state">未设置</b><button class="workspace-button compact" id="settings-vault-password-edit" type="button">设置</button><button class="workspace-button compact danger" id="settings-vault-password-remove" type="button" hidden>移除</button></div>
+                    <form class="settings-vault-password-form" id="settings-vault-password-form" hidden>
+                      <input id="settings-vault-password-new" type="password" placeholder="至少 6 位" autocomplete="new-password" aria-label="新的主密码" />
+                      <input id="settings-vault-password-confirm" type="password" placeholder="再输入一次" autocomplete="new-password" aria-label="再次输入主密码" />
+                      <button class="workspace-button compact" id="settings-vault-password-cancel" type="button">取消</button>
+                      <button class="workspace-button compact primary" type="submit">保存</button>
+                    </form>
+                  </div>
+                  <p class="settings-vault-note" id="settings-vault-note" role="status" aria-live="polite"></p>
+                </section>
+                <section data-settings-group="privacy" class="tile settings-card settings-cloud-card" id="settings-cloud-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">知情</span><strong>哪些数据会离开这台电脑</strong></div>
+                  </div>
+                  <ul class="settings-cloud-list">
+                    <li><b>实时转写</b><span>配置后，录音时把音频流发送到阿里云百炼（DashScope），用来实时转文字。</span></li>
+                    <li><b>智能命名</b><span>配置后，把笔记或录音转写的文字（最多 8000 字）发给你设置的模型服务（默认 DeepSeek），用来起标题和分组。</span></li>
+                    <li><b>链接标题</b><span>收藏链接时访问那个网址本身，读取标题和图标；本机和内网地址会被拒绝。</span></li>
+                    <li><b>AI 用量</b><span>Codex 用量由本机已安装的 Codex 读取，SoloDock 不读取它的登录凭据；Claude 用量来自 Claude Code 状态栏发到本机的数据。</span></li>
+                    <li><b>重置资讯</b><span>开启后，从公开网页读取各家 AI 服务的额度重置时间。</span></li>
+                    <li><b>其余一律只在本机</b><span>待办、笔记、链接、剪贴板、生活记录、工作时间、密钥都不上传，也没有统计与埋点。</span></li>
+                  </ul>
+                </section>
+                <section data-settings-group="data" class="tile settings-card settings-data-card" id="settings-data-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">本机</span><strong>数据文件夹</strong></div>
+                  </div>
+                  <div class="settings-device-row settings-workspace-row">
+                    <div><span>数据文件夹 · <em id="settings-workspace-kind">默认文件夹</em></span><strong id="settings-workspace-path">读取中…</strong></div>
+                    <span class="settings-device-actions">
+                      <button id="settings-workspace-open" type="button">打开文件夹</button>
+                      <button id="settings-workspace-choose" type="button">更换…</button>
+                    </span>
+                  </div>
+                  <p class="settings-card-note">待办、笔记、链接、生活记录、工作时间和录音都保存在这个文件夹里；换一台电脑时把它拷过去即可。密钥由系统钥匙串加密，不能跨电脑迁移。</p>
+                </section>
+                <section data-settings-group="about" class="tile settings-card settings-about-card" id="settings-about-card">
+                  <div class="settings-card-heading">
+                    <div><span class="tile-label">SoloDock</span><strong>一人公司最好的伙伴</strong></div>
+                    <small id="settings-about-version"></small>
+                  </div>
+                  <p class="settings-card-note">工作时管理精力，工作之外养成好习惯。它待在主要工作旁边，一眼看完、一两步做完，然后回去工作。</p>
+                  <div class="settings-about-links">
+                    <button class="workspace-button compact" type="button" data-settings-link="https://github.com/mrwuhoo/SoloDock">项目主页</button>
+                    <button class="workspace-button compact" type="button" data-settings-link="https://github.com/mrwuhoo/SoloDock/issues">反馈问题</button>
+                  </div>
+                  <p class="settings-card-note">基于 xiaopu-ai/TO-DO-Panel 开发 · MIT License</p>
+                </section>
+                </div>
               </div>
             </div>
           </section>
@@ -921,6 +956,7 @@
     <script src="notes-page.js"></script>
     <script src="links-domain.js"></script>
     <script src="links-page.js"></script>
+    <script src="settings-nav.js"></script>
     <script src="workspace.js"></script>
     <script src="prompts.js"></script>
     <script src="reset-news.js"></script>

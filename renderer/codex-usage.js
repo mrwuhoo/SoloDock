@@ -35,7 +35,7 @@
   tile.querySelector('.usage-configure').addEventListener('click', () => {
     get('tab-button-settings').click();
     setTimeout(() => {
-      get('settings-usage-card').scrollIntoView({ block: 'nearest', behavior: 'instant' });
+      if (!window.NotchSettings?.reveal?.('settings-usage-card', { behavior: 'instant' })) get('settings-usage-card').scrollIntoView({ block: 'nearest', behavior: 'instant' });
       refresh.focus({ preventScroll: true });
     }, 220);
   });

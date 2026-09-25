@@ -170,7 +170,7 @@
     if (action === 'add') addPhotos();
     if (action === 'settings') {
       window.setActiveTab?.('settings');
-      requestAnimationFrame(() => get('settings-frame-card')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+      requestAnimationFrame(() => { if (!window.NotchSettings?.reveal?.('settings-frame-card')) get('settings-frame-card')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
     }
   });
   menu.addEventListener('keydown', (event) => {

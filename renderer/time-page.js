@@ -276,7 +276,7 @@
 
   const openBodySettings = () => {
     window.setActiveTab?.('settings');
-    requestAnimationFrame(() => get('settings-body-card')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }));
+    requestAnimationFrame(() => { if (!window.NotchSettings?.reveal?.('settings-body-card')) get('settings-body-card')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); });
   };
   get('time-privacy').addEventListener('click', openBodySettings);
   get('time-metrics').addEventListener('click', (event) => {

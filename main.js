@@ -1602,6 +1602,7 @@ function publicAppSettings() {
     autoLaunch: isAutoLaunchEnabled(),
     body: readStoredBodySettings(),
     captureShortcutRegistered: captureShortcutRegistered,
+    version: app.getVersion(),
   };
 }
 

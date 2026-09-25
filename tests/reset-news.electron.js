@@ -35,10 +35,11 @@ app.whenReady().then(async () => {
     const sourceLink = external;
     await setActiveTab('settings');
     await new Promise((resolve) => setTimeout(resolve, 40));
-    const page = document.getElementById('settings-page');
-    const left = page.querySelector('.settings-column-primary');
-    const right = page.querySelector('.settings-column-secondary');
-    const scroll = {pageOverflow:getComputedStyle(page).overflowY,leftOverflow:getComputedStyle(left).overflowY,rightOverflow:getComputedStyle(right).overflowY,pageCanScroll:page.scrollHeight>page.clientHeight};
+    // Settings: one group at a time; the group's content scrolls inside its own pane.
+    window.NotchSettings.select('ai');
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    const body = document.getElementById('settings-pane-body');
+    const scroll = {bodyOverflow:getComputedStyle(body).overflowY,bodyCanScroll:body.scrollHeight>body.clientHeight};
     return {usageInHome,usageInFeatures,active,forecast,detail,sourceLink,scroll};
   })()`);
   assert.equal(result.usageInHome, true);
@@ -47,7 +48,7 @@ app.whenReady().then(async () => {
   assert.equal(result.forecast, true);
   assert.match(result.detail, /重置卡已发放/);
   assert.equal(result.sourceLink, 'https://x.com/thsottiaux/status/1');
-  assert.deepEqual(result.scroll, {pageOverflow:'auto',leftOverflow:'visible',rightOverflow:'visible',pageCanScroll:true});
+  assert.deepEqual(result.scroll, {bodyOverflow:'auto',bodyCanScroll:true});
   assert.deepEqual(errors, []);
   if (process.env.SOLODOCK_RESET_SCREENSHOT) {
     await win.webContents.executeJavaScript("setActiveTab('resets')");

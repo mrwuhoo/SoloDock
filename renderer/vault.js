@@ -202,7 +202,7 @@
     window.setActiveTab?.('settings');
     els.settingsPasswordForm.hidden = false;
     requestAnimationFrame(() => {
-      get('settings-vault-card')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      if (!window.NotchSettings?.reveal?.('settings-vault-card')) get('settings-vault-card')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       els.settingsPasswordNew.focus();
     });
   }
