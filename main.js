@@ -60,6 +60,7 @@ const {
   concealedClipboardFormats,
   createSecretClipboardTracker,
   windowsHelloScript,
+  credentialEnvName,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
@@ -2481,13 +2482,18 @@ ipcMain.handle('vault:configure', (event, options) => {
 ipcMain.handle('vault:dismiss-setup', () => getVaultLock().dismissSetup());
 ipcMain.handle('vault:reset-password', () => getVaultLock().resetPasswordWithSystem());
 
+// 发给页面的条目永远不含密码本身。
 function publicCredential(item) {
   return {
     id: item.id,
+    kind: item.kind === 'apikey' ? 'apikey' : 'password',
     service: item.service,
     account: item.account,
+    url: item.url || '',
+    note: item.note || '',
     passwordMask: '**********',
     createdAt: item.createdAt,
+    lastUsedAt: item.lastUsedAt || 0,
   };
 }
 
@@ -2512,8 +2518,11 @@ ipcMain.handle('credentials:save', (event, payload) => {
   if (!safeStorage.isEncryptionAvailable()) return { ok: false, error: 'secure_storage_unavailable' };
   const rows = readCredentialsVault();
   const existing = payload && payload.id ? rows.find((item) => item.id === payload.id) : null;
+  const source = existing
+    ? { ...payload, password: String(payload && payload.password || '') || existing.password, lastUsedAt: existing.lastUsedAt }
+    : payload;
   const normalized = normalizeCredentialInput(
-    existing && !String(payload && payload.password || '') ? { ...payload, password: existing.password } : payload,
+    source,
     existing ? existing.id : crypto.randomUUID(),
     existing ? existing.createdAt : Date.now()
   );
@@ -2536,16 +2545,22 @@ ipcMain.handle('credentials:delete-many', (event, ids) => {
   return { ok: true, deleted: rows.length - next.length };
 });
 
+// field：account / password / env（KEY=value，按机密内容写入）/ url。复制即记为最近使用。
 ipcMain.handle('credentials:copy', async (event, payload) => {
   const id = String(payload && payload.id || '');
-  const field = payload && payload.field === 'password' ? 'password' : payload && payload.field === 'account' ? 'account' : '';
+  const field = ['account', 'password', 'env', 'url'].includes(payload && payload.field) ? payload.field : '';
   if (!id || !field) return false;
   if (!vaultAccessAllowed()) return false;
-  const item = readCredentialsVault().find((row) => row.id === id);
+  const rows = readCredentialsVault();
+  const item = rows.find((row) => row.id === id);
   if (!item) return false;
-  const value = item[field];
-  if (field === 'password') await writeSecretToClipboard(value);
-  else await clipboard.writeText(value);
+  if (field === 'password') await writeSecretToClipboard(item.password);
+  else if (field === 'env') await writeSecretToClipboard(`${credentialEnvName(item)}=${item.password}`);
+  else if (field === 'url') {
+    if (!item.url) return false;
+    await clipboard.writeText(item.url);
+  } else await clipboard.writeText(item.account);
+  writeCredentialsVault(rows.map((row) => (row.id === id ? { ...row, lastUsedAt: Date.now() } : row)));
   return true;
 });
 

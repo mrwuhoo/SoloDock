@@ -293,19 +293,50 @@ function taskNotificationIdentity(payload, source = 'task') {
   };
 }
 
+// 环境变量名：用于「复制为 KEY=value」。
+const ENV_NAME = /^[A-Z_][A-Z0-9_]{0,63}$/;
+
+// 由名称推一个变量名：「OpenAI」→ OPENAI_API_KEY，「GITHUB_TOKEN」保持不变，没有英文字母时用 API_KEY。
+function deriveEnvName(service) {
+  const words = String(service || '').toUpperCase().match(/[A-Z0-9]+/g) || [];
+  const base = words.join('_').replace(/^(\d)/, '_$1');
+  if (!base) return 'API_KEY';
+  if (/(^|_)(KEY|TOKEN|SECRET)$/.test(base)) return base.slice(0, 64);
+  if (/(^|_)API$/.test(base)) return `${base}_KEY`.slice(0, 64);
+  return `${base}_API_KEY`.slice(0, 64);
+}
+
+// API Key 条目的「账号」就是变量名（旧版本读到的仍是完整条目，降级不会丢数据）。
+function credentialEnvName(item) {
+  const account = String(item && item.account || '').trim();
+  return ENV_NAME.test(account) ? account : deriveEnvName(item && item.service);
+}
+
+// v0.2 起条目分「密码」与「API Key」两类，并可带网址、备注；旧条目按「密码」读取，无需迁移。
 function normalizeCredentialInput(value, id, createdAt) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const clean = (text, limit) => Array.from(String(text || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim())
+    .slice(0, limit).join('');
+  const kind = value.kind === 'apikey' ? 'apikey' : 'password';
   const service = String(value.service || '').replace(/\s+/g, ' ').trim().slice(0, 80);
-  const account = String(value.account || '').trim().slice(0, 320);
+  let account = String(value.account || '').trim().slice(0, 320);
   const password = typeof value.password === 'string' ? value.password.slice(0, 4096) : '';
-  if (!service || !account || !password) return null;
-  return {
+  if (!service || !password || (kind === 'password' && !account)) return null;
+  if (kind === 'apikey') account = credentialEnvName({ service, account: account.toUpperCase() });
+  const row = {
     id: String(id || value.id || `credential-${Date.now().toString(36)}`),
     service,
     account,
     password,
     createdAt: Number.isFinite(createdAt) ? createdAt : Number.isFinite(value.createdAt) ? value.createdAt : Date.now(),
   };
+  if (kind === 'apikey') row.kind = 'apikey';
+  const url = clean(value.url, 400);
+  const note = clean(value.note, 500);
+  if (url) row.url = url;
+  if (note) row.note = note;
+  if (Number(value.lastUsedAt) > 0) row.lastUsedAt = Number(value.lastUsedAt);
+  return row;
 }
 
 function parseSmartLinkMetadata(value) {
@@ -630,6 +661,8 @@ function framePhotoSize(size, maxEdge) {
 }
 
 module.exports = {
+  deriveEnvName,
+  credentialEnvName,
   windowsHelloScript,
   concealedClipboardFormats,
   createSecretClipboardTracker,

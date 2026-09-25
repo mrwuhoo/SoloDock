@@ -115,7 +115,8 @@ test('tabs sit in two groups on either side of the notch, ordered by weight', ()
 test('Electron 44 clipboard reads are awaited and vault copies are marked concealed', () => {
   // clipboard.readText() returns a Promise in Electron 44; wrapping it in String() yielded "[object Promise]".
   assert.doesNotMatch(mainJs, /String\(clipboard\.readText\(\)/);
-  assert.match(mainJs, /if \(field === 'password'\) await writeSecretToClipboard\(value\)/);
+  assert.match(mainJs, /if \(field === 'password'\) await writeSecretToClipboard\(item\.password\)/);
+  assert.match(mainJs, /else if \(field === 'env'\) await writeSecretToClipboard\(`\$\{credentialEnvName\(item\)\}=\$\{item\.password\}`\)/, 'KEY=value is concealed too');
   assert.match(mainJs, /secretClipboard\.matches\(text\)\) return;/, 'the history poller skips a just-copied password');
   assert.match(mainJs, /getVaultLock\(\)\.lock\(eventName\);\s+void clearSecretFromClipboard\(\);/, 'screen lock and sleep lock the vault and clear a copied password');
 });

@@ -379,22 +379,57 @@
     });
   }
 
+  // 搜索名称、账号（API Key 的变量名）与网址，从不搜索密码。
   function filterCredentials(items, query) {
     const rows = Array.isArray(items) ? items : [];
     const keyword = String(query || '').trim().toLocaleLowerCase();
     if (!keyword) return [...rows];
     return rows.filter((item) => (
-      `${String(item && item.service || '')}\n${String(item && item.account || '')}`
+      `${String(item && item.service || '')}\n${String(item && item.account || '')}\n${String(item && item.url || '')}`
         .toLocaleLowerCase()
         .includes(keyword)
     ));
+  }
+
+  // 最近用过的排在前面，其次按新增时间。
+  function sortCredentials(items) {
+    return (Array.isArray(items) ? items : []).slice().sort((left, right) => (
+      (Number(right && right.lastUsedAt) || 0) - (Number(left && left.lastUsedAt) || 0)
+      || (Number(right && right.createdAt) || 0) - (Number(left && left.createdAt) || 0)
+    ));
+  }
+
+  // 与 main-services.js 的 deriveEnvName 同一套规则（测试里比对两边结果）。
+  function deriveEnvName(service) {
+    const words = String(service || '').toUpperCase().match(/[A-Z0-9]+/g) || [];
+    const base = words.join('_').replace(/^(\d)/, '_$1');
+    if (!base) return 'API_KEY';
+    if (/(^|_)(KEY|TOKEN|SECRET)$/.test(base)) return base.slice(0, 64);
+    if (/(^|_)API$/.test(base)) return `${base}_KEY`.slice(0, 64);
+    return `${base}_API_KEY`.slice(0, 64);
+  }
+
+  // 密码生成器：默认 20 位，选中的每类字符至少出现一次。randomInt(max) 返回 [0, max) 的整数。
+  function generatePassword(options = {}, randomInt) {
+    const length = Math.max(8, Math.min(64, Math.round(Number(options.length) || 20)));
+    const pools = ['ABCDEFGHJKLMNPQRSTUVWXYZ', 'abcdefghijkmnopqrstuvwxyz', '23456789'];
+    if (options.symbols !== false) pools.push('!@#$%^&*-_=+?');
+    const all = pools.join('');
+    const pick = (text) => text[randomInt(text.length)];
+    const chars = pools.map(pick);
+    while (chars.length < length) chars.push(pick(all));
+    for (let index = chars.length - 1; index > 0; index -= 1) {
+      const swap = randomInt(index + 1);
+      [chars[index], chars[swap]] = [chars[swap], chars[index]];
+    }
+    return chars.join('');
   }
 
   function credentialRowAction(options = {}) {
     if (options.requestedAction === 'delete') {
       return { type: 'delete', label: '删除', ariaLabel: '删除密钥' };
     }
-    if (options.copyField === 'account' || options.copyField === 'password') {
+    if (['account', 'password', 'env', 'url'].includes(options.copyField)) {
       return { type: 'copy', field: options.copyField };
     }
     if (options.rowBody && !options.shiftKey && !options.selected) return { type: 'edit' };
@@ -1011,6 +1046,9 @@
     updateTodo,
     sortTodosForDisplay,
     filterCredentials,
+    sortCredentials,
+    deriveEnvName,
+    generatePassword,
     credentialRowAction,
     visiblePanelTabs,
     resolveDefaultPanelTab,

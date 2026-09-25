@@ -462,11 +462,25 @@
             <div class="credentials-page">
               <section class="tile credentials-form-card">
                 <div class="credentials-heading"><div><span class="tile-label">新增密钥</span><strong>仅保存在本机</strong></div><span class="secure-chip">安全存储</span></div>
-                <label><span>软件 / 服务</span><input id="credential-service" maxlength="80" placeholder="例如 GitHub" autocomplete="off" /></label>
-                <label><span>账号</span><input id="credential-account" maxlength="320" placeholder="邮箱、用户名或手机号" autocomplete="off" /></label>
-                <label><span>密码 / Token</span><span class="credential-secret"><input id="credential-password" type="password" maxlength="4096" placeholder="保存后才会加密" autocomplete="new-password" spellcheck="false" /><button class="credential-reveal" type="button" data-reveal-for="credential-password" aria-pressed="false" aria-label="显示密码 10 秒">显示</button></span></label>
+                <div class="credential-kind" role="radiogroup" aria-label="类型">
+                  <button type="button" role="radio" aria-checked="true" data-credential-kind="password">密码</button>
+                  <button type="button" role="radio" aria-checked="false" data-credential-kind="apikey">API Key</button>
+                </div>
+                <label><span>名称</span><input id="credential-service" maxlength="80" placeholder="例如 GitHub" autocomplete="off" /></label>
+                <label><span id="credential-account-label">账号</span><input id="credential-account" maxlength="320" placeholder="邮箱、用户名或手机号" autocomplete="off" /></label>
+                <label><span id="credential-password-label">密码</span><span class="credential-secret"><input id="credential-password" type="password" maxlength="4096" placeholder="保存后才会加密" autocomplete="new-password" spellcheck="false" /><button class="credential-generate" id="credential-generate" type="button" aria-label="生成一个强密码">生成</button><button class="credential-reveal" type="button" data-reveal-for="credential-password" aria-pressed="false" aria-label="显示密码 10 秒">显示</button></span></label>
+                <div class="credential-generator" id="credential-generator" hidden>
+                  <label>长度<select id="credential-generator-length" aria-label="密码长度"><option value="12">12</option><option value="16">16</option><option value="20" selected>20</option><option value="24">24</option><option value="32">32</option></select></label>
+                  <label><input id="credential-generator-symbols" type="checkbox" checked />含符号</label>
+                  <button id="credential-generator-again" type="button">换一个</button>
+                </div>
+                <details class="credential-more">
+                  <summary>网址与备注</summary>
+                  <label><span>网址</span><input id="credential-url" maxlength="400" placeholder="https://" autocomplete="off" spellcheck="false" /></label>
+                  <label><span>备注</span><input id="credential-note" maxlength="500" placeholder="可选" autocomplete="off" /></label>
+                </details>
                 <button class="workspace-button primary credential-save" id="credential-save" type="button">保存</button>
-                <p class="credentials-note" id="credentials-note">密码不会发送到页面存储，复制后 60 秒自动清空剪贴板。</p>
+                <p class="credentials-note" id="credentials-note">只保存在本机；复制的密码不进剪贴板历史，60 秒后自动清除。</p>
               </section>
               <section class="tile credentials-library">
                 <div class="vault-setup" id="vault-setup" hidden>
@@ -475,7 +489,7 @@
                   <button class="workspace-button compact primary" id="vault-setup-enable" type="button">开启</button>
                   <button class="workspace-button compact" id="vault-setup-later" type="button">以后再说</button>
                 </div>
-                <div class="credentials-library-head"><div><span class="tile-label">账号密码</span><strong id="credential-count">0 项</strong></div><div class="credentials-library-actions"><input id="credential-search" type="search" placeholder="搜索名称或账号" aria-label="搜索密钥" autocomplete="off" /><button class="bulk-delete" id="credential-bulk-delete" type="button" hidden>删除</button><span class="vault-auto-lock" id="vault-auto-lock" hidden></span><button class="vault-lock-now" id="vault-lock-now" type="button" hidden title="立即锁定（⌘L）" aria-label="立即锁定"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg>锁定</button></div></div>
+                <div class="credentials-library-head"><div><span class="tile-label">账号密码</span><strong id="credential-count">0 项</strong></div><div class="credentials-library-actions"><input id="credential-search" type="search" placeholder="搜索名称、账号或网址" aria-label="搜索密钥" autocomplete="off" /><button class="bulk-delete" id="credential-bulk-delete" type="button" hidden>删除</button><span class="vault-auto-lock" id="vault-auto-lock" hidden></span><button class="vault-lock-now" id="vault-lock-now" type="button" hidden title="立即锁定（⌘L）" aria-label="立即锁定"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" /></svg>锁定</button></div></div>
                 <div class="credential-list" id="credential-list"></div>
               </section>
             </div>

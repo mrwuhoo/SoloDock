@@ -49,6 +49,7 @@
 - 待办：2 × 2 布局，一次回车新增，颜色为红 / 橙 / 绿 / 蓝。内部存储键仍是 `P0`–`P3`（`notch-todo-data` 结构不可变更），但界面显示名默认「课程 / 自媒体&写作 / Vibe coding / 日常」且用户可改名（存 `notch-todo-category-names-v1`）；截止时间默认当天 23:30，到期前一小时提醒
 - 剪贴板：默认关闭（`DEFAULT_FEATURES.clip = false`），可在菜单栏「显示功能」中启用。历史记录由主进程轮询采集，不再占用任何全局快捷键（见 `clipboardServicePolicy`）
 - 密钥锁（方案 A，`vault-lock.js`）：Touch ID（`systemPreferences.promptTouchID`，指纹不可用时系统会让输入登录密码）/ Windows Hello（PowerShell 调 WinRT `UserConsentVerifier`，脚本见 `windowsHelloScript`）解锁，主密码只存 scrypt 哈希（`userData/vault-lock.json`）。数据仍由 safeStorage 加密，忘记主密码靠系统验证重置，绝不能因此丢数据。锁状态只在内存，启动即锁定；N 分钟未使用（1/5/10/30/60，默认 10）、锁屏、休眠自动锁定，锁定时清掉 SoloDock 写入的密码。主密码连续错 5 次冷却 30 秒。系统验证弹窗期间用 `withSystemInteraction` 防止面板失焦收起。
+- 密钥条目：`kind` 为 `password`（默认，旧条目）或 `apikey`；可选 `url`、`note`、`lastUsedAt`。API Key 的变量名存在 `account`（`credentialEnvName` / `deriveEnvName`，渲染层 `NotchDomain.deriveEnvName` 与之同规则），这样旧版本仍能读出完整条目。复制字段：`account` / `password` / `env`（KEY=value，机密写入）/ `url`。
 - 机密内容：带 `org.nspasteboard.ConcealedType` / `TransientType`（macOS）或 `ExcludeClipboardContentFromMonitorProcessing`（Windows）标记的内容一律不记录、不读取文字。密钥页复制密码时用 `writeSecretToClipboard` 写入这些标记（Windows 另写 `CanIncludeInClipboardHistory` / `CanUploadToCloudClipboard` = 0），主进程只保留哈希；60 秒后、锁屏或休眠时、退出前，若剪贴板仍是该密码就清除。Windows 标记尚待实机验证。
 - 链接：只允许公开 http/https；主进程抓取标题时必须阻止本机、内网与不安全重定向
 - 录制：音频写入 `userData/recordings/`，转写与元数据保存在 LocalStorage；可选百炼 Qwen3-ASR 实时转写，API Key 必须经 `safeStorage` 加密或环境变量读取
@@ -90,6 +91,7 @@
 - NEVER 把剪贴板图片 dataURL 存入 LocalStorage
 - NEVER 用 `clipboard.writeText` 复制密码或令牌，必须走 `writeSecretToClipboard`
 - NEVER 在 `vaultAccessAllowed()` 之外读写密钥库；新增的密钥接口必须先过这道锁检查
+- NEVER 把密码或 API Key 本身发给渲染层列表（`publicCredential` 只给遮蔽值）；只有编辑时的 `credentials:get` 返回明文
 - NEVER 提交 `node_modules` 或 `dist`
 - NEVER 在没有用户确认时打包或发布桌面应用
 
