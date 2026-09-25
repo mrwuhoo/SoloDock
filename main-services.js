@@ -207,9 +207,12 @@ function normalizeWindowRows(rows) {
     ) === index);
 }
 
+// 提醒提前量：待办自己的 remindMin（-1 不提醒、0 准时、N 分钟）；旧待办没有这一项时用 leadMs（默认 1 小时）。
 function todoReminderState(todo, now = Date.now(), leadMs = 60 * 60 * 1000) {
   if (!todo || typeof todo !== 'object') return { state: 'invalid', delayMs: 0 };
   if (todo.done === true) return { state: 'done', delayMs: 0 };
+  if (todo.remindMin === -1) return { state: 'off', delayMs: 0 };
+  if (Number.isInteger(todo.remindMin) && todo.remindMin >= 0) leadMs = todo.remindMin * 60 * 1000;
   if (Number(todo.remindedAt) > 0) return { state: 'notified', delayMs: 0 };
   const deadline = Date.parse(String(todo.deadline || ''));
   const current = Number(now);
@@ -653,7 +656,7 @@ function normalizeCaptureEntry(value, now = Date.now()) {
   return {
     text,
     type: CAPTURE_TYPES.includes(value.type) ? value.type : '',
-    category: ['P0', 'P1', 'P2', 'P3'].includes(value.category) ? value.category : '',
+    category: typeof value.category === 'string' && /^[A-Za-z0-9_-]{1,40}$/.test(value.category) ? value.category : '',
     habitId: typeof value.habitId === 'string' ? value.habitId.trim().slice(0, 40) : '',
     open: value.open === true,
     at: Number(now) || Date.now(),

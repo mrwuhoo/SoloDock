@@ -46,9 +46,8 @@ app.whenReady().then(async () => {
       active: document.querySelector('.palette-row[aria-selected="true"] b')?.textContent || '',
     });
     window.__credentials = [{ id: 'k1', kind: 'apikey', service: 'OpenAI 封面生成', account: 'OPENAI_API_KEY', url: '', passwordMask: '**********', createdAt: 1 }];
-    data.P1.push({ id: 'todo-cover', text: '交付封面终稿', done: false, createdAt: Date.now(), deadline: '', remindedAt: 0 });
-    saveData(data);
-    renderList('P1');
+    window.NotchTodos.items().P1.push({ id: 'todo-cover', text: '交付封面终稿', done: false, createdAt: Date.now(), deadline: new Date(Date.now() + 3 * 3600000).toISOString(), remindedAt: 0 });
+    window.NotchTodoPage.render();
     await setMode(true);
     await setActiveTab('home');
     const out = {};
@@ -73,7 +72,7 @@ app.whenReady().then(async () => {
     // Enter on the todo: the palette closes and the todo flashes on its page.
     key({ key: 'Enter' });
     await settle(250);
-    out.todo = [$('palette').hidden, document.querySelector('#tab-todo.active') !== null, document.querySelector('.todo-item[data-id="todo-cover"]')?.classList.contains('flash')];
+    out.todo = [$('palette').hidden, document.querySelector('#tab-todo.active') !== null, document.querySelector('.task-row[data-id="todo-cover"]')?.classList.contains('flash')];
 
     // A note opens on the notes page, selected.
     await window.NotchPalette.open();

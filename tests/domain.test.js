@@ -14,13 +14,6 @@ const {
   completionMatchesWindow,
   deriveWindowDisplayName,
   numberWindowLabels,
-  createTodo,
-  updateTodo,
-  currentMonthDeadline,
-  calendarDeadline,
-  shiftCalendarMonth,
-  defaultTodoDeadline,
-  normalizeTodoCategoryNames,
   normalizeHomeWidgetSizes,
   packHomeWidgetLayout,
   normalizeHiddenHomeModules,
@@ -33,9 +26,7 @@ const {
   swapHomeLayoutSlots,
   resampleFloat32ToPcm16,
   shouldTogglePanelForSpace,
-  todoTimeBattery,
   updateRangeSelection,
-  sortTodosForDisplay,
   preferredLinkGroupId,
   moveLinkToGroup,
   moveLinkToPosition,
@@ -343,100 +334,6 @@ test('multiple browser windows use page titles instead of generic app numbers', 
   ]).map((item) => item.displayName), ['阿里云百炼控制台', 'NotchTodo 设计稿']);
 });
 
-test('createTodo requires a valid DDL and preserves reminder metadata', () => {
-  assert.equal(createTodo('没有截止时间', '', 't0', 100), null);
-  assert.equal(createTodo('日期无效', 'not-a-date', 't0', 100), null);
-  assert.deepEqual(createTodo('  发布新版  ', '2026-08-22T10:30:00.000Z', 't1', 100), {
-    id: 't1',
-    text: '发布新版',
-    done: false,
-    createdAt: 100,
-    deadline: '2026-08-22T10:30:00.000Z',
-    remindedAt: 0,
-  });
-});
-
-test('todo editor updates text and deadline while keeping completion state', () => {
-  const original = { ...createTodo('旧标题', '2026-08-22T10:30:00.000Z', 't1', 100), done: true, remindedAt: 88 };
-  const updated = updateTodo(original, '新标题', '2026-08-23T09:00:00.000Z');
-  assert.equal(updated.id, 't1');
-  assert.equal(updated.text, '新标题');
-  assert.equal(updated.done, true);
-  assert.equal(updated.remindedAt, 0);
-  const localDeadline = new Date(currentMonthDeadline(
-    { day: 21, hour: 14, minute: 30 },
-    new Date(2026, 7, 1, 0, 0, 0, 0),
-  ));
-  assert.deepEqual([
-    localDeadline.getFullYear(),
-    localDeadline.getMonth(),
-    localDeadline.getDate(),
-    localDeadline.getHours(),
-    localDeadline.getMinutes(),
-  ], [2026, 7, 21, 14, 30]);
-  assert.equal(currentMonthDeadline(
-    { day: 32, hour: 14, minute: 30 },
-    new Date(2026, 7, 1, 0, 0, 0, 0),
-  ), null);
-});
-
-test('todo calendar month navigation crosses year boundaries in both directions', () => {
-  assert.equal(typeof shiftCalendarMonth, 'function', 'shiftCalendarMonth must exist');
-  assert.deepEqual(shiftCalendarMonth({ year: 2026, month: 11 }, 1), { year: 2027, month: 0 });
-  assert.deepEqual(shiftCalendarMonth({ year: 2027, month: 0 }, -1), { year: 2026, month: 11 });
-});
-
-test('todo deadline uses the calendar month being viewed instead of the current month', () => {
-  assert.equal(typeof calendarDeadline, 'function', 'calendarDeadline must exist');
-  const deadline = new Date(calendarDeadline({
-    year: 2027,
-    month: 0,
-    day: 2,
-    hour: 23,
-    minute: 30,
-  }));
-  assert.deepEqual([
-    deadline.getFullYear(),
-    deadline.getMonth(),
-    deadline.getDate(),
-    deadline.getHours(),
-    deadline.getMinutes(),
-  ], [2027, 0, 2, 23, 30]);
-  assert.equal(calendarDeadline({ year: 2027, month: 1, day: 29, hour: 23, minute: 30 }), null);
-});
-
-test('default todo deadline stays on the current local day, including after 23:30', () => {
-  const daytime = new Date(2026, 7, 28, 9, 15, 0, 0);
-  const sameDayDeadline = new Date(defaultTodoDeadline(daytime));
-  assert.deepEqual([
-    sameDayDeadline.getFullYear(),
-    sameDayDeadline.getMonth(),
-    sameDayDeadline.getDate(),
-    sameDayDeadline.getHours(),
-    sameDayDeadline.getMinutes(),
-  ], [2026, 7, 28, 23, 30]);
-
-  const afterCutoff = new Date(2026, 7, 31, 23, 31, 0, 0);
-  const sameDayAfterCutoff = new Date(defaultTodoDeadline(afterCutoff));
-  assert.deepEqual([
-    sameDayAfterCutoff.getFullYear(),
-    sameDayAfterCutoff.getMonth(),
-    sameDayAfterCutoff.getDate(),
-    sameDayAfterCutoff.getHours(),
-    sameDayAfterCutoff.getMinutes(),
-  ], [2026, 7, 31, 23, 30]);
-});
-
-test('todos sort unfinished by DDL and creation time with completed items last', () => {
-  const rows = sortTodosForDisplay([
-    { id: 'done', done: true, deadline: '2026-08-20T00:00:00.000Z', createdAt: 1 },
-    { id: 'late', done: false, deadline: '2026-08-22T00:00:00.000Z', createdAt: 2 },
-    { id: 'early-new', done: false, deadline: '2026-08-21T00:00:00.000Z', createdAt: 3 },
-    { id: 'early-old', done: false, deadline: '2026-08-21T00:00:00.000Z', createdAt: 1 },
-  ]);
-  assert.deepEqual(rows.map((row) => row.id), ['early-old', 'early-new', 'late', 'done']);
-});
-
 test('credential search matches service or account without exposing passwords', () => {
   const rows = [
     { id: 'github', service: 'GitHub', account: 'hello@example.com', passwordMask: '********' },
@@ -611,22 +508,6 @@ test('home layout swaps complete slot assignments without duplicates', () => {
     mirror: 'small-top',
     commands: 'tall-right',
     note: 'wide-bottom',
-  });
-});
-
-test('todo category names migrate to work streams and reject blank edits', () => {
-  const defaults = {
-    P0: '课程',
-    P1: '自媒体&写作',
-    P2: 'Vibe coding',
-    P3: '日常',
-  };
-  assert.deepEqual(normalizeTodoCategoryNames(null, defaults), defaults);
-  assert.deepEqual(normalizeTodoCategoryNames({ P0: '  教学产品  ', P1: '', P4: '无效' }, defaults), {
-    P0: '教学产品',
-    P1: '自媒体&写作',
-    P2: 'Vibe coding',
-    P3: '日常',
   });
 });
 
@@ -805,45 +686,6 @@ test('mirror pinch zooms only a live camera and stays within safe bounds', () =>
   assert.equal(domain.adjustMirrorZoom?.(1, -100), 1.2);
   assert.equal(domain.adjustMirrorZoom?.(1, 100), 1);
   assert.equal(domain.adjustMirrorZoom?.(2.55, -100), 2.6);
-});
-
-test('todo time battery reports the remaining share with exact color boundaries', () => {
-  const createdAt = Date.parse('2026-08-21T00:00:00.000Z');
-  const deadline = '2026-08-21T10:00:00.000Z';
-  const todo = { createdAt, deadline, done: false };
-  assert.deepEqual(todoTimeBattery(todo, Date.parse('2026-08-21T02:00:00.000Z')), {
-    percent: 80,
-    tone: 'green',
-    overdue: false,
-    label: '剩余 80%',
-  });
-  assert.equal(todoTimeBattery(todo, Date.parse('2026-08-21T05:00:00.000Z')).tone, 'yellow');
-  assert.equal(todoTimeBattery(todo, Date.parse('2026-08-21T07:00:00.000Z')).tone, 'red');
-  // 恰好压在截止点上就算逾期，不再是「剩余 0%」。
-  assert.deepEqual(todoTimeBattery(todo, Date.parse('2026-08-21T10:00:00.000Z')), {
-    percent: 0,
-    tone: 'red',
-    overdue: true,
-    label: '已逾期',
-  });
-  assert.deepEqual(todoTimeBattery(todo, Date.parse('2026-08-21T11:00:00.000Z')), {
-    percent: 0,
-    tone: 'red',
-    overdue: true,
-    label: '已逾期',
-  });
-  // 逾期前的最后一刻仍是「剩余 0%」：取整落到 0 与真正欠账必须可区分。
-  const almostDue = todoTimeBattery(todo, Date.parse('2026-08-21T09:59:00.000Z'));
-  assert.equal(almostDue.overdue, false);
-  assert.equal(almostDue.percent, 0);
-  assert.equal(almostDue.label, '剩余 0%');
-  assert.equal(todoTimeBattery({ createdAt, deadline, done: true }, createdAt), null);
-  assert.deepEqual(todoTimeBattery({ deadline }, createdAt), {
-    percent: 0,
-    tone: 'red',
-    overdue: false,
-    label: '待补充有效截止时间',
-  });
 });
 
 test('Shift range selection selects contiguous rows while plain selection resets the range', () => {

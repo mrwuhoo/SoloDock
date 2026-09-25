@@ -920,6 +920,14 @@ function clearTodoReminderTimer() {
   todoReminderTimer = null;
 }
 
+function todoReminderDetail(todo) {
+  const minutes = Number.isInteger(todo.remindMin) ? todo.remindMin : 60;
+  if (minutes === 0) return '现在截止';
+  if (minutes === 1440) return '明天这个时候截止';
+  if (minutes % 60 === 0) return `将在 ${minutes / 60} 小时内截止`;
+  return `将在 ${minutes} 分钟内截止`;
+}
+
 function fireTodoReminder(todo) {
   const deadline = Date.parse(String(todo.deadline || ''));
   const notification = {
@@ -928,7 +936,7 @@ function fireTodoReminder(todo) {
     taskId: String(todo.id || ''),
     title: String(todo.text || '').trim() || '待办即将截止',
     project: '',
-    detail: '将在 1 小时内截止',
+    detail: todoReminderDetail(todo),
     deadline,
     completedAt: Date.now(),
   };
@@ -970,6 +978,7 @@ ipcMain.handle('todos:schedule-reminders', (event, items) => {
         deadline: String(item.deadline || ''),
         done: item.done === true,
         remindedAt: Math.max(0, Number(item.remindedAt) || 0),
+        remindMin: Number.isInteger(item.remindMin) && item.remindMin >= -1 && item.remindMin <= 10080 ? item.remindMin : null,
       }))
       .filter((item) => item.id && item.text)
     : [];

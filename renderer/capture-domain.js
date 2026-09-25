@@ -12,7 +12,9 @@
     { id: 'link', label: '链接' },
     { id: 'life', label: '生活' },
   ];
+  // 待办分类可增减（最多 6 个）；没有给出分类列表时按原来的四类。
   const CATEGORIES = ['P0', 'P1', 'P2', 'P3'];
+  const categoryIds = (options) => (Array.isArray(options.categories) && options.categories.length ? options.categories : CATEGORIES);
   const MAX_TEXT = 4000;
   const DETECT_LIMIT = 80;
   const DAY_BOUNDARY_HOUR = 4;
@@ -265,7 +267,7 @@
         deadline: new Date(at).toISOString(),
         at,
         hasTime: Boolean(when.at && when.hasTime),
-        category: CATEGORIES.includes(options.category) ? options.category : 'P3',
+        category: categoryIds(options).includes(options.category) ? options.category : categoryIds(options).at(-1),
       };
     }
     if (type === 'link') {
@@ -299,16 +301,17 @@
     return list[(index + direction + list.length) % list.length];
   }
 
-  // 待办默认分到最近一次新建待办所在的分类；还没有待办时放「日常」（P3）。
-  function lastUsedCategory(data) {
+  // 待办默认分到最近一次新建待办所在的分类；还没有待办时放最后一个分类（默认是「日常」）。
+  function lastUsedCategory(data, ids) {
+    const list = Array.isArray(ids) && ids.length ? ids : CATEGORIES;
     let best = null;
-    for (const category of CATEGORIES) {
+    for (const category of list) {
       for (const item of (data && Array.isArray(data[category]) ? data[category] : [])) {
         const created = Number(item && item.createdAt) || 0;
         if (!best || created > best.created) best = { category, created };
       }
     }
-    return best ? best.category : 'P3';
+    return best ? best.category : list.at(-1);
   }
 
   function dayLabel(at, now = Date.now()) {

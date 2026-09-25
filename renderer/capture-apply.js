@@ -37,10 +37,12 @@
   async function apply(entry) {
     const at = Number(entry?.at) || Date.now();
     const lifeHabits = habits();
+    const categoryIds = (window.NotchTodos?.categories?.() || []).map((category) => category.id);
     const result = Capture.parseCapture(entry?.text, {
       now: at,
       type: entry?.type,
-      category: entry?.category || Capture.lastUsedCategory(window.NotchTodos?.items?.()),
+      category: entry?.category || Capture.lastUsedCategory(window.NotchTodos?.items?.(), categoryIds),
+      categories: categoryIds,
       habits: lifeHabits,
       habitId: entry?.habitId,
     });

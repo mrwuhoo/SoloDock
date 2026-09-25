@@ -470,100 +470,75 @@ async function main() {
       },
     }, '权限等待期间的多入口连点只能启动一次录音');
 
+    // 待办截止时间选择器：翻到明年一月选 2 号，这一条用手选的日期；下一条回到默认（今天 23:30）。
     const todoCalendarNavigation = await window.webContents.executeJavaScript(`
-      new Promise((resolve) => {
+      (async () => {
         document.getElementById('tab-button-todo').click();
-        const trigger = document.querySelector('.todo-deadline-trigger[data-deadline-priority="P0"]');
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const card = document.querySelector('.task-card[data-category="P0"]');
+        const trigger = card.querySelector('.task-date');
         trigger.click();
-        const previous = document.getElementById('todo-calendar-previous');
-        const next = document.getElementById('todo-calendar-next');
-        if (!previous || !next) {
-          resolve({ controls: false });
-          return;
-        }
+        const picker = document.getElementById('task-picker');
+        const previous = picker.querySelector('[data-pick="prev"]');
+        const next = picker.querySelector('[data-pick="next"]');
         const base = new Date();
-        const popover = document.getElementById('todo-date-popover');
         const previousRect = previous.getBoundingClientRect();
         const nextRect = next.getBoundingClientRect();
-        const clicksToJanuary = 12 - base.getMonth();
-        for (let index = 0; index < clicksToJanuary; index += 1) next.click();
-        const expectedYear = base.getFullYear() + 1;
-        const januaryLabel = document.getElementById('todo-editor-month').textContent.trim();
-        const day = [...document.querySelectorAll('#todo-calendar-grid [data-day]')]
-          .find((button) => button.dataset.day === '2');
+        for (let index = 0; index < 12 - base.getMonth(); index += 1) next.click();
+        const januaryLabel = document.getElementById('task-picker-month').textContent.trim();
+        const day = [...picker.querySelectorAll('#task-picker-grid [data-day]')].find((button) => !button.classList.contains('outside') && button.textContent === '2');
         day.click();
-        const selected = new Date(trigger.dataset.deadline);
+        const buttonLabel = trigger.textContent.trim();
         previous.click();
-        resolve({
-          controls: true,
-          popoverVisible: !popover.hidden && getComputedStyle(popover).display !== 'none',
-          controlsUsable: [previousRect.width, previousRect.height, nextRect.width, nextRect.height]
-            .every((size) => size >= 18),
+        return {
+          popoverVisible: !picker.hidden && getComputedStyle(picker).display !== 'none',
+          controlsUsable: [previousRect.width, previousRect.height, nextRect.width, nextRect.height].every((size) => size >= 18),
           januaryLabel,
-          decemberLabel: document.getElementById('todo-editor-month').textContent.trim(),
-          selected: [selected.getFullYear(), selected.getMonth(), selected.getDate()],
-          expectedYear,
-        });
-      })
+          decemberLabel: document.getElementById('task-picker-month').textContent.trim(),
+          buttonLabel,
+          manual: trigger.dataset.manual,
+        };
+      })()
     `);
-
+    const nextYear = new Date().getFullYear() + 1;
     assert.deepEqual(todoCalendarNavigation, {
-      controls: true,
       popoverVisible: true,
       controlsUsable: true,
-      januaryLabel: `${new Date().getFullYear() + 1}年 1月`,
-      decemberLabel: `${new Date().getFullYear()}年 12月`,
-      selected: [new Date().getFullYear() + 1, 0, 2],
-      expectedYear: new Date().getFullYear() + 1,
+      januaryLabel: `${nextYear} 年 1 月`,
+      decemberLabel: `${nextYear - 1} 年 12 月`,
+      buttonLabel: `1/2 ${['周日', '周一', '周二', '周三', '周四', '周五', '周六'][new Date(nextYear, 0, 2).getDay()]} 23:30`,
+      manual: 'true',
     });
 
     const todoDeadlineReset = await window.webContents.executeJavaScript(`
       (() => {
-        const priority = 'P0';
-        const input = document.querySelector('.add-row input[data-priority="P0"]');
-        const trigger = document.querySelector('.todo-deadline-trigger[data-deadline-priority="P0"]');
-        const popover = document.getElementById('todo-date-popover');
-        const manuallySelected = trigger.dataset.deadline;
+        const card = document.querySelector('.task-card[data-category="P0"]');
+        const input = card.querySelector('.task-add-input');
         const submit = (text) => {
           input.value = text;
-          input.dispatchEvent(new KeyboardEvent('keydown', {
-            key: 'Enter',
-            code: 'Enter',
-            bubbles: true,
-            cancelable: true,
-          }));
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
+          return JSON.parse(localStorage.getItem('notch-todo-data')).P0.find((item) => item.text === text)?.deadline;
         };
-
-        submit('deadline-reset-first');
-        const resetDeadline = new Date(trigger.dataset.deadline);
-        const now = new Date();
-        submit('deadline-reset-second');
-
-        const stored = JSON.parse(localStorage.getItem('notch-todo-data'))[priority];
-        const first = stored.find((item) => item.text === 'deadline-reset-first');
-        const second = stored.find((item) => item.text === 'deadline-reset-second');
+        const first = new Date(submit('deadline-reset-first'));
+        const defaultLabel = card.querySelector('.task-date').textContent.trim();
+        const second = submit('deadline-reset-second');
         return {
-          firstKeptManualDeadline: first?.deadline === manuallySelected,
-          secondUsedResetDeadline: second?.deadline === trigger.dataset.deadline,
-          resetSource: trigger.dataset.deadlineSource,
-          resetParts: [
-            resetDeadline.getFullYear(),
-            resetDeadline.getMonth(),
-            resetDeadline.getDate(),
-            resetDeadline.getHours(),
-            resetDeadline.getMinutes(),
-          ],
-          todayParts: [now.getFullYear(), now.getMonth(), now.getDate(), 23, 30],
-          popoverHidden: popover.hidden,
+          first: [first.getFullYear(), first.getMonth(), first.getDate(), first.getHours(), first.getMinutes()],
+          secondIsDefault: second === new Date(window.NotchTodo.defaultDeadline()).toISOString(),
+          defaultLabel,
+          manual: card.querySelector('.task-date').dataset.manual,
+          popoverHidden: document.getElementById('task-picker').hidden,
         };
       })()
     `);
-    assert.equal(todoDeadlineReset.firstKeptManualDeadline, true, '当前待办应使用本次手动选择的截止时间');
-    assert.equal(todoDeadlineReset.secondUsedResetDeadline, true, '下一条待办不得沿用上一条的截止时间');
-    assert.equal(todoDeadlineReset.resetSource, 'default');
-    assert.deepEqual(todoDeadlineReset.resetParts, todoDeadlineReset.todayParts, '新建表单应重置为当天 23:30');
-    assert.equal(todoDeadlineReset.popoverHidden, true, '提交后应关闭旧日期选择器');
+    assert.deepEqual(todoDeadlineReset.first, [nextYear, 0, 2, 23, 30], '当前待办应使用本次手动选择的截止时间');
+    assert.equal(todoDeadlineReset.secondIsDefault, true, '下一条待办不得沿用上一条的截止时间');
+    assert.match(todoDeadlineReset.defaultLabel, /^(今天|明天) 23:30$/, '新建表单应重置为默认 23:30');
+    assert.equal(todoDeadlineReset.manual, 'false');
+    assert.equal(todoDeadlineReset.popoverHidden, true, '提交后应关闭日期选择器');
 
+    // 跨天、跨年、闰年：默认截止随「现在」计算，不会用到打开面板那天的旧日期；23:30 之后算明天。
     const todoRollover = await window.webContents.executeJavaScript(`
       (async () => {
         const RealDate = window.Date;
@@ -572,66 +547,37 @@ async function main() {
           constructor(...args) { super(...(args.length ? args : [now])); }
           static now() { return now; }
         };
-        const triggers = [...document.querySelectorAll('.todo-deadline-trigger[data-deadline-priority]')];
-        const input = document.querySelector('.add-row input[data-priority="P0"]');
-        const trigger = triggers[0];
-        const today = () => new RealDate(new Date().getFullYear(), new Date().getMonth(), new Date().getDate(), 23, 30).toISOString();
-        const stale = () => triggers.forEach(t => resetTodoDraftDeadline(t, new RealDate(2026, 8, 11, 22)));
+        const card = document.querySelector('.task-card[data-category="P0"]');
+        const input = card.querySelector('.task-add-input');
+        const iso = (...parts) => new RealDate(...parts).toISOString();
         const submit = (text) => {
           input.value = text;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
           input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-          return JSON.parse(localStorage.getItem('notch-todo-data')).P0.find(t => t.text === text)?.deadline;
+          return JSON.parse(localStorage.getItem('notch-todo-data')).P0.find((item) => item.text === text)?.deadline;
         };
         try {
-          stale();
-          // Let the resident timer observe the previous day before crossing midnight.
-          // Otherwise the test's target date may equal the real launch day's cache.
-          await new Promise(resolve => setTimeout(resolve, 1200));
-          now = new RealDate(2026, 8, 12, 9).getTime();
-          // Real timer on the production page: there are no legacy clock DOM nodes.
-          await new Promise(resolve => setTimeout(resolve, 1200));
-          const automatic = triggers.every(t => t.dataset.deadline === today());
-          stale();
-          window.dispatchEvent(new Event('focus'));
-          const wake = triggers.every(t => t.dataset.deadline === today());
-          stale();
-          document.dispatchEvent(new CustomEvent('notch:modechange', { detail: { expanded: true } }));
-          const expand = triggers.every(t => t.dataset.deadline === today());
-          stale();
-          document.dispatchEvent(new CustomEvent('notch:tabchange', { detail: { tab: 'todo' } }));
-          const tab = triggers.every(t => t.dataset.deadline === today());
-          stale();
-          input.dispatchEvent(new Event('focus'));
-          const inputFocus = trigger.dataset.deadline === today();
-          stale();
-          trigger.click();
-          const calendar = document.querySelector('#todo-calendar-grid .selected')?.dataset.day === '12'
-            && trigger.dataset.deadline === today();
-          closeTodoEditor();
-          const submits = [];
-          for (const parts of [[2026, 8, 12, 9], [2027, 0, 1, 0], [2028, 1, 29, 9], [2028, 2, 1, 9], [2028, 2, 1, 23, 50]]) {
-            stale(); now = new RealDate(...parts).getTime();
-            submits.push(submit('rollover-' + parts.join('-')) === today());
+          const results = [];
+          for (const [label, parts, expected] of [
+            ['a', [2026, 8, 11, 22], [2026, 8, 11, 23, 30]],
+            ['b', [2026, 8, 12, 9], [2026, 8, 12, 23, 30]],
+            ['c', [2027, 0, 1, 0], [2027, 0, 1, 23, 30]],
+            ['d', [2028, 1, 29, 9], [2028, 1, 29, 23, 30]],
+            ['e', [2028, 2, 1, 23, 50], [2028, 2, 2, 23, 30]],
+          ]) {
+            now = new RealDate(...parts).getTime();
+            results.push(submit('rollover-' + label) === iso(...expected));
           }
-          const manualDeadline = new RealDate(2028, 2, 5, 18).toISOString();
-          trigger.dataset.deadline = manualDeadline;
-          trigger.dataset.deadlineSource = 'manual';
-          window.dispatchEvent(new Event('focus'));
-          input.dispatchEvent(new Event('focus'));
-          const manual = submit('rollover-manual') === manualDeadline;
-          const resetAfterManual = trigger.dataset.deadline === today() && trigger.dataset.deadlineSource === 'default';
-          return { automatic, wake, expand, tab, inputFocus, calendar, submits, manual, resetAfterManual };
+          now = new RealDate(2028, 2, 3, 10).getTime();
+          document.dispatchEvent(new CustomEvent('notch:tabchange', { detail: { tab: 'todo' } }));
+          const label = card.querySelector('.task-date').textContent.trim();
+          return { results, label };
         } finally {
           window.Date = RealDate;
-          closeTodoEditor();
-          triggers.forEach(t => resetTodoDraftDeadline(t));
         }
       })()
     `);
-    assert.deepEqual(todoRollover, {
-      automatic: true, wake: true, expand: true, tab: true, inputFocus: true, calendar: true,
-      submits: [true, true, true, true, true], manual: true, resetAfterManual: true,
-    }, '常驻跨天、唤醒和直接提交都应使用当天 23:30；本次手选日期应保留');
+    assert.deepEqual(todoRollover, { results: [true, true, true, true, true], label: '今天 23:30' }, '常驻跨天、跨年和闰年都应使用当天 23:30；23:30 之后是明天');
 
     await window.webContents.executeJavaScript(`
       window.__measureHomepage = function measureHomepage() {

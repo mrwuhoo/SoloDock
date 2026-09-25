@@ -40,8 +40,8 @@ app.whenReady().then(async () => {
     const out = { visible: !strip.hidden, title: document.getElementById('today-date-title').textContent };
 
     // A todo due today, a focus session and an AI completion all land on the axis.
-    data.P1.push({ id: 'due-1', text: '交付封面终稿', done: false, createdAt: Date.now(), deadline: local(at(23, 30)) });
-    saveData();
+    window.NotchTodos.items().P1.push({ id: 'due-1', text: '交付封面终稿', done: false, createdAt: Date.now(), deadline: local(at(23, 30)), remindedAt: 0 });
+    document.dispatchEvent(new CustomEvent('notch:todos-changed'));
     localStorage.setItem('notch-focus-log-v1', JSON.stringify([{ start: at(8, 30), end: at(8, 55), minutes: 25 }]));
     document.dispatchEvent(new CustomEvent('notch:focus-logged'));
     await window.NotchTodayStrip.refreshCompletions();

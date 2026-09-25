@@ -333,52 +333,6 @@
     });
   }
 
-  function createTodo(text, deadline, id, createdAt) {
-    const normalizedText = String(text || '').trim();
-    const deadlineMs = Date.parse(String(deadline || '').trim());
-    if (!normalizedText || !Number.isFinite(deadlineMs)) return null;
-    return {
-      id: String(id || `todo-${Date.now().toString(36)}`),
-      text: normalizedText,
-      done: false,
-      createdAt: Number.isFinite(createdAt) ? createdAt : Date.now(),
-      deadline: new Date(deadlineMs).toISOString(),
-      remindedAt: 0,
-    };
-  }
-
-  function updateTodo(todo, text, deadline) {
-    if (!todo || typeof todo !== 'object') return null;
-    const normalized = createTodo(text, deadline, todo.id, todo.createdAt);
-    if (!normalized) return null;
-    return {
-      ...todo,
-      ...normalized,
-      done: todo.done === true,
-      remindedAt: Date.parse(String(todo.deadline || '')) === Date.parse(normalized.deadline)
-        ? Math.max(0, Number(todo.remindedAt) || 0)
-        : 0,
-    };
-  }
-
-  function sortTodosForDisplay(items) {
-    return [...(Array.isArray(items) ? items : [])].sort((left, right) => {
-      const doneDifference = Number(left && left.done === true) - Number(right && right.done === true);
-      if (doneDifference) return doneDifference;
-      const leftDeadline = Date.parse(String(left && left.deadline || ''));
-      const rightDeadline = Date.parse(String(right && right.deadline || ''));
-      const safeLeftDeadline = Number.isFinite(leftDeadline) ? leftDeadline : Number.POSITIVE_INFINITY;
-      const safeRightDeadline = Number.isFinite(rightDeadline) ? rightDeadline : Number.POSITIVE_INFINITY;
-      if (safeLeftDeadline !== safeRightDeadline) return safeLeftDeadline - safeRightDeadline;
-      const leftCreatedAt = Number(left && left.createdAt);
-      const rightCreatedAt = Number(right && right.createdAt);
-      const safeLeftCreatedAt = Number.isFinite(leftCreatedAt) ? leftCreatedAt : Number.POSITIVE_INFINITY;
-      const safeRightCreatedAt = Number.isFinite(rightCreatedAt) ? rightCreatedAt : Number.POSITIVE_INFINITY;
-      if (safeLeftCreatedAt !== safeRightCreatedAt) return safeLeftCreatedAt - safeRightCreatedAt;
-      return String(left && left.id || '').localeCompare(String(right && right.id || ''));
-    });
-  }
-
   // 搜索名称、账号（API Key 的变量名）与网址，从不搜索密码。
   function filterCredentials(items, query) {
     const rows = Array.isArray(items) ? items : [];
@@ -559,68 +513,6 @@
     };
   }
 
-  function calendarDeadline(parts) {
-    const year = Math.round(Number(parts && parts.year));
-    const month = Math.round(Number(parts && parts.month));
-    const day = Math.round(Number(parts && parts.day));
-    const hour = Math.round(Number(parts && parts.hour));
-    const minute = Math.round(Number(parts && parts.minute));
-    if (!Number.isInteger(year) || year < 1 || year > 9999 || month < 0 || month > 11
-      || day < 1 || day > 31 || hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
-    const deadline = new Date(year, month, day, hour, minute, 0, 0);
-    if (deadline.getFullYear() !== year || deadline.getMonth() !== month || deadline.getDate() !== day) return null;
-    return deadline.toISOString();
-  }
-
-  function shiftCalendarMonth(value, offset) {
-    const year = Math.round(Number(value && value.year));
-    const month = Math.round(Number(value && value.month));
-    const step = Math.round(Number(offset));
-    if (!Number.isInteger(year) || !Number.isInteger(month) || month < 0 || month > 11 || !Number.isInteger(step)) return null;
-    const shifted = new Date(year, month + step, 1, 12, 0, 0, 0);
-    return { year: shifted.getFullYear(), month: shifted.getMonth() };
-  }
-
-  function currentMonthDeadline(parts, now = new Date()) {
-    const base = now instanceof Date ? now : new Date(now);
-    if (!Number.isFinite(base.getTime())) return null;
-    return calendarDeadline({
-      ...parts,
-      year: base.getFullYear(),
-      month: base.getMonth(),
-    });
-  }
-
-  function defaultTodoDeadline(now = new Date()) {
-    const base = now instanceof Date ? new Date(now.getTime()) : new Date(now);
-    if (!Number.isFinite(base.getTime())) return null;
-    const deadline = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 30, 0, 0);
-    return deadline.toISOString();
-  }
-
-  function todoTimeBattery(todo, now = Date.now()) {
-    if (!todo || todo.done === true) return null;
-    const createdAt = Number(todo.createdAt);
-    const deadline = Date.parse(String(todo.deadline || ''));
-    const current = Number(now);
-    const total = deadline - createdAt;
-    if (!Number.isFinite(current)) return null;
-    if (!Number.isFinite(deadline) || !Number.isFinite(createdAt) || total <= 0) {
-      return { percent: 0, tone: 'red', overdue: false, label: '待补充有效截止时间' };
-    }
-    // 逾期必须与「剩余 0%」分开：后者只是取整落到 0，前者已经欠账。
-    // 逾期项的电量条改为整条填满 + 白色感叹号，不能再显示成一条空槽。
-    const overdue = current >= deadline;
-    const percent = Math.round(Math.max(0, Math.min(1, (deadline - current) / total)) * 100);
-    const tone = percent >= 80 ? 'green' : percent >= 50 ? 'yellow' : percent > 30 ? 'orange' : 'red';
-    return {
-      percent,
-      tone,
-      overdue,
-      label: overdue ? '已逾期' : `剩余 ${percent}%`,
-    };
-  }
-
   // 首页「今天」卡片的时间标签：逾期写清欠了多久，一小时内写剩余分钟，其余写时刻。
   function todoDueLabel(deadline, now = Date.now()) {
     const due = Date.parse(String(deadline || ''));
@@ -708,15 +600,6 @@
       [sourceId]: layout[targetId],
       [targetId]: layout[sourceId],
     };
-  }
-
-  function normalizeTodoCategoryNames(value, defaults) {
-    const fallback = defaults && typeof defaults === 'object' ? { ...defaults } : {};
-    const source = value && typeof value === 'object' ? value : {};
-    return Object.fromEntries(Object.entries(fallback).map(([key, defaultName]) => {
-      const candidate = String(source[key] || '').replace(/\s+/g, ' ').trim();
-      return [key, candidate ? candidate.slice(0, 24) : defaultName];
-    }));
   }
 
   function normalizeHomeWidgetSizes(value, defaults, preferredId, capacity = Infinity) {
@@ -1042,9 +925,6 @@
     completionMatchesWindow,
     deriveWindowDisplayName,
     numberWindowLabels,
-    createTodo,
-    updateTodo,
-    sortTodosForDisplay,
     filterCredentials,
     sortCredentials,
     deriveEnvName,
@@ -1059,17 +939,11 @@
     applyGeneratedNoteTitle,
     apiCredentialStatuses,
     settingsSummary,
-    currentMonthDeadline,
-    calendarDeadline,
-    shiftCalendarMonth,
-    defaultTodoDeadline,
-    todoTimeBattery,
     todoDueLabel,
     todayTodoItems,
     updateRangeSelection,
     normalizeHomeLayout,
     swapHomeLayoutSlots,
-    normalizeTodoCategoryNames,
     normalizeHomeWidgetSizes,
     packHomeWidgetLayout,
     normalizeHiddenHomeModules,

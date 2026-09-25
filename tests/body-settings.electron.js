@@ -59,6 +59,7 @@ app.whenReady().then(async () => {
     // "待办挪到明天" moves today's and overdue undone todos, keeping the clock time.
     const today = new Date();
     const at = (dayOffset, hour) => new Date(today.getFullYear(), today.getMonth(), today.getDate() + dayOffset, hour, 30).toISOString();
+    const data = window.NotchTodos.items();
     data.P0.push({ id: 'due-today', text: '交付', done: false, createdAt: 1, deadline: at(0, 18), remindedAt: 5 });
     data.P1.push({ id: 'overdue', text: '回复', done: false, createdAt: 1, deadline: at(-2, 9), remindedAt: 0 });
     data.P2.push({ id: 'done', text: '已完成', done: true, createdAt: 1, deadline: at(0, 10), remindedAt: 0 });

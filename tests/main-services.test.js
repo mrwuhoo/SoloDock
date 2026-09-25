@@ -274,6 +274,10 @@ test('todoReminderState fires once within the final hour and expires after the D
   });
   assert.equal(todoReminderState({ ...todo, remindedAt: deadline - 60 * 60 * 1000 }, deadline - 30 * 60 * 1000).state, 'notified');
   assert.equal(todoReminderState(todo, deadline + 1).state, 'expired');
+  // A todo's own reminder setting wins: 15 minutes ahead, on time, or none.
+  assert.deepEqual(todoReminderState({ ...todo, remindMin: 15 }, deadline - 30 * 60 * 1000), { state: 'scheduled', delayMs: 15 * 60 * 1000 });
+  assert.deepEqual(todoReminderState({ ...todo, remindMin: 0 }, deadline - 1000), { state: 'scheduled', delayMs: 1000 });
+  assert.equal(todoReminderState({ ...todo, remindMin: -1 }, deadline - 1000).state, 'off');
 });
 
 test('todo reminder timers checkpoint far-future deadlines without overflowing Node timers', () => {
@@ -666,7 +670,7 @@ test('a quick capture entry keeps only text and type hints; the main process sta
   assert.deepEqual(normalizeCaptureEntry({ text: '  明天3点 开会\r\n第二行 ', type: 'todo', category: 'P2', habitId: ' exercise ', open: true, at: 1 }, 42), {
     text: '明天3点 开会\n第二行', type: 'todo', category: 'P2', habitId: 'exercise', open: true, at: 42,
   });
-  assert.deepEqual(normalizeCaptureEntry({ text: 'x', type: 'script', category: 'P9', habitId: 5, open: 'yes' }, 7), { text: 'x', type: '', category: '', habitId: '', open: false, at: 7 });
+  assert.deepEqual(normalizeCaptureEntry({ text: 'x', type: 'script', category: 'bad id!', habitId: 5, open: 'yes' }, 7), { text: 'x', type: '', category: '', habitId: '', open: false, at: 7 });
   assert.equal(normalizeCaptureEntry({ text: '   ' }), null);
   assert.equal(normalizeCaptureEntry('text'), null);
   assert.equal(normalizeCaptureEntry({ text: 'a'.repeat(5000) }, 1).text.length, 4000);

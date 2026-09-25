@@ -12,7 +12,7 @@
   const LATER_KEY = 'notch-later-v1';
   const FOCUS_LOG_KEY = 'notch-focus-log-v1';
   const STRIP_KEY = 'notch-home-strip-v1';
-  const CATEGORY_COLORS = { P0: 'var(--sd-cat-1)', P1: 'var(--sd-cat-2)', P2: 'var(--sd-cat-3)', P3: 'var(--sd-cat-4)' };
+  const categoryColor = (id) => `var(--sd-${window.NotchTodos?.categoryColor?.(id) || 'cat-4'})`;
   // The completion history already leaves out todos and reminders; pomodoro is shown as focus instead.
   const NOT_AI_SOURCES = new Set(['todo', 'event', 'reminder', 'pomodoro']);
   const get = (id) => document.getElementById(id);
@@ -105,7 +105,7 @@
     const now = Date.now();
     const date = new Date(now);
     get('today-date-title').textContent = `${date.getMonth() + 1}月${date.getDate()}日 周${'日一二三四五六'[date.getDay()]}`;
-    const todos = window.NotchTodos ? window.NotchDomain.todayTodoItems(window.NotchTodos.items(), now) : [];
+    const todos = window.NotchTodos ? window.NotchDomain.todayTodoItems(window.NotchTodos.items(), now, window.NotchTodos.categories().map((category) => category.id)) : [];
     const todayEvents = Timeline.eventsForDay(events, now);
     const focus = focusToday(now);
     const focusMinutes = Math.round(focus.reduce((sum, item) => sum + item.minutes, 0));
@@ -149,7 +149,7 @@
       const mark = element('button', 'tl-deadline');
       mark.type = 'button';
       mark.dataset.todo = `${todo.priority}:${todo.id}`;
-      mark.style.setProperty('--c', todo.overdue ? 'var(--sd-danger)' : CATEGORY_COLORS[todo.priority]);
+      mark.style.setProperty('--c', todo.overdue ? 'var(--sd-danger)' : categoryColor(todo.priority));
       mark.setAttribute('aria-label', `${Timeline.clock(todo.due)} 截止：${todo.text}`);
       mark.title = `${Timeline.clock(todo.due)} ${todo.text}${todo.overdue ? ' · 已逾期' : ''}`;
       line.append(positioned(mark, percent));

@@ -339,86 +339,59 @@
           </section>
 
           <section id="tab-todo" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-todo" aria-hidden="true" inert>
-            <div class="sections">
-              <section class="quadrant tile" data-priority="P0">
-                <div class="quadrant-header">
-                  <span class="dot dot-p0"></span>
-                  <input class="todo-category-name" data-category="P0" value="课程" maxlength="24" aria-label="修改待办分类名称" />
-                  <button class="bulk-delete todo-bulk-delete" type="button" data-bulk-priority="P0" hidden>删除</button>
-                  <span class="count" data-priority="P0">0</span>
+            <!-- 待办：筛选 · 搜索 · 管理分类；分类卡由 todo-page.js 按分类数排成 2×2 或 3×2。 -->
+            <div class="task-page" id="task-page">
+              <div class="task-toolbar">
+                <div class="task-filters" id="task-filters" role="tablist" aria-label="筛选待办">
+                  <button type="button" role="tab" data-filter="all" aria-selected="true">全部 <b>0</b></button>
+                  <button type="button" role="tab" data-filter="today" aria-selected="false">今天 <b>0</b></button>
+                  <button type="button" role="tab" data-filter="overdue" aria-selected="false">逾期 <b>0</b></button>
+                  <button type="button" role="tab" data-filter="done" aria-selected="false">已完成 <b>0</b></button>
                 </div>
-                <ul class="todo-list" data-priority="P0"></ul>
-                <div class="add-row">
-                  <input
-                    type="text"
-                    placeholder="添加待办，回车保存…"
-                    aria-label="添加课程待办"
-                    data-priority="P0"
-                    maxlength="80"
-                  />
-                  <button class="todo-deadline-trigger" type="button" data-deadline-priority="P0" aria-label="选择课程待办截止时间"><span>日期</span></button>
-                </div>
-              </section>
+                <span class="task-flex"></span>
+                <label class="task-search">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m15.5 15.5 4 4"/></svg>
+                  <input id="task-search" type="search" placeholder="搜索待办" aria-label="搜索待办" autocomplete="off" spellcheck="false" />
+                </label>
+                <button class="task-manage" id="task-manage" type="button" aria-expanded="false">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="6" height="6" rx="1.5"/><rect x="13.5" y="4.5" width="6" height="6" rx="1.5"/><rect x="4.5" y="13.5" width="6" height="6" rx="1.5"/><rect x="13.5" y="13.5" width="6" height="6" rx="1.5"/></svg>管理分类
+                </button>
+              </div>
+              <div class="task-grid" id="task-grid"></div>
 
-              <section class="quadrant tile" data-priority="P1">
-                <div class="quadrant-header">
-                  <span class="dot dot-p1"></span>
-                  <input class="todo-category-name" data-category="P1" value="自媒体&amp;写作" maxlength="24" aria-label="修改待办分类名称" />
-                  <button class="bulk-delete todo-bulk-delete" type="button" data-bulk-priority="P1" hidden>删除</button>
-                  <span class="count" data-priority="P1">0</span>
+              <div class="task-pop task-picker" id="task-picker" role="dialog" aria-label="截止时间" hidden>
+                <div class="task-quick" id="task-picker-quick"></div>
+                <div class="task-cal-head">
+                  <button class="task-icon" type="button" data-pick="prev" aria-label="上个月"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6.5-5.5 5.5 5.5 5.5"/></svg></button>
+                  <b id="task-picker-month"></b>
+                  <button class="task-icon" type="button" data-pick="next" aria-label="下个月"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6.5 5.5 5.5-5.5 5.5"/></svg></button>
                 </div>
-                <ul class="todo-list" data-priority="P1"></ul>
-                <div class="add-row">
-                  <input
-                    type="text"
-                    placeholder="添加待办，回车保存…"
-                    aria-label="添加自媒体和写作待办"
-                    data-priority="P1"
-                    maxlength="80"
-                  />
-                  <button class="todo-deadline-trigger" type="button" data-deadline-priority="P1" aria-label="选择自媒体待办截止时间"><span>日期</span></button>
-                </div>
-              </section>
+                <div class="task-cal" id="task-picker-grid"></div>
+                <div class="task-field-row"><span>时间</span><span class="task-clock"><select id="task-picker-hour" aria-label="小时"></select><i>:</i><select id="task-picker-minute" aria-label="分钟"></select></span></div>
+                <div class="task-field-row"><span>重复</span><select id="task-picker-repeat" aria-label="重复"></select></div>
+                <div class="task-field-row task-custom" id="task-picker-custom" hidden><span>每</span><span class="task-clock"><input id="task-picker-every" type="number" min="1" max="99" value="2" aria-label="间隔" /><select id="task-picker-unit" aria-label="单位"><option value="day">天</option><option value="week">周</option><option value="month">个月</option></select></span></div>
+                <div class="task-field-row"><span>提醒</span><select id="task-picker-remind" aria-label="提醒"></select></div>
+                <p class="task-picker-error" id="task-picker-error" role="status"></p>
+                <div class="task-pop-foot"><button class="task-ghost" type="button" data-pick="clear">清除</button><button class="task-primary" type="button" data-pick="ok">确定</button></div>
+              </div>
 
-              <section class="quadrant tile" data-priority="P2">
-                <div class="quadrant-header">
-                  <span class="dot dot-p2"></span>
-                  <input class="todo-category-name" data-category="P2" value="Vibe coding" maxlength="24" aria-label="修改待办分类名称" />
-                  <button class="bulk-delete todo-bulk-delete" type="button" data-bulk-priority="P2" hidden>删除</button>
-                  <span class="count" data-priority="P2">0</span>
-                </div>
-                <ul class="todo-list" data-priority="P2"></ul>
-                <div class="add-row">
-                  <input
-                    type="text"
-                    placeholder="添加待办，回车保存…"
-                    aria-label="添加 Vibe coding 待办"
-                    data-priority="P2"
-                    maxlength="80"
-                  />
-                  <button class="todo-deadline-trigger" type="button" data-deadline-priority="P2" aria-label="选择 Vibe coding 待办截止时间"><span>日期</span></button>
-                </div>
-              </section>
+              <div class="task-pop task-manager" id="task-manager" role="dialog" aria-label="管理分类" hidden>
+                <header class="task-pop-head"><b>管理分类</b><span id="task-manager-count"></span></header>
+                <ol class="task-manager-list" id="task-manager-list"></ol>
+                <form class="task-manager-add" id="task-manager-add" autocomplete="off">
+                  <input id="task-manager-name" maxlength="24" placeholder="新分类名称" aria-label="新分类名称" />
+                  <button class="task-primary" type="submit">添加</button>
+                </form>
+                <p class="task-pop-hint">拖动或用箭头调整顺序；有待办的分类要先合并到别的分类才能删除</p>
+              </div>
 
-              <section class="quadrant tile" data-priority="P3">
-                <div class="quadrant-header">
-                  <span class="dot dot-p3"></span>
-                  <input class="todo-category-name" data-category="P3" value="日常" maxlength="24" aria-label="修改待办分类名称" />
-                  <button class="bulk-delete todo-bulk-delete" type="button" data-bulk-priority="P3" hidden>删除</button>
-                  <span class="count" data-priority="P3">0</span>
-                </div>
-                <ul class="todo-list" data-priority="P3"></ul>
-                <div class="add-row">
-                  <input
-                    type="text"
-                    placeholder="添加待办，回车保存…"
-                    aria-label="添加日常待办"
-                    data-priority="P3"
-                    maxlength="80"
-                  />
-                  <button class="todo-deadline-trigger" type="button" data-deadline-priority="P3" aria-label="选择日常待办截止时间"><span>日期</span></button>
-                </div>
-              </section>
+              <div class="task-pop task-menu" id="task-menu" role="menu" hidden>
+                <div class="task-swatches" id="task-menu-swatches"></div>
+                <button type="button" role="menuitem" data-menu="rename">重命名</button>
+                <button type="button" role="menuitem" data-menu="up">上移</button>
+                <button type="button" role="menuitem" data-menu="down">下移</button>
+                <button type="button" role="menuitem" data-menu="remove" class="danger">删除分类…</button>
+              </div>
             </div>
           </section>
 
@@ -850,20 +823,6 @@
             </div>
           </section>
         </div>
-        <div class="todo-date-popover" id="todo-date-popover" hidden>
-          <section class="todo-editor-card" role="group" aria-label="截止日期与时间">
-            <header class="todo-calendar-head">
-              <button id="todo-calendar-previous" type="button" aria-label="上个月">‹</button>
-              <span id="todo-editor-month"></span>
-              <button id="todo-calendar-next" type="button" aria-label="下个月">›</button>
-            </header>
-            <div class="todo-calendar-week"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>
-            <div class="todo-calendar-grid" id="todo-calendar-grid"></div>
-            <div class="todo-time-row"><span>截止时间</span><select id="todo-editor-hour" aria-label="小时"></select><b>:</b><select id="todo-editor-minute" aria-label="分钟"></select></div>
-            <p id="todo-editor-error" role="status"></p>
-          </section>
-        </div>
-
         <div class="transcription-settings-backdrop" id="transcription-settings-backdrop" hidden>
           <section class="transcription-settings-card" role="dialog" aria-modal="true" aria-labelledby="transcription-settings-title">
             <div class="transcription-settings-head">
@@ -930,7 +889,11 @@
     <script src="domain.js"></script>
     <script src="prompts-domain.js"></script>
     <script src="effects.js"></script>
+    <script src="life-domain.js"></script>
+    <script src="capture-domain.js"></script>
+    <script src="todo-domain.js"></script>
     <script src="app.js"></script>
+    <script src="todo-page.js"></script>
     <script src="workspace.js"></script>
     <script src="prompts.js"></script>
     <script src="reset-news.js"></script>
@@ -948,11 +911,9 @@
     <script src="notice-center.js"></script>
     <script src="worklog-domain.js"></script>
     <script src="time-page.js"></script>
-    <script src="life-domain.js"></script>
     <script src="life-page.js"></script>
     <script src="search-domain.js"></script>
     <script src="command-palette.js"></script>
-    <script src="capture-domain.js"></script>
     <script src="capture-apply.js"></script>
     <script src="icon-motion.js"></script>
   </body>

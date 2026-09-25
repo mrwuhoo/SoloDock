@@ -20,12 +20,10 @@
   const LINE = 24;
   const SHADOW_SPACE = 40;
   const DRAFT_TTL_MS = 10 * 60 * 1000;
-  const CATEGORY_COLORS = { P0: 'cat-1', P1: 'cat-2', P2: 'cat-3', P3: 'cat-4' };
-  const DEFAULT_NAMES = { P0: '课程', P1: '自媒体&写作', P2: 'Vibe coding', P3: '日常' };
   const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  let context = { names: { ...DEFAULT_NAMES }, habits: [], category: 'P3' };
+  let context = { categories: [], names: {}, habits: [], category: 'P3' };
   let picked = { type: '', category: '', habitId: '' };
   let result = null;
   let composing = false;
@@ -44,16 +42,22 @@
   }
 
   function loadContext() {
-    const stored = readJson('notch-todo-category-names-v1', {});
-    const names = { ...DEFAULT_NAMES };
-    for (const key of Capture.CATEGORIES) {
-      const name = stored && typeof stored[key] === 'string' ? stored[key].trim() : '';
-      if (name) names[key] = name.slice(0, 20);
-    }
+    const categories = window.NotchTodo
+      ? window.NotchTodo.normalizeCategories(readJson('notch-todo-categories-v1', null), readJson('notch-todo-category-names-v1', {}))
+      : [];
+    const ids = categories.map((category) => category.id);
     let habits = [];
     try { habits = Life ? Life.normalizeLife(readJson('notch-life-v1', {}) || {}).habits : []; } catch (error) {}
-    context = { names, habits, category: Capture.lastUsedCategory(readJson('notch-todo-data', {})) };
+    context = {
+      categories,
+      names: Object.fromEntries(categories.map((category) => [category.id, category.name])),
+      habits,
+      category: Capture.lastUsedCategory(readJson('notch-todo-data', {}), ids),
+    };
   }
+
+  const categoryIds = () => context.categories.map((category) => category.id);
+  const categoryColor = (id) => context.categories.find((category) => category.id === id)?.color || '';
 
   function habitOf(id) {
     return context.habits.find((item) => item.id === id) || null;
@@ -75,13 +79,14 @@
     result = Capture.parseCapture(text, {
       type: picked.type,
       category: picked.category || context.category,
+      categories: categoryIds(),
       habits: context.habits,
       habitId: picked.habitId,
     });
     const habit = result.type === 'life' ? habitOf(result.habitId) : null;
     card.dataset.type = result.type;
     card.dataset.icon = habit ? habit.icon : 'leaf';
-    const color = empty ? '' : result.type === 'todo' ? CATEGORY_COLORS[result.category] : habit ? habit.color : '';
+    const color = empty ? '' : result.type === 'todo' ? categoryColor(result.category) : habit ? habit.color : '';
     if (color) card.dataset.color = color;
     else delete card.dataset.color;
 
@@ -100,7 +105,7 @@
       target.dataset.state = result.valid ? '' : 'invalid';
       targetText.textContent = Capture.describe(result, { now: Date.now(), categoryNames: context.names, habits: context.habits });
     }
-    target.title = pickable ? (result.type === 'todo' ? '换分类（⌘1–4）' : `换习惯（⌘1–${Math.min(6, context.habits.length)}）`) : '';
+    target.title = pickable ? (result.type === 'todo' ? `换分类（⌘1–${context.categories.length}）` : `换习惯（⌘1–${Math.min(6, context.habits.length)}）`) : '';
     save.disabled = empty;
     autosize();
   }
@@ -112,7 +117,7 @@
   }
 
   function pickIndex(index) {
-    if (result.type === 'todo' && Capture.CATEGORIES[index]) picked.category = Capture.CATEGORIES[index];
+    if (result.type === 'todo' && categoryIds()[index]) picked.category = categoryIds()[index];
     else if (result.type === 'life' && context.habits[index]) picked.habitId = context.habits[index].id;
     else return;
     update();
@@ -120,8 +125,8 @@
 
   function cyclePick() {
     if (result.type === 'todo') {
-      const index = Capture.CATEGORIES.indexOf(result.category);
-      picked.category = Capture.CATEGORIES[(index + 1) % Capture.CATEGORIES.length];
+      const ids = categoryIds();
+      picked.category = ids[(ids.indexOf(result.category) + 1) % ids.length];
     } else if (result.type === 'life' && context.habits.length > 1) {
       const index = context.habits.findIndex((habit) => habit.id === result.habitId);
       picked.habitId = context.habits[(index + 1) % context.habits.length].id;

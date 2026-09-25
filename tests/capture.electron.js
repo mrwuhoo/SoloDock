@@ -215,7 +215,7 @@ app.whenReady().then(async () => {
     await add({ text: '记得买猫粮', type: 'todo', category: 'P3', open: true });
     await settle(300);
     out.opened = [document.getElementById('app').classList.contains('expanded'), document.querySelector('#tab-todo.active') !== null, document.getElementById('status-toast-message').textContent];
-    out.flashed = document.querySelector('.todo-item.flash')?.dataset.id === window.NotchTodos.items().P3.find((item) => item.text === '买猫粮')?.id;
+    out.flashed = document.querySelector('.task-row.flash')?.dataset.id === window.NotchTodos.items().P3.find((item) => item.text === '买猫粮')?.id;
 
     // Settings: the capture shortcut row says when another app holds the shortcut.
     window.__handlers.onAppSettingsChanged.forEach((callback) => callback({ features: {}, shortcut: 'Space', captureShortcut: 'Alt+Shift+N', captureShortcutRegistered: false }));

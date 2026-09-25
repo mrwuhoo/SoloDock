@@ -57,12 +57,10 @@
   // 把各处的数据收成统一的条目。每次打开时重新收集，保证是最新的。
   async function collect() {
     const next = [];
-    const todos = window.NotchTodos?.items?.() || {};
-    for (const priority of ['P0', 'P1', 'P2', 'P3']) {
-      for (const todo of todos[priority] || []) {
-        if (todo.done) continue;
-        next.push({ type: 'todo', id: todo.id, title: todo.text, subtitle: [window.NotchTodos.categoryName(priority), todo.deadline ? new Date(todo.deadline).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : ''].filter(Boolean).join(' · '), at: todo.createdAt });
-      }
+    for (const todo of window.NotchTodos?.list?.() || []) {
+      if (todo.done) continue;
+      const due = todo.deadline ? window.NotchTodo?.dueLabel?.(todo.deadline).text : '';
+      next.push({ type: 'todo', id: todo.id, title: todo.text, subtitle: [window.NotchTodos.categoryName(todo.categoryId), due].filter(Boolean).join(' · '), at: todo.createdAt });
     }
     for (const note of window.NotchNotes?.list?.() || []) {
       next.push({ type: 'note', id: note.id, title: oneLine(note.title) || '未命名笔记', subtitle: oneLine(note.content), keywords: note.content, at: note.updatedAt || note.createdAt });
