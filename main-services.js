@@ -699,7 +699,89 @@ function framePhotoSize(size, maxEdge) {
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
+// ============ 一键接入 Claude Code ============
+// Claude Code 没有像 Codex app-server 那样的额度读取接口，额度只能从状态栏输入（rate_limits）里拿，
+// 所以要在 ~/.claude/settings.json 里登记 SoloDock 的状态栏脚本和提醒钩子。下面是纯函数：只加 / 只删
+// SoloDock 自己的那一项，别的设置原样保留；已有自己的状态栏命令时用 --then 接在后面，断开时原样还原。
+const CLAUDE_STATUS_SCRIPT = 'claude-statusline.js';
+const CLAUDE_NOTIFY_SCRIPT = 'claude-notify.js';
+const CLAUDE_HOOK_EVENTS = ['Stop', 'Notification'];
+
+const isPlainObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+
+function shellQuote(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
+}
+
+// 从 SoloDock 生成的状态栏命令里取回原来的命令（--then '...'），没有就是空串。
+function chainedStatusCommand(command) {
+  const match = String(command || '').match(/ --then '((?:[^']|'\\'')*)'\s*$/);
+  return match ? match[1].replace(/'\\''/g, "'") : '';
+}
+
+function isSoloDockHook(hook) {
+  return isPlainObject(hook) && typeof hook.command === 'string' && hook.command.includes(CLAUDE_NOTIFY_SCRIPT);
+}
+
+function claudeSettingsStatus(settings) {
+  const source = isPlainObject(settings) ? settings : {};
+  const statusCommand = isPlainObject(source.statusLine) ? String(source.statusLine.command || '') : '';
+  const hooks = isPlainObject(source.hooks) ? source.hooks : {};
+  const hasHook = (event) => (Array.isArray(hooks[event]) ? hooks[event] : [])
+    .some((group) => isPlainObject(group) && Array.isArray(group.hooks) && group.hooks.some(isSoloDockHook));
+  return { usage: statusCommand.includes(CLAUDE_STATUS_SCRIPT), reminders: CLAUDE_HOOK_EVENTS.every(hasHook) };
+}
+
+function connectClaudeSettings(settings, { statusCommand, notifyCommand }) {
+  const next = isPlainObject(settings) ? JSON.parse(JSON.stringify(settings)) : {};
+  const current = isPlainObject(next.statusLine) ? next.statusLine : null;
+  const currentCommand = current ? String(current.command || '').trim() : '';
+  const chained = currentCommand.includes(CLAUDE_STATUS_SCRIPT) ? chainedStatusCommand(currentCommand) : currentCommand;
+  next.statusLine = { ...(current || {}), type: 'command', command: chained ? `${statusCommand} --then ${shellQuote(chained)}` : statusCommand };
+  next.hooks = isPlainObject(next.hooks) ? next.hooks : {};
+  for (const event of CLAUDE_HOOK_EVENTS) {
+    let found = false;
+    const groups = (Array.isArray(next.hooks[event]) ? next.hooks[event] : []).map((group) => {
+      if (!isPlainObject(group) || !Array.isArray(group.hooks)) return group;
+      return { ...group, hooks: group.hooks.map((hook) => {
+        if (!isSoloDockHook(hook)) return hook;
+        found = true;
+        return { ...hook, command: notifyCommand };
+      }) };
+    });
+    if (!found) groups.push({ hooks: [{ type: 'command', command: notifyCommand }] });
+    next.hooks[event] = groups;
+  }
+  return next;
+}
+
+function disconnectClaudeSettings(settings) {
+  const next = isPlainObject(settings) ? JSON.parse(JSON.stringify(settings)) : {};
+  if (isPlainObject(next.statusLine) && String(next.statusLine.command || '').includes(CLAUDE_STATUS_SCRIPT)) {
+    const chained = chainedStatusCommand(next.statusLine.command);
+    if (chained) next.statusLine = { ...next.statusLine, command: chained };
+    else delete next.statusLine;
+  }
+  if (isPlainObject(next.hooks)) {
+    for (const event of CLAUDE_HOOK_EVENTS) {
+      if (!Array.isArray(next.hooks[event])) continue;
+      const groups = next.hooks[event]
+        .map((group) => (isPlainObject(group) && Array.isArray(group.hooks) ? { ...group, hooks: group.hooks.filter((hook) => !isSoloDockHook(hook)) } : group))
+        .filter((group) => !(isPlainObject(group) && Array.isArray(group.hooks) && group.hooks.length === 0));
+      if (groups.length) next.hooks[event] = groups;
+      else delete next.hooks[event];
+    }
+    if (!Object.keys(next.hooks).length) delete next.hooks;
+  }
+  return next;
+}
+
 module.exports = {
+  shellQuote,
+  chainedStatusCommand,
+  claudeSettingsStatus,
+  connectClaudeSettings,
+  disconnectClaudeSettings,
   needsInputMessage,
   needsInputDetail,
   normalizeCaptureEntry,

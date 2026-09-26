@@ -77,18 +77,24 @@ app.whenReady().then(async () => {
   assert.deepEqual(picks.beforeLeaving, []);
   await shot('onboard-2');
 
-  // Step 3: detected tools get a primary copy button; nothing is written to their config.
+  // Step 3: Claude Code is connected with one click (main writes only SoloDock's entry); Codex copies its snippet.
   const ai = await run(`
     const settle = (ms = 80) => new Promise((resolve) => setTimeout(resolve, ms));
     window.__copied = [];
-    window.notchAPI.getAiIntegrationStatus = async () => ({ claude: { installed: true, connected: false }, codex: { installed: false, connected: false } });
-    window.notchAPI.getAiIntegrationSetup = async (tool) => ({ ok: true, file: '~/.claude/settings.json', snippet: '"hooks": {}' });
+    window.__linked = false;
+    window.__connects = 0;
+    window.notchAPI.getAiIntegrationStatus = async () => ({ claude: { installed: true, connected: window.__linked, usage: window.__linked, reminders: window.__linked }, codex: { installed: false, connected: false } });
+    window.notchAPI.connectClaude = async () => { window.__connects += 1; window.__linked = true; return { ok: true, changed: true, status: { usage: true, reminders: true } }; };
+    window.notchAPI.getAiIntegrationSetup = async (tool) => ({ ok: true, file: '~/.codex/config.toml', snippet: 'notify = []' });
     window.notchAPI.writeClipboard = async (entry) => { window.__copied.push(entry); return true; };
     document.querySelector('[data-onboard="next"]').click();
     await settle(150);
-    const rows = [...document.querySelectorAll('.onboard-ai-row')].map((row) => [row.querySelector('b').textContent, row.querySelector('small').textContent, row.querySelector('button')?.className || '']);
+    const rows = [...document.querySelectorAll('.onboard-ai-row')].map((row) => [row.querySelector('b').textContent, row.querySelector('small').textContent, row.querySelector('button')?.className || '', row.querySelector('button')?.textContent || '']);
     const out = { features: window.__features.slice(), step: window.NotchOnboarding.state().step, next: document.querySelector('[data-onboard="next"]').textContent, rows };
-    document.querySelector('[data-setup="claude"]').click();
+    document.querySelector('[data-connect="claude"]').click();
+    await settle(150);
+    out.connected = { calls: window.__connects, note: document.querySelector('#onboard-ai-note span').textContent, row: [...document.querySelectorAll('.onboard-ai-row')][0].querySelector('small').textContent, button: Boolean([...document.querySelectorAll('.onboard-ai-row')][0].querySelector('button')), toast: document.getElementById('status-toast-message').textContent };
+    document.querySelector('[data-setup="codex"]').click();
     await settle();
     out.copied = window.__copied.slice();
     out.note = document.querySelector('#onboard-ai-note span').textContent;
@@ -104,9 +110,13 @@ app.whenReady().then(async () => {
   assert.deepEqual(ai.features, [['clip', true], ['life', false]]);
   assert.equal(ai.step, 3);
   assert.equal(ai.next, '完成');
-  assert.deepEqual(ai.rows, [['Claude Code', '已检测到', 'onboard-primary'], ['Codex', '没有检测到，装好后可以在这里接入', 'onboard-secondary']]);
-  assert.deepEqual(ai.copied, [{ type: 'text', text: '"hooks": {}' }]);
-  assert.match(ai.note, /^已复制 · 粘贴进 ~\/\.claude\/settings\.json 的最外层/);
+  assert.deepEqual(ai.rows, [['Claude Code', '已检测到', 'onboard-primary', '一键接入'], ['Codex', '没有检测到，装好后可以在这里接入', 'onboard-secondary', '复制接入设置']]);
+  assert.equal(ai.connected.calls, 1);
+  assert.match(ai.connected.note, /^已接入 Claude Code/);
+  assert.deepEqual([ai.connected.row, ai.connected.button], ['已接入', false]);
+  assert.equal(ai.connected.toast, '已接入 Claude Code · 新开的会话回复一次后显示额度');
+  assert.deepEqual(ai.copied, [{ type: 'text', text: 'notify = []' }]);
+  assert.match(ai.note, /^已复制 · 粘贴到 ~\/\.codex\/config\.toml 最前面/);
   assert.deepEqual(ai.back, [2, 'true']);
   assert.deepEqual(ai.featuresAfter, [['clip', true], ['life', false]]);
   await shot('onboard-3');

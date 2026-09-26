@@ -31,6 +31,8 @@
   let subscriptions = Ai.normalizeSubscriptions(readJson(KEY, null));
   let claudeSnapshot = null;
   let lastClaudeRead = 0;
+  // ~/.claude/settings.json 里有没有 SoloDock 的状态栏 / 提醒登记（主进程只读判断，内容不传过来）。
+  let claudeLink = { installed: false, usage: false, reminders: false };
 
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(subscriptions)); } catch (error) { /* keep session state */ }
@@ -105,14 +107,15 @@
       footer.append(node('span', '', secondary ? `${secondary.label}剩 ${Math.round(secondary.remaining)}%` : 'Claude Code 上报'));
     } else {
       column.dataset.level = 'unknown';
-      body.append(value('—', '', summary.state === 'stale' ? '额度已重置' : '未接入'));
+      const waiting = summary.state === 'disconnected' && claudeLink.usage;
+      body.append(value('—', '', summary.state === 'stale' ? '额度已重置' : waiting ? '已接入' : '未接入'));
       body.append(node('p', 'usage-note', summary.state === 'stale'
         ? '等 Claude Code 刷新'
-        : '接入后自动显示额度'));
-      if (summary.state === 'disconnected') {
-        const connect = node('button', 'workspace-button compact', '接入 Claude Code');
+        : waiting ? 'Claude Code 回复一次后显示' : '一键接入，自动显示额度'));
+      if (summary.state === 'disconnected' && !claudeLink.usage) {
+        const connect = node('button', 'workspace-button compact', '一键接入');
         connect.type = 'button';
-        connect.addEventListener('click', openSettings);
+        connect.addEventListener('click', (event) => { event.stopPropagation(); connectClaude(); });
         body.append(connect);
       }
     }
@@ -214,6 +217,50 @@
     document.dispatchEvent(new CustomEvent('notch:ai-usage-updated', { detail: { provider: 'claude' } }));
   }
 
+  // ---------------- 一键接入 Claude Code ----------------
+  // Claude 没有 Codex 那样的额度读取接口，只能从状态栏拿数据；点一下由主进程写好 ~/.claude/settings.json，
+  // 只加 SoloDock 自己的一项，原来的状态栏与钩子都保留，随时可以断开还原。
+  async function refreshClaudeLink() {
+    const status = await Promise.resolve(window.notchAPI?.getAiIntegrationStatus?.()).catch(() => null);
+    if (status?.claude) claudeLink = { installed: Boolean(status.claude.installed), usage: Boolean(status.claude.usage), reminders: Boolean(status.claude.reminders) };
+    render();
+    renderSettings();
+    return claudeLink;
+  }
+
+  function linkChanged(status) {
+    if (status) claudeLink = { ...claudeLink, usage: Boolean(status.usage), reminders: Boolean(status.reminders) };
+    render();
+    renderSettings();
+    document.dispatchEvent(new CustomEvent('notch:ai-usage-updated', { detail: { provider: 'claude' } }));
+  }
+
+  async function connectClaude() {
+    const result = await Promise.resolve(window.notchAPI?.connectClaude?.()).catch(() => null);
+    if (!result?.ok) {
+      toast(result?.error === 'invalid_settings' ? '~/.claude/settings.json 格式有误，没有改动；可以用「手动配置」' : '接入没有成功，请再试一次');
+      return result;
+    }
+    const claude = subscriptions.find((item) => item.id === 'claude');
+    if (claude && !claude.enabled) { claude.enabled = true; save(); }
+    linkChanged(result.status);
+    if (typeof window.showStatusToast === 'function') {
+      window.showStatusToast('已接入 Claude Code · 新开的会话回复一次后显示额度', { actionLabel: '撤销', onAction: () => disconnectClaude(), duration: 6000 });
+    }
+    return result;
+  }
+
+  async function disconnectClaude() {
+    const result = await Promise.resolve(window.notchAPI?.disconnectClaude?.()).catch(() => null);
+    if (!result?.ok) {
+      toast(result?.error === 'invalid_settings' ? '~/.claude/settings.json 格式有误，没有改动' : '断开没有成功，请再试一次');
+      return result;
+    }
+    linkChanged(result.status);
+    toast('已断开 Claude Code，原来的设置都还在');
+    return result;
+  }
+
   // ---------------- Settings ----------------
   function dayOptions(select, selected) {
     select.replaceChildren();
@@ -232,7 +279,7 @@
     const onHomeText = subscription.enabled && !homeIds.includes(subscription.id) ? ' · 不在首页（只显示前 3 个）' : '';
     if (subscription.kind === 'codex') return `自动读取本机 Codex 账号${onHomeText}`;
     if (subscription.kind === 'claude') {
-      if (!claudeSnapshot) return `通过 Claude Code 状态栏 · 未接入${onHomeText}`;
+      if (!claudeSnapshot) return claudeLink.usage ? `已接入 · 等 Claude Code 下一次回复${onHomeText}` : `通过 Claude Code 状态栏 · 未接入${onHomeText}`;
       const minutes = Math.max(0, Math.round((Date.now() - claudeSnapshot.receivedAt) / 60000));
       return `通过 Claude Code 状态栏 · ${minutes ? `${minutes} 分钟前更新` : '刚刚更新'}${onHomeText}`;
     }
@@ -285,10 +332,14 @@
       down.setAttribute('aria-label', `${subscription.name} 下移`);
       controls.append(plan, day, up, down);
       if (subscription.kind === 'claude') {
-        const setup = node('button', 'workspace-button compact', '复制接入设置');
-        setup.type = 'button';
-        setup.dataset.action = 'claude-setup';
-        controls.append(setup);
+        const link = node('button', `workspace-button compact${claudeLink.usage ? '' : ' primary'}`, claudeLink.usage ? '断开' : '一键接入');
+        link.type = 'button';
+        link.dataset.action = claudeLink.usage ? 'claude-disconnect' : 'claude-connect';
+        const manual = node('button', 'usage-text-button ai-sub-manual', '手动配置');
+        manual.type = 'button';
+        manual.dataset.action = 'claude-setup';
+        manual.title = '复制状态栏设置，自己粘贴到 ~/.claude/settings.json';
+        controls.append(link, manual);
       }
       if (subscription.kind === 'manual') {
         const remove = node('button', 'icon-button danger ai-sub-remove', '×');
@@ -337,6 +388,8 @@
       subscriptions = subscriptions.filter((item) => item.id !== row.dataset.id);
       save();
     }
+    if (action === 'claude-connect') connectClaude();
+    if (action === 'claude-disconnect') disconnectClaude();
     if (action === 'claude-setup') {
       const setup = await window.notchAPI?.getClaudeStatuslineSetup?.().catch(() => null);
       const copied = setup && await window.notchAPI?.writeClipboard?.({ type: 'text', text: setup.snippet }).catch(() => false);
@@ -376,12 +429,19 @@
   render();
   renderSettings();
   refreshClaude(true);
+  refreshClaudeLink();
+  document.addEventListener('notch:tabchange', (event) => {
+    if (['home', 'settings'].includes(event.detail?.tab)) refreshClaudeLink();
+  });
 
   window.NotchAiUsageState = {
     isOnHome: (id) => onHome().some((item) => item.id === id),
     subscriptions: () => subscriptions.map((item) => ({ ...item })),
     refreshClaude: () => refreshClaude(true),
     claude: () => claudeSnapshot,
+    claudeLink: () => ({ ...claudeLink }),
+    connectClaude,
+    disconnectClaude,
     openSettings,
     // 刘海下沿用：Claude 开着且数据不超过 6 小时时，返回最紧额度窗口的剩余百分比。
     claudeRemaining() {

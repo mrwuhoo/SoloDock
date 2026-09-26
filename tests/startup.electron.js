@@ -7,6 +7,10 @@ app.commandLine.appendSwitch('user-data-dir', profile);
 // The production bootstrap may inspect encrypted legacy settings on this Mac.
 // Use Chromium's test keychain so a regression test never prompts for user keys.
 if (process.platform === 'darwin') app.commandLine.appendSwitch('use-mock-keychain');
+// One-click Claude Code hookup writes ~/.claude/settings.json: point "home" at a throwaway folder.
+const fakeHome = path.join(profile, 'home');
+fs.mkdirSync(path.join(fakeHome, '.claude'), { recursive: true });
+app.setPath('home', fakeHome);
 fs.writeFileSync(path.join(profile, 'workspace.json'), JSON.stringify({version:1, localStorage:{
   'notch-home-note':'Recovered workspace note',
   'notch-recordings':JSON.stringify([{id:'startup-recording',createdAt:1788709776699,durationMs:1558,transcript:'',audioPath:'recordings/retained.webm',mimeType:'audio/webm',title:'Saved recording',category:'未分类'}]),
@@ -228,6 +232,33 @@ app.on('web-contents-created', (_event, contents) => {
       assert.equal(summaryTitle, '暂停期间有 1 条提醒');
       assert.equal(await noticeCount(), beforeNotices + 1, 'the summary is not another notice');
       assert.equal((await contents.executeJavaScript('window.notchAPI.getAppSettings()')).remindersPausedUntil, 0);
+
+      // 一键接入 Claude Code: only SoloDock's entries are added, the original is backed up once and restored on disconnect.
+      const claudeFile = path.join(fakeHome, '.claude', 'settings.json');
+      const original = { model: 'opus', statusLine: { type: 'command', command: "echo 'mine'" }, hooks: { Stop: [{ hooks: [{ type: 'command', command: 'afplay /System/Library/Sounds/Glass.aiff' }] }] } };
+      fs.writeFileSync(claudeFile, JSON.stringify(original, null, 2), { mode: 0o644 });
+      fs.chmodSync(claudeFile, 0o644);
+      const linked = await contents.executeJavaScript('window.notchAPI.connectClaude()');
+      assert.deepEqual(linked, { ok: true, changed: true, status: { usage: true, reminders: true } });
+      const written = JSON.parse(fs.readFileSync(claudeFile, 'utf8'));
+      assert.equal(written.model, 'opus');
+      assert.match(written.statusLine.command, /^ELECTRON_RUN_AS_NODE=1 ".+" ".+scripts\/claude-statusline\.js" --then 'echo '\\''mine'\\'''$/);
+      assert.equal(written.hooks.Stop.length, 2);
+      assert.equal(written.hooks.Notification.length, 1);
+      assert.equal(fs.statSync(claudeFile).mode & 0o777, 0o644, 'file permissions are kept');
+      assert.deepEqual(JSON.parse(fs.readFileSync(`${claudeFile}.before-solodock`, 'utf8')), original);
+      assert.equal((await contents.executeJavaScript('window.notchAPI.getAiIntegrationStatus()')).claude.connected, true);
+      // The generated command really runs with the bundled runtime and keeps the user's own status line
+      // (no rate limits on stdin, so nothing is sent anywhere).
+      const { execFileSync } = require('node:child_process');
+      const statusOutput = execFileSync('/bin/sh', ['-c', written.statusLine.command], { input: JSON.stringify({ model: { display_name: 'Opus' } }), timeout: 10000 }).toString();
+      assert.equal(statusOutput.trim(), 'mine');
+      assert.deepEqual(await contents.executeJavaScript('window.notchAPI.connectClaude()'), { ok: true, changed: false, status: { usage: true, reminders: true } }, 'connecting twice changes nothing');
+      assert.deepEqual((await contents.executeJavaScript('window.notchAPI.disconnectClaude()')).status, { usage: false, reminders: false });
+      assert.deepEqual(JSON.parse(fs.readFileSync(claudeFile, 'utf8')), original, 'disconnecting restores the original');
+      fs.writeFileSync(claudeFile, '{ not json');
+      assert.deepEqual(await contents.executeJavaScript('window.notchAPI.connectClaude()'), { ok: false, error: 'invalid_settings' });
+      assert.equal(fs.readFileSync(claudeFile, 'utf8'), '{ not json', 'a broken file is never overwritten');
 
       // This profile already has a workspace, so it is not treated as a fresh install: no onboarding.
       assert.equal((await contents.executeJavaScript('window.notchAPI.getAppSettings()')).onboardingPending, false);

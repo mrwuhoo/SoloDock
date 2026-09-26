@@ -28,12 +28,12 @@
 首页「AI 用量」最多同时显示 3 个订阅（设置 → AI 用量 → 订阅，可开关、排序、填写套餐和每月续费日）：
 
 - **Codex**：自动读取本机登录账号的额度与重置卡（见下文）。
-- **Claude**：通过 Claude Code 状态栏上报。在设置里点「复制接入设置」，把复制到的 `statusLine` 配置粘贴进 `~/.claude/settings.json` 并重启 Claude Code。脚本 `scripts/claude-statusline.js` 只把 `rate_limits` 里 5 小时与每周窗口的已用百分比和重置时间转发到本机 `127.0.0.1:43821/usage/claude`，会话、路径、模型等内容不会离开 Claude Code；数据只保存在内存里。已有自己的状态栏命令时，用 `--then '原命令'` 接在后面，状态栏继续显示原来的内容。仅 Pro/Max 订阅会提供该数据。
+- **Claude**：通过 Claude Code 状态栏上报（Claude Code 没有像 Codex 那样的额度读取接口，SoloDock 也不读取它的登录凭据）。在首页 Claude 栏、用量详情或「设置 → AI 与 API」里点「一键接入」，SoloDock 会在 `~/.claude/settings.json` 里登记状态栏脚本和提醒钩子：只加自己的一项，原来的状态栏命令用 `--then` 接在后面继续显示，其他设置原样保留；第一次写入前在旁边留一份 `settings.json.before-solodock`，文件不是合法 JSON 时不写。点「断开」原样还原。新开的 Claude Code 会话回复一次后就会显示额度。也可以用「手动配置」复制设置自己粘贴。脚本 `scripts/claude-statusline.js` 只把 `rate_limits` 里 5 小时与每周窗口的已用百分比和重置时间转发到本机 `127.0.0.1:43821/usage/claude`，会话、路径、模型等内容不会离开 Claude Code；数据只保存在内存里。已有自己的状态栏命令时，用 `--then '原命令'` 接在后面，状态栏继续显示原来的内容。仅 Pro/Max 订阅会提供该数据。
 - **其他订阅**（如 Grok）：没有可读取的额度接口，只显示套餐和续费倒计时，不会显示猜测的额度。
 
 ## 接入 Claude Code 提醒
 
-在 `~/.claude/settings.json` 的 `hooks` 里登记 SoloDock 的转发脚本（把路径换成你的 SoloDock 目录）。`Stop` 在一轮任务完成时提醒；`Notification` 在 Claude Code 请求权限时点亮刘海下沿的「Claude 需要你确认」并弹出提醒，你批准后它继续工作、完成时状态自动清除。脚本只转发标题、项目名与权限提示，不上传对话内容，只发往本机 `127.0.0.1:43821`。
+「一键接入」会同时登记下面这两个钩子；想手动配置的话，在 `~/.claude/settings.json` 的 `hooks` 里登记 SoloDock 的转发脚本（把路径换成你的 SoloDock 目录）。`Stop` 在一轮任务完成时提醒；`Notification` 在 Claude Code 请求权限时点亮刘海下沿的「Claude 需要你确认」并弹出提醒，你批准后它继续工作、完成时状态自动清除。脚本只转发标题、项目名与权限提示，不上传对话内容，只发往本机 `127.0.0.1:43821`。
 
 ```json
 {

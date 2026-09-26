@@ -64,6 +64,9 @@ const {
   needsInputMessage,
   needsInputDetail,
   normalizeCaptureEntry,
+  claudeSettingsStatus,
+  connectClaudeSettings,
+  disconnectClaudeSettings,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
 const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES, createQuotaWatch, quotaWindows } = require('./reminder-rules');
@@ -1384,9 +1387,13 @@ ipcMain.handle('claude:usage', () => (claudeUsageSnapshot
   : { ok: false, error: 'not_connected' }));
 // 生成 ~/.claude/settings.json 里的状态栏配置。用 SoloDock 自带的运行时执行脚本，
 // 这样即使电脑上没有单独安装 Node.js 也能工作。只返回文本，由用户自己粘贴。
+// 用 SoloDock 自带的运行时执行随 App 分发的脚本。
+function bundledScriptCommand(name) {
+  return `ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(__dirname, 'scripts', name)}"`;
+}
+
 ipcMain.handle('claude:statusline-setup', () => {
-  const script = path.join(__dirname, 'scripts', 'claude-statusline.js');
-  const command = `ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${script}"`;
+  const command = bundledScriptCommand('claude-statusline.js');
   return {
     command,
     snippet: `"statusLine": ${JSON.stringify({ type: 'command', command }, null, 2)}`,
@@ -1400,8 +1407,10 @@ function aiIntegrationStatus() {
   const read = (file) => { try { return fs.readFileSync(file, 'utf8'); } catch (error) { return ''; } };
   const claudeDir = path.join(home, '.claude');
   const codexDir = process.env.CODEX_HOME || path.join(home, '.codex');
+  let claude = { usage: false, reminders: false };
+  try { claude = claudeSettingsStatus(JSON.parse(read(path.join(claudeDir, 'settings.json')) || '{}')); } catch (error) { /* 文件坏了就当没接入 */ }
   return {
-    claude: { installed: fs.existsSync(claudeDir), connected: read(path.join(claudeDir, 'settings.json')).includes('claude-notify.js') },
+    claude: { installed: fs.existsSync(claudeDir), connected: claude.usage && claude.reminders, usage: claude.usage, reminders: claude.reminders },
     codex: { installed: fs.existsSync(codexDir), connected: read(path.join(codexDir, 'config.toml')).includes('codex-notify.js') },
   };
 }
@@ -1410,7 +1419,7 @@ ipcMain.handle('ai:integration-status', () => aiIntegrationStatus());
 // 和状态栏设置一样，用 SoloDock 自带的运行时执行脚本，电脑上没装 Node.js 也能用。
 ipcMain.handle('ai:integration-setup', (event, tool) => {
   if (tool === 'claude') {
-    const command = `ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${path.join(__dirname, 'scripts', 'claude-notify.js')}"`;
+    const command = bundledScriptCommand('claude-notify.js');
     const hook = [{ hooks: [{ type: 'command', command }] }];
     return { ok: true, file: '~/.claude/settings.json', snippet: `"hooks": ${JSON.stringify({ Stop: hook, Notification: hook }, null, 2)}` };
   }
@@ -1419,6 +1428,49 @@ ipcMain.handle('ai:integration-setup', (event, tool) => {
     return { ok: true, file: '~/.codex/config.toml', snippet: `notify = ${JSON.stringify(['/usr/bin/env', 'ELECTRON_RUN_AS_NODE=1', process.execPath, script])}` };
   }
   return { ok: false, error: 'invalid' };
+});
+
+// 一键接入 / 断开 Claude Code：只在用户点按钮时写 ~/.claude/settings.json。
+// 第一次写之前在旁边留一份 settings.json.before-solodock；文件不是合法 JSON 时一律不写。
+async function updateClaudeSettings(mutate) {
+  const directory = path.join(app.getPath('home'), '.claude');
+  const file = path.join(directory, 'settings.json');
+  let raw = null;
+  let mode = 0o600;
+  try {
+    raw = await fs.promises.readFile(file, 'utf8');
+    mode = (await fs.promises.stat(file)).mode & 0o777;
+  } catch (error) {
+    if (error.code !== 'ENOENT') return { ok: false, error: 'read_failed' };
+  }
+  let settings = {};
+  if (raw !== null && raw.trim()) {
+    try { settings = JSON.parse(raw); } catch (error) { return { ok: false, error: 'invalid_settings' }; }
+    if (!settings || typeof settings !== 'object' || Array.isArray(settings)) return { ok: false, error: 'invalid_settings' };
+  }
+  const next = mutate(settings);
+  if (JSON.stringify(next) === JSON.stringify(settings)) return { ok: true, changed: false, status: claudeSettingsStatus(next) };
+  try {
+    await fs.promises.mkdir(directory, { recursive: true });
+    const backup = `${file}.before-solodock`;
+    if (raw !== null && !fs.existsSync(backup)) await fs.promises.writeFile(backup, raw, { mode: 0o600 });
+    const temporary = `${file}.solodock-${process.pid}.tmp`;
+    await fs.promises.writeFile(temporary, `${JSON.stringify(next, null, 2)}\n`, { mode });
+    await fs.promises.rename(temporary, file);
+  } catch (error) {
+    return { ok: false, error: 'write_failed' };
+  }
+  return { ok: true, changed: true, status: claudeSettingsStatus(next) };
+}
+
+ipcMain.handle('claude:connect', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'unavailable' };
+  const commands = { statusCommand: bundledScriptCommand('claude-statusline.js'), notifyCommand: bundledScriptCommand('claude-notify.js') };
+  return updateClaudeSettings((settings) => connectClaudeSettings(settings, commands));
+});
+ipcMain.handle('claude:disconnect', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'unavailable' };
+  return updateClaudeSettings(disconnectClaudeSettings);
 });
 
 function startTaskNotificationServer() {

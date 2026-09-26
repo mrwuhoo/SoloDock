@@ -675,3 +675,46 @@ test('a quick capture entry keeps only text and type hints; the main process sta
   assert.equal(normalizeCaptureEntry('text'), null);
   assert.equal(normalizeCaptureEntry({ text: 'a'.repeat(5000) }, 1).text.length, 4000);
 });
+
+test('one-click Claude Code hookup only adds and removes SoloDock entries', () => {
+  const { connectClaudeSettings, disconnectClaudeSettings, claudeSettingsStatus, chainedStatusCommand, shellQuote } = require('../main-services');
+  const commands = {
+    statusCommand: 'ELECTRON_RUN_AS_NODE=1 "/Applications/SoloDock.app/Contents/MacOS/SoloDock" "/Applications/SoloDock.app/Contents/Resources/app/scripts/claude-statusline.js"',
+    notifyCommand: 'ELECTRON_RUN_AS_NODE=1 "/Applications/SoloDock.app/Contents/MacOS/SoloDock" "/Applications/SoloDock.app/Contents/Resources/app/scripts/claude-notify.js"',
+  };
+  // Empty settings: status line and both hooks are added.
+  const fresh = connectClaudeSettings({}, commands);
+  assert.equal(fresh.statusLine.command, commands.statusCommand);
+  assert.deepEqual(fresh.hooks.Stop, [{ hooks: [{ type: 'command', command: commands.notifyCommand }] }]);
+  assert.deepEqual(claudeSettingsStatus(fresh), { usage: true, reminders: true });
+  assert.deepEqual(disconnectClaudeSettings(fresh), {});
+
+  // Existing settings: other keys, the user's own status line and hooks all survive a round trip.
+  const own = {
+    model: 'opus',
+    env: { FOO: '1' },
+    statusLine: { type: 'command', command: "bash -c 'echo \"$(pwd)\"'", padding: 0 },
+    hooks: {
+      Stop: [{ matcher: '', hooks: [{ type: 'command', command: 'afplay /System/Library/Sounds/Glass.aiff' }] }],
+      PreToolUse: [{ matcher: 'Bash', hooks: [{ type: 'command', command: 'echo pre' }] }],
+    },
+  };
+  const connected = connectClaudeSettings(own, commands);
+  assert.equal(connected.statusLine.padding, 0);
+  assert.equal(chainedStatusCommand(connected.statusLine.command), own.statusLine.command, 'the old status line runs after ours');
+  assert.equal(connected.statusLine.command, `${commands.statusCommand} --then ${shellQuote(own.statusLine.command)}`);
+  assert.deepEqual(connected.hooks.Stop[0], own.hooks.Stop[0]);
+  assert.equal(connected.hooks.Stop.length, 2);
+  assert.deepEqual(connected.hooks.PreToolUse, own.hooks.PreToolUse);
+  assert.deepEqual([connected.model, connected.env], ['opus', { FOO: '1' }]);
+  // Connecting twice (or after moving the app) updates in place instead of stacking.
+  const moved = { statusCommand: commands.statusCommand.replace(/\/Applications/g, '/Users/me/Applications'), notifyCommand: commands.notifyCommand.replace(/\/Applications/g, '/Users/me/Applications') };
+  const again = connectClaudeSettings(connected, moved);
+  assert.equal(again.hooks.Stop.length, 2);
+  assert.equal(again.hooks.Notification.length, 1);
+  assert.equal(chainedStatusCommand(again.statusLine.command), own.statusLine.command);
+  assert.ok(again.hooks.Stop[1].hooks[0].command.includes('/Users/me/Applications'));
+  assert.deepEqual(disconnectClaudeSettings(again), own, 'disconnecting restores the original exactly');
+  assert.deepEqual(claudeSettingsStatus(own), { usage: false, reminders: false });
+  assert.deepEqual(claudeSettingsStatus(null), { usage: false, reminders: false });
+});

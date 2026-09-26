@@ -88,8 +88,14 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = info.installed ? 'onboard-primary' : 'onboard-secondary';
-        button.dataset.setup = id;
-        button.textContent = '复制接入设置';
+        // Claude Code 由 SoloDock 直接登记（只加自己的一项）；Codex 仍复制接入设置自己粘贴。
+        if (id === 'claude') {
+          button.dataset.connect = id;
+          button.textContent = '一键接入';
+        } else {
+          button.dataset.setup = id;
+          button.textContent = '复制接入设置';
+        }
         row.append(button);
       }
       return row;
@@ -145,6 +151,18 @@
       pick.setAttribute('aria-pressed', String(picked[pick.dataset.feature]));
       return;
     }
+    const connect = event.target.closest('[data-connect]');
+    if (connect) {
+      connect.disabled = true;
+      const result = await Promise.resolve(window.NotchAiUsageState?.connectClaude?.()).catch(() => null);
+      const note = $('onboard-ai-note');
+      note.classList.toggle('done', Boolean(result?.ok));
+      note.querySelector('span').textContent = result?.ok
+        ? '已接入 Claude Code：新开的会话回复一次后，额度和提醒都会出现在 SoloDock 里。原来的设置都保留，在「设置 → AI 与 API」里可以断开。'
+        : result?.error === 'invalid_settings' ? '~/.claude/settings.json 格式有误，没有改动。' : '接入没有成功，请再试一次。';
+      await renderAi();
+      return;
+    }
     const setup = event.target.closest('[data-setup]');
     if (setup) {
       const tool = setup.dataset.setup;
@@ -153,11 +171,9 @@
       const note = $('onboard-ai-note');
       const name = TOOLS.find(([id]) => id === tool)[1];
       note.classList.toggle('done', Boolean(copied));
-      note.querySelector('span').textContent = !copied
-        ? '没复制上，请再试一次。'
-        : tool === 'claude'
-          ? `已复制 · 粘贴进 ${result.file} 的最外层（已有 hooks 时，把 Stop 与 Notification 两项并进去），然后重启 ${name}。`
-          : `已复制 · 粘贴到 ${result.file} 最前面（任何 [ ] 段落之前），然后重启 ${name}。`;
+      note.querySelector('span').textContent = copied
+        ? `已复制 · 粘贴到 ${result.file} 最前面（任何 [ ] 段落之前），然后重启 ${name}。`
+        : '没复制上，请再试一次。';
       return;
     }
     const action = event.target.closest('[data-onboard]')?.dataset.onboard;
