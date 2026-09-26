@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('notchAPI', {
   getClaudeStatuslineSetup: () => ipcRenderer.invoke('claude:statusline-setup'),
   connectClaude: () => ipcRenderer.invoke('claude:connect'),
   disconnectClaude: () => ipcRenderer.invoke('claude:disconnect'),
+  moveToApplications: () => ipcRenderer.invoke('app:move-to-applications'),
   getAiIntegrationStatus: () => ipcRenderer.invoke('ai:integration-status'),
   getAiIntegrationSetup: (tool) => ipcRenderer.invoke('ai:integration-setup', tool),
   finishOnboarding: () => ipcRenderer.invoke('onboarding:done'),

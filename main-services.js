@@ -755,6 +755,25 @@ function connectClaudeSettings(settings, { statusCommand, notifyCommand }) {
   return next;
 }
 
+// App 换了位置（例如从安装盘移到「应用程序」）后，把已经登记的 SoloDock 命令改到新路径；
+// 用户没接入过就什么都不做，也不会新增任何一项。
+function repairClaudeSettings(settings, { statusCommand, notifyCommand }) {
+  const next = isPlainObject(settings) ? JSON.parse(JSON.stringify(settings)) : {};
+  if (isPlainObject(next.statusLine) && String(next.statusLine.command || '').includes(CLAUDE_STATUS_SCRIPT)) {
+    const chained = chainedStatusCommand(next.statusLine.command);
+    next.statusLine = { ...next.statusLine, command: chained ? `${statusCommand} --then ${shellQuote(chained)}` : statusCommand };
+  }
+  if (isPlainObject(next.hooks)) {
+    for (const event of Object.keys(next.hooks)) {
+      if (!Array.isArray(next.hooks[event])) continue;
+      next.hooks[event] = next.hooks[event].map((group) => (isPlainObject(group) && Array.isArray(group.hooks)
+        ? { ...group, hooks: group.hooks.map((hook) => (isSoloDockHook(hook) ? { ...hook, command: notifyCommand } : hook)) }
+        : group));
+    }
+  }
+  return next;
+}
+
 function disconnectClaudeSettings(settings) {
   const next = isPlainObject(settings) ? JSON.parse(JSON.stringify(settings)) : {};
   if (isPlainObject(next.statusLine) && String(next.statusLine.command || '').includes(CLAUDE_STATUS_SCRIPT)) {
@@ -781,6 +800,7 @@ module.exports = {
   chainedStatusCommand,
   claudeSettingsStatus,
   connectClaudeSettings,
+  repairClaudeSettings,
   disconnectClaudeSettings,
   needsInputMessage,
   needsInputDetail,

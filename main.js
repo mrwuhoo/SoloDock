@@ -66,6 +66,7 @@ const {
   normalizeCaptureEntry,
   claudeSettingsStatus,
   connectClaudeSettings,
+  repairClaudeSettings,
   disconnectClaudeSettings,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
@@ -1410,7 +1411,7 @@ function aiIntegrationStatus() {
   let claude = { usage: false, reminders: false };
   try { claude = claudeSettingsStatus(JSON.parse(read(path.join(claudeDir, 'settings.json')) || '{}')); } catch (error) { /* 文件坏了就当没接入 */ }
   return {
-    claude: { installed: fs.existsSync(claudeDir), connected: claude.usage && claude.reminders, usage: claude.usage, reminders: claude.reminders },
+    claude: { installed: fs.existsSync(claudeDir), connected: claude.usage && claude.reminders, usage: claude.usage, reminders: claude.reminders, appInstalled: appLocationStable() },
     codex: { installed: fs.existsSync(codexDir), connected: read(path.join(codexDir, 'config.toml')).includes('codex-notify.js') },
   };
 }
@@ -1463,11 +1464,66 @@ async function updateClaudeSettings(mutate) {
   return { ok: true, changed: true, status: claudeSettingsStatus(next) };
 }
 
+const claudeCommands = () => ({ statusCommand: bundledScriptCommand('claude-statusline.js'), notifyCommand: bundledScriptCommand('claude-notify.js') });
+
 ipcMain.handle('claude:connect', (event) => {
   if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'unavailable' };
-  const commands = { statusCommand: bundledScriptCommand('claude-statusline.js'), notifyCommand: bundledScriptCommand('claude-notify.js') };
+  // 从安装盘直接运行时路径会随安装盘消失，登记进去的命令就会失效：先装好再接入。
+  if (!appLocationStable()) return { ok: false, error: 'not_installed' };
+  const commands = claudeCommands();
   return updateClaudeSettings((settings) => connectClaudeSettings(settings, commands));
 });
+
+// App 换过位置后，把已经登记的 SoloDock 命令改到当前路径（没接入过就不动）。
+async function repairClaudeLink() {
+  if (!appLocationStable()) return;
+  const commands = claudeCommands();
+  await updateClaudeSettings((settings) => repairClaudeSettings(settings, commands)).catch(() => {});
+}
+
+// ============ 安装位置 ============
+// 直接从 DMG（/Volumes/…）或被系统临时转移的位置运行时，脚本路径、开机启动都不稳定。
+function appLocationStable() {
+  if (process.platform !== 'darwin' || !app.isPackaged) return true;
+  try { return app.isInApplicationsFolder(); } catch (error) { return true; }
+}
+
+function moveToApplications() {
+  try {
+    // 「应用程序」里已有旧版本时直接替换；移动成功后系统会从新位置重新打开 SoloDock。
+    return app.moveToApplicationsFolder({ conflictHandler: () => true });
+  } catch (error) {
+    return false;
+  }
+}
+
+ipcMain.handle('app:move-to-applications', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false };
+  if (appLocationStable()) return { ok: true, already: true };
+  return { ok: moveToApplications() };
+});
+
+async function offerMoveToApplications() {
+  if (appLocationStable()) return;
+  updateTransientSystemInteraction(1);
+  let response = 1;
+  try {
+    ({ response } = await dialog.showMessageBox({
+      type: 'info',
+      message: '把 SoloDock 移到「应用程序」文件夹？',
+      detail: '现在是直接从安装盘里运行的。移过去以后，推出安装盘也能照常使用，接入 Claude Code 和开机启动才会稳定。「应用程序」里的旧版本会被替换，数据不受影响。',
+      buttons: ['移到「应用程序」', '以后再说'],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    }));
+  } finally {
+    updateTransientSystemInteraction(-1);
+  }
+  if (response === 0 && !moveToApplications()) {
+    dialog.showMessageBox({ type: 'warning', message: '没能移过去', detail: '请把安装盘里的 SoloDock 手动拖进「应用程序」文件夹。', buttons: ['好'] }).catch(() => {});
+  }
+}
 ipcMain.handle('claude:disconnect', (event) => {
   if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'unavailable' };
   return updateClaudeSettings(disconnectClaudeSettings);
@@ -4325,6 +4381,8 @@ app.whenReady().then(() => {
   ensureRecordingsDir();
   applyAppSettings();
   scheduleReminderResume();
+  void repairClaudeLink();
+  setTimeout(() => { if (!isQuitting) void offerMoveToApplications(); }, 1200);
   startTaskNotificationServer();
   // 锁屏或休眠时锁上密钥，并清掉仍在剪贴板上的密码。
   for (const eventName of ['lock-screen', 'suspend']) {

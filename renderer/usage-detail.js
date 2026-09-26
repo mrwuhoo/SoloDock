@@ -136,7 +136,7 @@
       if (!snapshot) {
         const linked = state()?.claudeLink?.()?.usage;
         box.append(linked
-          ? emptyState(ICON.info, '已接入，等第一次上报', 'Claude Code 回复一次后这里就会显示 5 小时与每周额度；已经开着的会话要重开一下。只有 Pro / Max 订阅会提供额度数据。')
+          ? emptyState(ICON.info, '已接入，等第一次上报', '在终端里用 claude 回复一次后，这里就会显示 5 小时与每周额度（已经开着的要重开一下）。Claude 桌面 App 的 Code 页不运行状态栏，不会上报额度。只有 Pro / Max 订阅会提供这项数据。')
           : emptyState(ICON.plug, '还没接入 Claude Code', '点一下，SoloDock 会在 Claude Code 的设置里登记状态栏：只加这一项，原来的设置都保留，随时可以断开。', button('usage-pop-primary', '一键接入', () => state()?.connectClaude?.())));
         box.append(renewalRow(subscription));
         return box;

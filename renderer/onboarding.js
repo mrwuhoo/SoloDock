@@ -158,8 +158,9 @@
       const note = $('onboard-ai-note');
       note.classList.toggle('done', Boolean(result?.ok));
       note.querySelector('span').textContent = result?.ok
-        ? '已接入 Claude Code：新开的会话回复一次后，额度和提醒都会出现在 SoloDock 里。原来的设置都保留，在「设置 → AI 与 API」里可以断开。'
-        : result?.error === 'invalid_settings' ? '~/.claude/settings.json 格式有误，没有改动。' : '接入没有成功，请再试一次。';
+        ? '已接入 Claude Code：任务完成与「需要你确认」会从刘海提醒你；在终端里用 claude 时还会上报额度。原来的设置都保留，在「设置 → AI 与 API」里可以断开。'
+        : result?.error === 'not_installed' ? '先把 SoloDock 移到「应用程序」文件夹再接入（现在是从安装盘里运行的）。'
+          : result?.error === 'invalid_settings' ? '~/.claude/settings.json 格式有误，没有改动。' : '接入没有成功，请再试一次。';
       await renderAi();
       return;
     }

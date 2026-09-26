@@ -114,7 +114,7 @@ app.whenReady().then(async () => {
   assert.equal(ai.connected.calls, 1);
   assert.match(ai.connected.note, /^已接入 Claude Code/);
   assert.deepEqual([ai.connected.row, ai.connected.button], ['已接入', false]);
-  assert.equal(ai.connected.toast, '已接入 Claude Code · 新开的会话回复一次后显示额度');
+  assert.equal(ai.connected.toast, '已接入 · 在终端用 claude 回复一次后显示额度');
   assert.deepEqual(ai.copied, [{ type: 'text', text: 'notify = []' }]);
   assert.match(ai.note, /^已复制 · 粘贴到 ~\/\.codex\/config\.toml 最前面/);
   assert.deepEqual(ai.back, [2, 'true']);

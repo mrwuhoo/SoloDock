@@ -718,3 +718,22 @@ test('one-click Claude Code hookup only adds and removes SoloDock entries', () =
   assert.deepEqual(claudeSettingsStatus(own), { usage: false, reminders: false });
   assert.deepEqual(claudeSettingsStatus(null), { usage: false, reminders: false });
 });
+
+test('moving the app repairs the SoloDock entries in Claude Code settings and adds nothing', () => {
+  const { connectClaudeSettings, repairClaudeSettings, chainedStatusCommand } = require('../main-services');
+  const at = (root) => ({
+    statusCommand: `ELECTRON_RUN_AS_NODE=1 "${root}/SoloDock.app/Contents/MacOS/SoloDock" "${root}/SoloDock.app/Contents/Resources/app/scripts/claude-statusline.js"`,
+    notifyCommand: `ELECTRON_RUN_AS_NODE=1 "${root}/SoloDock.app/Contents/MacOS/SoloDock" "${root}/SoloDock.app/Contents/Resources/app/scripts/claude-notify.js"`,
+  });
+  const fromDmg = connectClaudeSettings({ statusLine: { type: 'command', command: 'echo mine' }, hooks: { Stop: [{ hooks: [{ type: 'command', command: 'afplay x' }] }] } }, at('/Volumes/SoloDock 0.2.0-beta.2'));
+  const repaired = repairClaudeSettings(fromDmg, at('/Applications'));
+  assert.ok(repaired.statusLine.command.startsWith(at('/Applications').statusCommand));
+  assert.equal(chainedStatusCommand(repaired.statusLine.command), 'echo mine');
+  assert.deepEqual(repaired.hooks.Stop.map((group) => group.hooks[0].command), ['afplay x', at('/Applications').notifyCommand]);
+  assert.equal(repaired.hooks.Notification[0].hooks[0].command, at('/Applications').notifyCommand);
+  assert.ok(!JSON.stringify(repaired).includes('/Volumes/'));
+  // Never connected: nothing is added.
+  const untouched = { statusLine: { type: 'command', command: 'echo mine' } };
+  assert.deepEqual(repairClaudeSettings(untouched, at('/Applications')), untouched);
+  assert.deepEqual(repairClaudeSettings({}, at('/Applications')), {});
+});

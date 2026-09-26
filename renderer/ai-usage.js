@@ -111,7 +111,7 @@
       body.append(value('—', '', summary.state === 'stale' ? '额度已重置' : waiting ? '已接入' : '未接入'));
       body.append(node('p', 'usage-note', summary.state === 'stale'
         ? '等 Claude Code 刷新'
-        : waiting ? 'Claude Code 回复一次后显示' : '一键接入，自动显示额度'));
+        : waiting ? '在终端用 claude 回复一次后显示' : '一键接入，自动显示额度'));
       if (summary.state === 'disconnected' && !claudeLink.usage) {
         const connect = node('button', 'workspace-button compact', '一键接入');
         connect.type = 'button';
@@ -237,6 +237,13 @@
 
   async function connectClaude() {
     const result = await Promise.resolve(window.notchAPI?.connectClaude?.()).catch(() => null);
+    if (result?.error === 'not_installed') {
+      // 从安装盘直接运行时登记进去的路径会失效：先移到「应用程序」。
+      if (typeof window.showStatusToast === 'function') {
+        window.showStatusToast('先把 SoloDock 移到「应用程序」再接入', { actionLabel: '移过去', onAction: () => window.notchAPI?.moveToApplications?.(), duration: 8000 });
+      }
+      return result;
+    }
     if (!result?.ok) {
       toast(result?.error === 'invalid_settings' ? '~/.claude/settings.json 格式有误，没有改动；可以用「手动配置」' : '接入没有成功，请再试一次');
       return result;
@@ -245,7 +252,7 @@
     if (claude && !claude.enabled) { claude.enabled = true; save(); }
     linkChanged(result.status);
     if (typeof window.showStatusToast === 'function') {
-      window.showStatusToast('已接入 Claude Code · 新开的会话回复一次后显示额度', { actionLabel: '撤销', onAction: () => disconnectClaude(), duration: 6000 });
+      window.showStatusToast('已接入 · 在终端用 claude 回复一次后显示额度', { actionLabel: '撤销', onAction: () => disconnectClaude(), duration: 6000 });
     }
     return result;
   }
@@ -279,7 +286,7 @@
     const onHomeText = subscription.enabled && !homeIds.includes(subscription.id) ? ' · 不在首页（只显示前 3 个）' : '';
     if (subscription.kind === 'codex') return `自动读取本机 Codex 账号${onHomeText}`;
     if (subscription.kind === 'claude') {
-      if (!claudeSnapshot) return claudeLink.usage ? `已接入 · 等 Claude Code 下一次回复${onHomeText}` : `通过 Claude Code 状态栏 · 未接入${onHomeText}`;
+      if (!claudeSnapshot) return claudeLink.usage ? `已接入 · 终端里的 claude 回复后上报（桌面 App 的 Code 页不上报）${onHomeText}` : `通过 Claude Code 状态栏 · 未接入${onHomeText}`;
       const minutes = Math.max(0, Math.round((Date.now() - claudeSnapshot.receivedAt) / 60000));
       return `通过 Claude Code 状态栏 · ${minutes ? `${minutes} 分钟前更新` : '刚刚更新'}${onHomeText}`;
     }
