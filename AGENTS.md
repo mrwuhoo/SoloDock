@@ -6,6 +6,8 @@
 
 > **文档准绳**：产品行为以 [README.md](README.md) 为唯一事实来源。本文与 README 冲突时以 README 为准。
 
+> **交接**：当前开发进度、进行中的工作（Claude 订阅额度）、等用户决定的事与本机环境问题见 [docs/HANDOFF.md](docs/HANDOFF.md)，接手前先读。
+
 ## 技术栈
 
 - 桌面端：Electron 44 + 原生 HTML/CSS/JavaScript，无渲染层构建步骤
