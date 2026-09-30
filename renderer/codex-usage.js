@@ -9,7 +9,7 @@
   const sync = get('usage-sync');
   const details = get('usage-details');
   const errors = {
-    not_installed: '未找到 Codex 客户端，请先安装 Codex 桌面端或 CLI。',
+    not_installed: '未找到 Codex：请安装 ChatGPT 桌面端（内置 Codex）、Codex 桌面端或 Codex CLI，并登录一次。',
     login_required: '请先在本机 Codex 中登录，再重试。',
     unsupported: '请更新 Codex 客户端后重试。',
     timeout: '读取超时，请检查网络后重试。',

@@ -33,6 +33,74 @@ test('discovery never executes a relative PATH entry or a shell command', () => 
   assert.deepEqual(checked, ['/usr/local/bin/codex']);
 });
 
+// A fake file system for discovery tests: files is a set of executable paths, manifests maps a path to JSON,
+// dirs maps a folder to its entries (a trailing "/" marks a folder).
+function fakeFs({ files = [], manifests = {}, dirs = {} } = {}) {
+  const executables = new Set(files);
+  return {
+    home: '/Users/me',
+    access(file) { if (!executables.has(file)) throw new Error('ENOENT'); },
+    readFile(file) {
+      if (!(file in manifests)) throw new Error('ENOENT');
+      return JSON.stringify(manifests[file]);
+    },
+    readdir(dir, options) {
+      if (!(dir in dirs)) throw new Error('ENOENT');
+      return dirs[dir].map((name) => (options && options.withFileTypes
+        ? { name: name.replace(/\/$/, ''), isDirectory: () => name.endsWith('/') }
+        : name.replace(/\/$/, '')));
+    },
+  };
+}
+
+test('finds Codex through the manifest the ChatGPT app ships, even with a macOS GUI PATH', () => {
+  const base = '/Applications/ChatGPT.app/Contents/Resources/codex-cli';
+  const found = findCodex({
+    platform: 'darwin',
+    env: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin' },
+    ...fakeFs({ files: [`${base}/bin/codex`], manifests: { [`${base}/codex-package.json`]: { entrypoint: 'bin/codex' } } }),
+  });
+  assert.equal(found, `${base}/bin/codex`);
+});
+
+test('a manifest can only point inside its own package', () => {
+  const base = '/Applications/ChatGPT.app/Contents/Resources/codex-cli';
+  for (const entrypoint of ['../../../../../../usr/bin/evil', '/usr/bin/evil']) {
+    const found = findCodex({
+      platform: 'darwin',
+      env: { PATH: '' },
+      ...fakeFs({ files: ['/usr/bin/evil'], manifests: { [`${base}/codex-package.json`]: { entrypoint } } }),
+    });
+    assert.equal(found, null, entrypoint);
+  }
+});
+
+test('falls back to the known bundled path when there is no manifest', () => {
+  const bundled = '/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex';
+  assert.equal(findCodex({ platform: 'darwin', env: { PATH: '/usr/bin' }, ...fakeFs({ files: [bundled] }) }), bundled);
+});
+
+test('if the app moves Codex somewhere new, a bounded search inside the bundle still finds it', () => {
+  const res = '/Applications/ChatGPT.app/Contents/Resources';
+  const moved = `${res}/tools/next/Codex.app/Contents/MacOS/codex`;
+  const found = findCodex({
+    platform: 'darwin',
+    env: { PATH: '' },
+    ...fakeFs({
+      files: [moved],
+      dirs: {
+        [res]: ['tools/', 'Electron Framework.framework/', 'en.lproj/'],
+        [`${res}/tools`]: ['next/'],
+        [`${res}/tools/next`]: ['Codex.app/'],
+        [`${res}/tools/next/Codex.app`]: ['Contents/'],
+        [`${res}/tools/next/Codex.app/Contents`]: ['MacOS/'],
+        [`${res}/tools/next/Codex.app/Contents/MacOS`]: ['codex'],
+      },
+    }),
+  });
+  assert.equal(found, moved);
+});
+
 function fixture({ respond, timeoutMs = 1000 } = {}) {
   const messages = [];
   const children = [];

@@ -32,24 +32,98 @@ function normalizeUsage(result, now = Date.now()) {
   return { ok: true, updatedAt: now, buckets, resetCredits };
 }
 
-function findCodex({ platform = process.platform, env = process.env, access = fs.accessSync } = {}) {
+// 装 Codex 的应用包：独立的 Codex 桌面端，以及内置 Codex 的 ChatGPT 桌面端。
+const CODEX_APP_BUNDLES = ['Codex.app', 'ChatGPT.app'];
+
+// 应用包里有一份官方清单 codex-package.json，写明入口（entrypoint，例如 bin/codex）。
+// 按清单找，App 以后在包里挪文件也不会再「连不上」。
+function manifestEntrypoints(appPath, { readFile, readdir }) {
+  const resources = path.join(appPath, 'Contents', 'Resources');
+  const dirs = ['codex-cli'];
+  try {
+    for (const entry of readdir(resources)) {
+      const name = typeof entry === 'string' ? entry : entry.name;
+      if (/codex/i.test(name) && !dirs.includes(name)) dirs.push(name);
+    }
+  } catch {}
+  const found = [];
+  for (const dir of dirs) {
+    const base = path.join(resources, dir);
+    try {
+      const manifest = JSON.parse(readFile(path.join(base, 'codex-package.json'), 'utf8'));
+      const entry = typeof manifest.entrypoint === 'string' ? manifest.entrypoint : '';
+      // 只接受包内的相对路径，不跟随绝对路径或 ..。
+      if (!entry || path.isAbsolute(entry) || entry.split(/[\\/]/).includes('..')) continue;
+      found.push(path.join(base, entry));
+    } catch {}
+  }
+  return found;
+}
+
+// 兜底：清单和已知路径都找不到时，在应用包的 Resources 里限定深度找名为 codex 的可执行文件。
+function searchBundle(appPath, { readdir, access }, maxDepth = 5) {
+  const queue = [[path.join(appPath, 'Contents', 'Resources'), 0]];
+  let visited = 0;
+  while (queue.length && visited < 400) {
+    const [dir, depth] = queue.shift();
+    visited += 1;
+    let entries;
+    try { entries = readdir(dir, { withFileTypes: true }); } catch { continue; }
+    for (const entry of entries) {
+      const full = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (depth < maxDepth && !/\.(framework|lproj)$|^node_modules$/.test(entry.name)) queue.push([full, depth + 1]);
+      } else if (entry.name === 'codex') {
+        try { access(full, fs.constants.X_OK); return full; } catch {}
+      }
+    }
+  }
+  return null;
+}
+
+// 找本机的 Codex 客户端。从访达打开的 App 拿不到终端里的 PATH，所以常见的命令行安装位置要写全；
+// 不执行任何 shell，也不从相对路径解析。
+function findCodex({
+  platform = process.platform,
+  env = process.env,
+  access = fs.accessSync,
+  readFile = fs.readFileSync,
+  readdir = fs.readdirSync,
+  home = os.homedir(),
+} = {}) {
   const executable = platform === 'win32' ? 'codex.exe' : 'codex';
-  const candidates = platform === 'darwin' ? [
-    '/Applications/Codex.app/Contents/Resources/codex',
-    '/Applications/ChatGPT.app/Contents/Resources/codex',
-    path.join(os.homedir(), 'Applications/Codex.app/Contents/Resources/codex'),
-    path.join(os.homedir(), 'Applications/ChatGPT.app/Contents/Resources/codex'),
-    '/opt/homebrew/bin/codex', '/usr/local/bin/codex',
-  ] : [];
+  const apps = platform === 'darwin'
+    ? ['/Applications', path.join(home, 'Applications')].flatMap((root) => CODEX_APP_BUNDLES.map((name) => path.join(root, name)))
+    : [];
+  const candidates = apps.flatMap((app) => manifestEntrypoints(app, { readFile, readdir }));
+  if (platform === 'darwin') {
+    for (const app of apps) {
+      candidates.push(
+        path.join(app, 'Contents/Resources/codex'),
+        path.join(app, 'Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex'),
+      );
+    }
+    candidates.push(
+      '/opt/homebrew/bin/codex', '/usr/local/bin/codex',
+      path.join(home, '.local/bin/codex'), path.join(home, '.npm-global/bin/codex'), path.join(home, '.bun/bin/codex'),
+    );
+  }
   for (const directory of (env.PATH || '').split(platform === 'win32' ? ';' : ':')) {
     // Do not resolve executables from the current project or a relative PATH entry.
     if ((platform === 'win32' ? path.win32 : path).isAbsolute(directory)) {
       candidates.push((platform === 'win32' ? path.win32 : path).join(directory, executable));
     }
   }
-  return candidates.find((candidate) => {
+  const usable = (candidate) => {
     try { access(candidate, fs.constants.X_OK); return true; } catch { return false; }
-  }) || null;
+  };
+  const hit = [...new Set(candidates)].find(usable);
+  if (hit) return hit;
+  for (const app of apps) {
+    const found = searchBundle(app, { readdir, access });
+    if (found) return found;
+  }
+  return null;
 }
 
 function createCodexUsageService({ spawnProcess = spawn, locate = findCodex, now = Date.now, timeoutMs = 20000 } = {}) {
