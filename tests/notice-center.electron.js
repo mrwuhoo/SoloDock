@@ -10,7 +10,7 @@ app.whenReady().then(async () => {
     width: 1240,
     height: 616,
     show: false,
-    webPreferences: { preload: path.join(__dirname, 'fixtures', 'panel-preload.js'), contextIsolation: false, sandbox: false, backgroundThrottling: false },
+    webPreferences: { preload: path.join(__dirname, 'fixtures', 'fixed-clock-preload.js'), contextIsolation: false, sandbox: false, backgroundThrottling: false },
   });
   const errors = [];
   win.webContents.on('console-message', (details) => { if (details.level === 'error') errors.push(details.message); });
