@@ -135,23 +135,49 @@ pump(4)
 if re.search(CERT, clean(buffer), re.I):
     log.append('启动时就连不上 Anthropic（证书 / 网络）')
     finish({'ok': False, 'reason': 'network', 'screen_tail': tail()})
-# 首次使用的确认画面（选主题、安全提示、是否信任文件夹）一律回车接受默认；看到登录选择就说明还没登录。
+# 首次使用的确认画面：选主题、安全提示回车接受默认；「是否信任文件夹」这一版默认选中的是「No, exit」，
+# 要先用方向键把光标移到「Yes, I trust this folder」、确认光标在 Yes 上才回车；看到登录选择说明还没登录。
+# 每一轮只看上一次按键之后新输出的画面，免得对着旧画面反复按键。
 READY = r'for shortcuts|\? for|Try "'
+DOWN, UP = b'\x1b[B', b'\x1b[A'
 ready = False
-for step in range(8):
-    screen = clean(buffer[-6000:])
-    if re.search(r'Select ?login ?method', screen, re.I):
+since_key = max(0, len(buffer) - 6000)
+arrow_tries = 0
+for step in range(14):
+    recent = clean(buffer[since_key:])
+    if re.search(r'Select ?login ?method', recent, re.I):
         log.append('终端版 claude 还没登录')
         finish({'ok': False, 'reason': 'not_logged_in', 'screen_tail': tail(8)})
-    if re.search(READY, screen, re.I) and not re.search(r'Choose ?the ?text ?style|Press ?Enter|trust', screen[-800:], re.I):
+    if re.search(r'trust ?this ?folder|you ?trust\?', recent, re.I):
+        pointer = recent.rfind('❯')
+        choice = recent[pointer:pointer + 40] if pointer >= 0 else ''
+        if re.match(r'❯\s*(?:\d\.\s*)?Yes', choice):
+            log.append('信任文件夹：光标在 Yes → 回车')
+            since_key = len(buffer)
+            send(b'\r')
+            pump(3)
+            continue
+        if arrow_tries >= 4:
+            log.append('信任文件夹：没能把光标移到 Yes，放弃')
+            finish({'ok': False, 'reason': 'trust_prompt', 'screen_tail': tail(14)})
+        key = DOWN if arrow_tries % 2 == 0 else UP
+        arrow_tries += 1
+        log.append(f'信任文件夹：光标在 {choice[1:14].strip()!r} → {"↓" if key == DOWN else "↑"}')
+        since_key = len(buffer)
+        send(key)
+        pump(1.5)
+        continue
+    if re.search(READY, recent, re.I):
         ready = True
         break
-    if re.search(r'Choose ?the ?text ?style|Press ?Enter ?to ?continue|trust|Enter ?to ?confirm', screen, re.I):
+    if re.search(r'Choose ?the ?text ?style|Press ?Enter ?to ?continue|Enter ?to ?confirm', recent, re.I):
         log.append(f'首次画面 {step + 1} → 回车')
+        since_key = len(buffer)
         send(b'\r')
         pump(3)
         continue
-    pump(2)
+    if not pump(2):
+        break
 if not ready:
     ready = wait_for(READY, 15)
 log.append(f'输入框就绪={ready}（{time.time() - started:.1f}s）')

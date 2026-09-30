@@ -166,13 +166,33 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 - 用户的终端版 `claude`（Homebrew 安装，v2.1.81）原本从没登录过。现在已用 `claude auth login --claudeai` 登录（Pro 订阅），首次向导也由用户手动走完了。
 - `claude auth status --json` 可以判断是否已登录，不涉及令牌内容。
 - **注意**：只要 `~/.claude.json` 里没有 `hasCompletedOnboarding`，交互界面就会从头走首次向导，而且**不管有没有登录**都会显示「选择登录方式」。`claude auth login` 不会写这个标记。
-- 验证脚本：`docs/handoff/claude-usage-probe.py`。用法：`python3 docs/handoff/claude-usage-probe.py /opt/homebrew/bin/claude <工作文件夹> <原始输出路径>`。它会自动接受主题、安全提示和信任文件夹这些首次画面，看到登录选择就返回 `not_logged_in`，读到额度就返回 `ok: true` 和相关行。**最后这一次关键验证还没跑**，因为用户额度用完了，约定 2026-09-29 继续。
+- 验证脚本：`docs/handoff/claude-usage-probe.py`。用法：`python3 docs/handoff/claude-usage-probe.py /opt/homebrew/bin/claude <工作文件夹> <原始输出路径>`。它会自动接受主题和安全提示；「是否信任文件夹」会用方向键移到 Yes 后再回车；看到登录选择就返回 `not_logged_in`，读到额度就返回 `ok: true` 和相关行。
+
+**✅ 2026-09-29 验证通过**（在用户自己的终端里跑，结果 `ok: true`，全程约 10 秒，不读凭据、不消耗额度）。`/usage` 打开的是「Usage」页，读到的内容：
+
+```text
+Current session
+█████████▌   19% used
+Resets 12:40am (America/Los_Angeles)
+Current week (all models)
+█▌   3% used
+Resets Oct 6 at 4pm (America/Los_Angeles)
+```
+
+同一时刻状态栏显示「5h 剩 81% · 周 剩 97%」，两边一致。Max 订阅可能还会多出分模型的每周窗口（Opus / Sonnet / Fable），解析时按标题逐块读取，不要写死只有两块。
+
+这次验证还发现：
+
+- 「是否信任文件夹」这一版**默认选中的是「No, exit」**，直接回车会让 `claude` 退出。必须先移到「Yes, I trust this folder」。信任记录由 Claude Code 自己写进 `~/.claude.json` 的 `projects[<文件夹>].hasTrustDialogAccepted`。
+- 只去掉 ANSI 转义序列会丢字母（比如「Current week」变成「Currnt week」、「Total cost」变成「Tota os」），因为 Claude Code 的界面靠光标定位来画，不是逐行输出。**正式实现要用虚拟终端还原真实画面再解析**：Node 端推荐 `@xterm/headless`（纯 JS，不用重新编译）；把输出喂进去，读 `buffer.active` 的每一行。
+- 用户的 Homebrew 版 Claude Code 已经升级到 v2.1.285（设置了 `DISABLE_AUTOUPDATER=1` 也可能是用户自己升级的），界面文字会随版本变化，解析要按关键词和百分号来找，别依赖固定行号。
+- 重置时间带时区名，格式有「12:40am」和「Oct 6 at 4pm」两种，解析时用该时区换算成时间戳。
 
 **下一步：**
 
-1. 请用户在自己的终端里运行验证脚本（AI 代理的沙盒会拦截 TLS，而在沙盒外运行被权限规则拒绝），确认 `/usage` 的输出能稳定解析。
+1. ~~请用户在自己的终端里运行验证脚本~~（已完成，见上）。
 2. 在 SoloDock 里实现，建议做成新的只读服务，比如 `claude-usage.js`，写法仿照 `codex-usage.js`：
-   - 在专用文件夹里启动伪终端。优先用 macOS 自带的 `/usr/bin/script`，免得引入需要重新编译的原生模块。
+   - 在专用文件夹（例如 `userData/claude-probe/`）里启动伪终端。优先用 macOS 自带的 `/usr/bin/script`，免得引入需要重新编译的原生模块；输出交给 `@xterm/headless` 还原画面。
    - 设置 `NODE_OPTIONS=--use-system-ca` 和 `DISABLE_AUTOUPDATER=1`，去掉继承来的 `CLAUDE*` / `ANTHROPIC*` 环境变量。
    - 设总超时；退出时一边读输出一边等进程结束，必要时强制结束。不要在不读伪终端的情况下死等进程退出，否则会互相卡住。
    - 每 15 分钟最多刷新一次；遇到限流就退避。
@@ -180,7 +200,7 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 3. 界面：用 `claude auth status` 判断，未登录时显示「登录 Claude Code」按钮，点击运行 `claude auth login --claudeai`，由 Claude Code 自己打开浏览器。
 4. **待用户决定**：对从没用过终端版的用户，SoloDock 要不要替他在 `~/.claude.json` 里补上 `hasCompletedOnboarding`（以及专用文件夹的信任记录，ClaudeBar 就是这么做的），还是请用户自己在终端里走一次向导。
 
-**解析要点**：`/usage` 的界面是给人看的，要去掉 ANSI 转义序列；Claude Code 改版后可能需要跟着调整。解析失败时给出明确状态，不要猜数字。桌面 App 自带的 `~/Library/Application Support/Claude/claude-code/<版本>/claude.app/Contents/MacOS/claude` 能不能单独使用、登录状态是否可用，**还没验证**。
+**解析要点**：`/usage` 的界面是给人看的，要用虚拟终端还原画面后再读（见上），Claude Code 改版后可能需要跟着调整。解析失败时给出明确状态，不要猜数字。桌面 App 自带的 `~/Library/Application Support/Claude/claude-code/<版本>/claude.app/Contents/MacOS/claude` 能不能单独使用、登录状态是否可用，**还没验证**。
 
 ## 8. 已放弃或暂不做
 
