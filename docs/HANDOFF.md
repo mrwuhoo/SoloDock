@@ -231,7 +231,7 @@ Resets Oct 6 at 4pm (America/Los_Angeles)
 
 0. **新 logo（2026-09-29 记下，暂缓）**：用户认为现在的 logo（AI 生成的「方块 + U 形托」，边缘有黑色杂点）不好看。已出三个矢量方向：A 刘海下拉 / B 光点与底座 / C S 字玻璃。推荐 B，用户还没选，要求先集中优化功能。选定后精修，生成 `build/solodock-icon.png` / `.icns` / `solodock.iconset` 与 `docs/brand/solodock-logo.png`，并更新 `docs/brand/README.md`。
 1. **付费或支持者项目的内容**（规范里的「支持者提醒主题」：水波、极光、光带、晨露）：用户说体验一段时间后再定。解锁方式、素材包怎么分发（规范要求素材包不放进 MIT 代码）都没定。
-2. **是否出 `0.2.0-beta.4` 体验包**，带上 6.9 的首页改版。beta.3（含 6.8 与 Claude 额度自动读取）已打好：`dist.noindex/SoloDock-0.2.0-beta.3-arm64.dmg`。
+2. **体验包**：`0.2.0-beta.4`（带 6.9 的首页改版）已于 2026-09-30 打好，`dist.noindex/SoloDock-0.2.0-beta.4-arm64.dmg`，SHA-256 `ea40c17ecb7cf8d21b6576c28705146358da588d2a4366cba050595fb79e051a`，用户正在体验。时间页顶部的「比上月」「日均」用户说暂时不动。
 3. **正式发布 v0.2**：推送分支和标签、改版本号、更新 README 和官网下载链接、Windows 检查。都要用户确认，并遵守 `AGENTS.md` 的「GitHub 推送与发布联动」。
 4. 第 7 节里 `hasCompletedOnboarding` 由谁补。
 
