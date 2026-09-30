@@ -88,10 +88,10 @@
         const button = document.createElement('button');
         button.type = 'button';
         button.className = info.installed ? 'onboard-primary' : 'onboard-secondary';
-        // Claude Code 由 SoloDock 直接登记（只加自己的一项）；Codex 仍复制接入设置自己粘贴。
+        // Claude Code 的提醒由 SoloDock 直接登记（只加自己的一项）；额度会自动读取，不用接入。
         if (id === 'claude') {
           button.dataset.connect = id;
-          button.textContent = '一键接入';
+          button.textContent = '接入提醒';
         } else {
           button.dataset.setup = id;
           button.textContent = '复制接入设置';
@@ -158,7 +158,7 @@
       const note = $('onboard-ai-note');
       note.classList.toggle('done', Boolean(result?.ok));
       note.querySelector('span').textContent = result?.ok
-        ? '已接入 Claude Code：任务完成与「需要你确认」会从刘海提醒你；在终端里用 claude 时还会上报额度。原来的设置都保留，在「设置 → AI 与 API」里可以断开。'
+        ? '已接入 Claude Code 提醒：任务完成与「需要你确认」会从刘海提醒你。额度由 SoloDock 自动读取，不用额外设置。原来的设置都保留，在「设置 → AI 与 API」里可以断开。'
         : result?.error === 'not_installed' ? '先把 SoloDock 移到「应用程序」文件夹再接入（现在是从安装盘里运行的）。'
           : result?.error === 'invalid_settings' ? '~/.claude/settings.json 格式有误，没有改动。' : '接入没有成功，请再试一次。';
       await renderAi();

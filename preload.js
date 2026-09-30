@@ -10,7 +10,8 @@ function subscribe(channel, handler) {
 contextBridge.exposeInMainWorld('notchAPI', {
   platform: process.platform,
   getCodexUsage: () => ipcRenderer.invoke('codex:usage'),
-  getClaudeUsage: () => ipcRenderer.invoke('claude:usage'),
+  getClaudeUsage: (options) => ipcRenderer.invoke('claude:usage', options),
+  claudeLogin: () => ipcRenderer.invoke('claude:login'),
   getClaudeStatuslineSetup: () => ipcRenderer.invoke('claude:statusline-setup'),
   connectClaude: () => ipcRenderer.invoke('claude:connect'),
   disconnectClaude: () => ipcRenderer.invoke('claude:disconnect'),

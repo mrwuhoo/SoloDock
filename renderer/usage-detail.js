@@ -134,10 +134,10 @@
     if (subscription.kind === 'claude') {
       const snapshot = state()?.claude?.();
       if (!snapshot) {
-        const linked = state()?.claudeLink?.()?.usage;
-        box.append(linked
-          ? emptyState(ICON.info, '已接入，等第一次上报', '在终端里用 claude 回复一次后，这里就会显示 5 小时与每周额度（已经开着的要重开一下）。Claude 桌面 App 的 Code 页不运行状态栏，不会上报额度。只有 Pro / Max 订阅会提供这项数据。')
-          : emptyState(ICON.plug, '还没接入 Claude Code', '点一下，SoloDock 会在 Claude Code 的设置里登记状态栏：只加这一项，原来的设置都保留，随时可以断开。', button('usage-pop-primary', '一键接入', () => state()?.connectClaude?.())));
+        // 额度由本机的 Claude Code 自动读取；读不到时说清楚原因，能一步解决的给按钮。
+        const view = state()?.claudeView?.() || { title: '暂时读不到额度', text: '稍后自动重试。' };
+        box.append(emptyState(view.action ? ICON.plug : ICON.info, view.title, view.text,
+          view.action ? button('usage-pop-primary', view.action.label, () => view.action.run()) : null));
         box.append(renewalRow(subscription));
         return box;
       }

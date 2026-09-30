@@ -1,0 +1,42 @@
+7[r8[?25h[?25l[?2004h[?2031h[?1004h
+[93m────────────────────────────────────────────────────────────────────────────────[39m
+[2G[93m[1mAccessing[12Gworkspace:[22m[39m
+
+[2G[1m/private/tmp/claude-501/-Users-user-0001-Downloads-Claude-agent/00000000-1b02-[22m
+[2G[1m0000-0000-000000000000/scratchpad/claude-probe/workdir[22m
+
+[2GQuick[8Gsafety[15Gcheck:[22GIs[25Gthis[30Ga[32Gproject[40Gyou[44Gcreated[52Gor[55Gone[59Gyou[63Gtrust?[70G(Like[76Gyour
+[2Gown[6Gcode,[12Ga[14Gwell-known[25Gopen[30Gsource[37Gproject,[46Gor[49Gwork[54Gfrom[59Gyour[64Gteam).[71GIf[74Gnot,
+[2Gtake[7Ga[9Gmoment[16Gto[19Greview[26Gwhat's[33Gin[36Gthis[41Gfolder[48Gfirst.
+
+[2GClaude[9GCode'll[17Gbe[20Gable[25Gto[28Gread,[34Gedit,[40Gand[44Gexecute[52Gfiles[58Ghere.
+
+[2G[37mSecurity[11Gguide[39m
+
+[2G[94m❯[4GNo,[8Gexit[39m
+[4GYes,[9GI[11Gtrust[17Gthis[22Gfolder
+
+[2G[37mEnter[8Gto[11Gconfirm[19G·[21GEsc[25Gto[28Gcancel[39m
+[1C[4A[>0q[?u[c[1D[4B[1C[4A [4GNo, exit[1C[1B[94m❯[4GYes, I trust this folder[39m
+
+
+[1C[3A[>4m[<u[?1004l[?2031l[?2004l[1D[3B[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[1A[2K[G[1A[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[1B[K[18A[?2004h[?2031h[?1004h[>0q[c[>4m[<u[?1004l[?2031l[?2004l[?2004h[?2031h[?1004h]0;✳ Claude Code[91m▗[101m[30m ▗   ▖ [49m[91m▖[12G[39m[1mClaude[19GCode[24G[22m[37mv2.1.285[39m
+[2G[101m       [12G[49m[37mOpus[17G5.5[21G·[23GClaude[30GPro[39m
+[2G[91m▘▘[7G▝▝[12G[37m/…/scratchpad/claude-probe/workdir[39m
+
+[3G[1mUpdated[11Gto[14Glatest.[22GGot[26G59[29Gfeatures,[39G352[43Gbugfixes,[53Gand[57G162[61Gother[67Gchanges.[22m
+[3G[37mcode.claude.com/docs/en/changelog[37Gfor[41Gdetails[39m
+
+
+[94m────────────────────────────────────────────────────────────────────────────────[39m
+[3G[94m[1mTry[7Gthe[11Gnew[15Gfullscreen[26Grenderer?[22m[39m
+
+[3G[37m·[5GFlicker-free[18Goutput[25G—[27Gfixes[33Gthe[37Gflashing[46Gyou[50Gsee[54Gduring[61Glong[66Gresponses[39m
+[3G[37m·[5GMouse[11Gsupport[19G—[21Gclick[27Gto[30Gmove[35Gyour[40Gcursor[47Gor[50Gexpand[57Gresults[39m
+[3G[37m·[5GSelected[14Gtext[19Gauto-copies[31Gto[34Gyour[39Gclipboard[39m
+
+[3G[94m❯[5G[37m1.[8G[94mYes,[13Gtry[17Git[39m
+[5G[37m2.[8G[39mNot[12Gnow
+
+[3G[37m[3mEnter[9Gto[12Gconfirm[20G·[22GEsc[26Gto[29Gcancel[23m[39m
+[2C[4A[>0q[c[?1006l[?1003l[?1002l[?1000l[2D[4B[?1004l[>4m[<u[?2031l[?2004l(B[?1016l[?1006l[?1003l[?1002l[?1000l[?25h7[r8]0;7[r8[?25h[?25l[?2004h[?2031h[?1004h[>0q[?u[c[>4m[<u[?1004l[?2031l[?2004l[?2004h[?2031h[?1004h]0;✳ Claude Code[?1049h[2J[H[?1000h[?1002h[?1003h[?1006h[?25l[H[1B[91m▗[101m[30m ▗   ▖ [49m[91m▖[12G[39m[1mClaude Code[24G[22m[37mv2.1.285[1C[1B[39m[101m       [12G[49m[37mOpus 5.5 · Claude Pro[1C[1B[91m▘▘   ▝▝[12G[37m/…/scratchpad/claude-probe/workdir[2C[2B[92m✔ Using flicker-free rendering[37m · if you want to go back, use /tui default[2C[1B  · Click to move your cursor in the text input[2C[1B  · Click to expand collapsed tool results[2C[1B  · By default, text auto-copies when you select it (/config to change)[2C[1B  · Hold Fn while selecting to use your terminal's native copy instead[2C[2B[39mOpus[8G5.5[12Gis[15Gnow[19Gyour[24Gdefault[32Gmodel[38Gand[42Git[45Gdraws[51Gdown[56Gusage[62Gfaster[69Gthan[74GSonnet[2C[1B5.[6GSwitch[13Ganytime[21Gwith[26G[94m/model[39m.[60C[6B[37m◐ medium · /effort[1B────────────────────────────────────────────────────────────────────────────────[1B[39m❯ [2mTry "how does <filepath> work?"[1B[22m[37m────────────────────────────────────────────────────────────────────────────────[2C[2B⏸ manual mode on · ← for agents[39m[24;1H[21;3H[?25h[>0q[c[?25l[H[2C[22B[37mOpus 5.5[39m[24;1H[21;3H[?25h[?25l[H[2C[1B[101m[30m▝[7G▝[39m[49m[24;1H[21;3H[?25h[?6n[?25l[H[2C[1B[101m[30m▘[7G▘[39m[49m[24;1H[21;3H[?25h[?25l[H[2C[1B[101m[30m▗[7G▖[39m[49m[24;1H[21;3H[?25h[?25l[H[2C[15B[94m/[1musage[22m                        Show session cost, plan [1musage[22m, and activity[32C[1Bstats[2C[1B[37m/[39m[1musage[22m[37m-credits                Configure [39m[1musage[22m[37m credits or request them from[32C[1Byour admin when you hit a limit[39m[K[2C[2B[94m/usage[39m[K[18C[3B[K[24;1H[21;9H[?25h[?25l[H[3GOpus[8G5.5[12Gis[15Gnow[19Gyour[24Gdefault[32Gmodel[38Gand[42Git[45Gdraws[51Gdown[56Gusage[62Gfaster[69Gthan[74GSonnet[1B  5. Switch anytime with [94m/model[39m.[1B[94m▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔[61G[37m◐ medium · /effort[94m ▔[1C[1B[39m  [94m[1mSettings[22m[39m  Status   Config  [104m[30m[1m Usage [22m[39m[49m  Stats[K[2C[2B [1mSession[22m[K[2C[1B[K[2C[1B [37mTota[9G [11Gos[14G:[16G      [23G    $0.0000[39m[K[2C[1B [37mTotal[11Gur[14Gtion[19G(API):  0s[39m[K[2C[1B [37mTotal [11Guration (wal[24G): 6s[39m[K[3C[1B[37mTotal code changes:    0 lines added, 0 lines removed[2C[1B[39m [37mUsage:                 0 input, 0 output, 0 cache read, 0 cache write[74G[39m[K[2C[1B[K[3C[1B[1mCurrent session[3C[1B[22m[47m[33m█████████▌                                        [55G[39m[49m19%[59Gused[2C[1B [37mResets 12:40am (America/Los_Angeles)[39m[K[32C[1B[K[2C[1B [1mCurr[9Gnt week (all models)[22m[K[3C[1B[47m[33m█▌                                                [39m[49m 3% used[K[1B   [37mResets Oct 6 at 4pm (America/Los_Angeles)[39m[K[1B[K[1B   [1mWhat's contributing to your limits usage?[22m[K[2C[1B [37mApproximate, based on local sessions on this machine — does not include [2C[1B[39m [37mother devic[16Gs or claude.ai[79G↓[39m[24;1H[4;32H[H[12C[14B[47m[33m█[55G[39m[49m20[24;1H[4;32H[?6n[H[3G[K[1B[91m▗[101m[30m ▗   ▖ [49m[91m▖[39m  [1mClaude Code[22m [37mv2.1.285[39m[K[1B [101m       [49m   [37mOpus 5.5 · Claude Pro[39m[K[1C[1B[91m▘▘   ▝▝[39m   [37m/…/scratchpad/claude-probe/workdir[2C[2B[92m✔ Using flicker-free rendering[37m · if you want to go back, use /tui default[2C[1B  · Click to move your cursor in the text input[2C[1B  · C[9Gi[11Gk [14Go[16Gexpand[23Gcollapsed tool results[2C[1B  · By[11Gef[14Gult,[19Gtext auto-copies when you select it (/config to change)[2C[1B  · Hol[11G Fn while se[24Gecting to use your terminal's native copy instead[3C[1B[39m[K[2C[1BOpus 5.5 is now your default model and it draws down usage faster than[74GSonnet[2C[1B5.[6GSwitch[13Ganytime[21Gwith[26G[94m/model[39m.[3C[1B[K[3C[1B[K[3C[1B[K[3C[2B[K[3C[1B                                                  [55G  [58G   [37m◐ medium · /effort[1B────────────────────────────────────────────────────────────────────────────────[1B[39m❯ [1B[37m────────────────────────────────────────────────────────────────────────────────[2C[1BOpus 5.5[39m[K[2C[1B[37m⏸ manual mod[16G on · ← for [29Ggents[79G[39m[K[24;1H[21;3H[?25h[?25l[H[10C[22B[37m · 5h 剩 81% · 周 剩 97%[39m[24;1H[21;3H[?25h]0;◐ Claude Code[?25l[H[14B[100m[37m❯ /exit[39m                                                                         [3B[49m[91m✢[3G[93mPr[91moofing… [3B[37m❯ [39m[24;1H[21;3H[?25h[?1006l[?1003l[?1002l[?1000l[?25h[?1004l[<u[?1049l[>4m[>4m[<u[?2031l[?2004l(B[?1016l[?1006l[?1003l[?1002l[?1000l[?25h7[r8[?25h(B[?1016l[?1006l[?1003l[?1002l[?1000l[>4m[?1004l[?2031l[?2004l[<u[?25h7[r8]0;[?25h

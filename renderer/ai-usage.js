@@ -33,6 +33,9 @@
   let lastClaudeRead = 0;
   // ~/.claude/settings.json 里有没有 SoloDock 的状态栏 / 提醒登记（主进程只读判断，内容不传过来）。
   let claudeLink = { installed: false, usage: false, reminders: false };
+  // 自动读取（claude-usage.js）的状态：读取中 / 出错原因。
+  let claudeLoading = false;
+  let claudeError = '';
 
   function save() {
     try { localStorage.setItem(KEY, JSON.stringify(subscriptions)); } catch (error) { /* keep session state */ }
@@ -104,19 +107,17 @@
         bar(primary.remaining / 100, false),
         node('p', 'usage-note', primary.resetsAt ? `${Ai.clock(primary.resetsAt)} 恢复 · ${Ai.until(primary.resetsAt)}` : '恢复时间未提供'),
       );
-      footer.append(node('span', '', secondary ? `${secondary.label}剩 ${Math.round(secondary.remaining)}%` : 'Claude Code 上报'));
+      footer.append(node('span', '', secondary ? `${secondary.label}剩 ${Math.round(secondary.remaining)}%` : '本机 Claude Code'));
     } else {
       column.dataset.level = 'unknown';
-      const waiting = summary.state === 'disconnected' && claudeLink.usage;
-      body.append(value('—', '', summary.state === 'stale' ? '额度已重置' : waiting ? '已接入' : '未接入'));
-      body.append(node('p', 'usage-note', summary.state === 'stale'
-        ? '等 Claude Code 刷新'
-        : waiting ? '在终端用 claude 回复一次后显示' : '一键接入，自动显示额度'));
-      if (summary.state === 'disconnected' && !claudeLink.usage) {
-        const connect = node('button', 'workspace-button compact', '一键接入');
-        connect.type = 'button';
-        connect.addEventListener('click', (event) => { event.stopPropagation(); connectClaude(); });
-        body.append(connect);
+      const view = claudeView(summary);
+      body.append(value('—', '', view.label));
+      body.append(node('p', 'usage-note', view.note));
+      if (view.action) {
+        const act = node('button', 'workspace-button compact', view.action.label);
+        act.type = 'button';
+        act.addEventListener('click', (event) => { event.stopPropagation(); view.action.run(); });
+        body.append(act);
       }
     }
     const renewal = renewalText(subscription);
@@ -210,11 +211,48 @@
     if (!window.notchAPI?.getClaudeUsage || (!claude?.enabled && !settingsOpen)) return;
     if (!force && (!cardVisible() || Date.now() - lastClaudeRead < CLAUDE_POLL_MS)) return;
     lastClaudeRead = Date.now();
-    const result = await window.notchAPI.getClaudeUsage().catch(() => null);
+    // 第一次读要启动本机的 claude，几秒钟；期间显示「读取中」。
+    claudeLoading = !claudeSnapshot;
+    if (claudeLoading) render();
+    const result = await window.notchAPI.getClaudeUsage({ force }).catch(() => null);
+    claudeLoading = false;
     claudeSnapshot = result && result.ok ? result : null;
+    claudeError = result && result.ok ? '' : (result?.error || 'unavailable');
     render();
     renderSettings();
     document.dispatchEvent(new CustomEvent('notch:ai-usage-updated', { detail: { provider: 'claude' } }));
+  }
+
+  // ---------------- Claude 自动读取的状态 ----------------
+  // 读不到时说清楚原因，能一步解决的给按钮（登录由 Claude Code 自己打开浏览器）。
+  function claudeView(summary = Ai.claudeSummary(claudeSnapshot)) {
+    if (claudeLoading) return { label: '读取中', note: '正在用本机的 Claude Code 读取', title: '正在读取额度', text: '正在用本机的 Claude Code 读取 5 小时与每周额度，几秒钟就好。' };
+    if (summary.state === 'stale') return { label: '额度已重置', note: '等下一次读取', title: '额度刚重置', text: '上一个周期已经结束，下一次读取就会显示新的额度。' };
+    switch (claudeError) {
+      case '':
+        return { label: '还没读取', note: '会自动读取本机 Claude Code', title: '还没读取额度', text: 'SoloDock 会自动用本机的 Claude Code 读取 5 小时与每周额度，不读取登录信息，也不消耗额度。', action: { label: '立即读取', run: () => refreshClaude(true) } };
+      case 'login_required':
+        return { label: '未登录', note: '登录一次，之后自动读取', title: '登录一次 Claude Code', text: '点下面的按钮会打开浏览器，用你的 Claude 账号授权一次。之后 SoloDock 自动读取额度，不再需要任何操作；登录信息由 Claude Code 自己保存。', action: { label: '登录 Claude', run: loginClaude } };
+      case 'not_installed':
+        return { label: '未安装', note: '需要终端版 Claude Code', title: '需要终端版 Claude Code', text: 'SoloDock 通过本机的终端版 Claude Code 读取额度（Claude 桌面 App 里的不能单独使用）。装好并登录一次后自动显示。', action: { label: '安装方法', run: () => window.notchAPI?.openExternal?.('https://code.claude.com/docs/en/setup') } };
+      case 'network':
+        return { label: '连不上', note: '网络或证书问题，稍后自动重试', title: '暂时连不上 Claude', text: '本机的 Claude Code 连不上 Anthropic，可能是网络或代理证书的问题。SoloDock 会稍后自动重试。' };
+      case 'rate_limited':
+        return { label: '稍后再试', note: '用量接口限流，稍后自动重试', title: '查询太频繁了', text: 'Claude 的用量接口限流比较严，过几分钟会自动重试。' };
+      default:
+        return { label: '暂时读不到', note: '稍后自动重试', title: '暂时读不到额度', text: '为避免显示过期数字，这里先不显示。SoloDock 会稍后自动重试。' };
+    }
+  }
+
+  async function loginClaude() {
+    toast('已打开浏览器，授权后回到这里');
+    const result = await Promise.resolve(window.notchAPI?.claudeLogin?.()).catch(() => null);
+    if (result?.ok) {
+      toast('已登录 Claude，正在读取额度');
+      refreshClaude(true);
+    } else {
+      toast(result?.error === 'not_installed' ? '没找到终端版 Claude Code' : '登录没有完成，可以再试一次');
+    }
   }
 
   // ---------------- 一键接入 Claude Code ----------------
@@ -252,7 +290,7 @@
     if (claude && !claude.enabled) { claude.enabled = true; save(); }
     linkChanged(result.status);
     if (typeof window.showStatusToast === 'function') {
-      window.showStatusToast('已接入 · 在终端用 claude 回复一次后显示额度', { actionLabel: '撤销', onAction: () => disconnectClaude(), duration: 6000 });
+      window.showStatusToast('已接入提醒 · Claude Code 完成或需要你确认时会从刘海提醒你', { actionLabel: '撤销', onAction: () => disconnectClaude(), duration: 6000 });
     }
     return result;
   }
@@ -264,7 +302,7 @@
       return result;
     }
     linkChanged(result.status);
-    toast('已断开 Claude Code，原来的设置都还在');
+    toast('已断开 Claude Code 提醒，原来的设置都还在');
     return result;
   }
 
@@ -286,7 +324,11 @@
     const onHomeText = subscription.enabled && !homeIds.includes(subscription.id) ? ' · 不在首页（只显示前 3 个）' : '';
     if (subscription.kind === 'codex') return `自动读取本机 Codex 账号${onHomeText}`;
     if (subscription.kind === 'claude') {
-      if (!claudeSnapshot) return claudeLink.usage ? `已接入 · 终端里的 claude 回复后上报（桌面 App 的 Code 页不上报）${onHomeText}` : `通过 Claude Code 状态栏 · 未接入${onHomeText}`;
+      if (!claudeSnapshot) return `自动读取本机 Claude Code · ${claudeView().label}${onHomeText}`;
+      if (claudeSnapshot.source === 'cli') {
+        const age = Math.max(0, Math.round((Date.now() - claudeSnapshot.receivedAt) / 60000));
+        return `自动读取本机 Claude Code · ${age ? `${age} 分钟前更新` : '刚刚更新'}${onHomeText}`;
+      }
       const minutes = Math.max(0, Math.round((Date.now() - claudeSnapshot.receivedAt) / 60000));
       return `通过 Claude Code 状态栏 · ${minutes ? `${minutes} 分钟前更新` : '刚刚更新'}${onHomeText}`;
     }
@@ -339,7 +381,9 @@
       down.setAttribute('aria-label', `${subscription.name} 下移`);
       controls.append(plan, day, up, down);
       if (subscription.kind === 'claude') {
-        const link = node('button', `workspace-button compact${claudeLink.usage ? '' : ' primary'}`, claudeLink.usage ? '断开' : '一键接入');
+        // 额度已经自动读取；这里接入的是「完成 / 需要你确认」提醒，并让终端里的 claude 实时上报额度。
+        const link = node('button', 'workspace-button compact', claudeLink.usage ? '断开提醒' : '接入提醒');
+        link.title = claudeLink.usage ? '不再从刘海提醒 Claude Code 的完成与确认' : 'Claude Code 完成任务或需要你确认时，从刘海提醒你';
         link.type = 'button';
         link.dataset.action = claudeLink.usage ? 'claude-disconnect' : 'claude-connect';
         const manual = node('button', 'usage-text-button ai-sub-manual', '手动配置');
@@ -447,6 +491,8 @@
     refreshClaude: () => refreshClaude(true),
     claude: () => claudeSnapshot,
     claudeLink: () => ({ ...claudeLink }),
+    claudeView: () => claudeView(),
+    loginClaude,
     connectClaude,
     disconnectClaude,
     openSettings,

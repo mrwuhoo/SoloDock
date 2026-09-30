@@ -37,6 +37,7 @@
       "notice-store.js",
       "worklog-store.js",
       "codex-usage.js",
+      "claude-usage.js",
       "reset-news.js",
       "platform.js",
       "build/solodock-icon.png",

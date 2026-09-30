@@ -27,6 +27,7 @@ const crypto = require('crypto');
 const { execFile } = require('child_process');
 const platformPolicy = require('./platform');
 const codexUsage = require('./codex-usage').createCodexUsageService();
+const { createClaudeUsageService, findClaude, ensureOnboarded } = require('./claude-usage');
 const resetNews = require('./reset-news').createResetNewsService();
 const PLATFORM_CAPABILITIES = platformPolicy.capabilities(process.platform);
 const {
@@ -1377,15 +1378,50 @@ function sendTaskNotificationResponse(response, statusCode, body) {
 
 // 最近一次由 Claude Code 状态栏上报的额度；只在内存里，退出即清空。
 let claudeUsageSnapshot = null;
+const SIX_HOURS_MS = 6 * 60 * 60 * 1000;
 // AI 额度剩余不到 20% 时提醒一次（同一周期不重复）；Claude 随状态栏上报检查，Codex 在面板读取用量时检查。
 const quotaWatch = createQuotaWatch();
 function checkQuota(provider, data) {
   const notification = quotaWatch.check(provider, quotaWindows(provider, data), { resetCredits: data && data.resetCredits });
   if (notification) enqueueTaskNotification(notification);
 }
-ipcMain.handle('claude:usage', () => (claudeUsageSnapshot
-  ? { ok: true, ...claudeUsageSnapshot }
-  : { ok: false, error: 'not_connected' }));
+// Claude 额度两条来路：终端里用 claude 时状态栏会实时上报（免费、最新）；平时（比如只用桌面 App）
+// 由 claude-usage.js 在后台用用户自己的终端版 claude 跑一次 /usage 读取，最多每 15 分钟一次。
+const CLAUDE_STATUSLINE_FRESH_MS = 10 * 60 * 1000;
+let claudeCli = null;
+function getClaudeCli() {
+  if (!claudeCli) {
+    claudeCli = createClaudeUsageService({
+      probeDir: path.join(app.getPath('userData'), 'claude-probe'),
+      locate: () => findClaude({ home: app.getPath('home') }),
+      onboard: () => ensureOnboarded({ home: app.getPath('home') }),
+    });
+  }
+  return claudeCli;
+}
+
+ipcMain.handle('claude:usage', async (event, options) => {
+  if (claudeUsageSnapshot && claudeUsageSnapshot.source !== 'cli' && Date.now() - claudeUsageSnapshot.receivedAt < CLAUDE_STATUSLINE_FRESH_MS) {
+    return { ok: true, ...claudeUsageSnapshot };
+  }
+  const result = await getClaudeCli().read({ force: Boolean(options && options.force) });
+  if (!result.ok) {
+    // 读不到时不拿过期数字冒充：只有近期的状态栏数据才回退使用。
+    if (claudeUsageSnapshot && Date.now() - claudeUsageSnapshot.receivedAt < SIX_HOURS_MS) return { ok: true, ...claudeUsageSnapshot };
+    return { ok: false, error: result.error };
+  }
+  if (!claudeUsageSnapshot || claudeUsageSnapshot.receivedAt < result.snapshot.receivedAt) {
+    claudeUsageSnapshot = result.snapshot;
+    checkQuota('claude', result.snapshot);
+  }
+  return { ok: true, ...claudeUsageSnapshot };
+});
+
+// 「登录 Claude」：由 Claude Code 自己打开浏览器完成登录，SoloDock 不经手任何凭据。
+ipcMain.handle('claude:login', async (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'unavailable' };
+  return getClaudeCli().login();
+});
 // 生成 ~/.claude/settings.json 里的状态栏配置。用 SoloDock 自带的运行时执行脚本，
 // 这样即使电脑上没有单独安装 Node.js 也能工作。只返回文本，由用户自己粘贴。
 // 用 SoloDock 自带的运行时执行随 App 分发的脚本。
@@ -4427,6 +4463,7 @@ app.on('before-quit', (event) => {
 
 app.on('will-quit', () => {
   codexUsage.dispose();
+  if (claudeCli) claudeCli.dispose();
   cancelCollapseWatchdog();
   clearTodoReminderTimer();
   if (timedReminderTimer) clearTimeout(timedReminderTimer);

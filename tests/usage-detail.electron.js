@@ -71,18 +71,21 @@ app.whenReady().then(async () => {
     const text = (selector) => [...card().querySelectorAll(selector)].map((node) => node.textContent);
     const now = Date.now();
     const out = {};
-    // Claude: 立即同步 pulls the latest status-line numbers.
-    window.notchAPI.getClaudeUsage = async () => ({ ok: true, receivedAt: Date.now(), fiveHour: { usedPercent: 96, resetsAt: now + 3600000 }, sevenDay: { usedPercent: 30, resetsAt: now + 4 * 86400000 } });
+    // Claude: usage is read automatically through the local Claude Code; a missing sign-in offers one button.
+    window.__claudeReads = [];
+    window.notchAPI.getClaudeUsage = async (options) => { window.__claudeReads.push(options || {}); return { ok: false, error: 'login_required' }; };
+    window.notchAPI.claudeLogin = async () => ({ ok: true });
+    await window.NotchAiUsageState.refreshClaude();
     [...card().querySelectorAll('.usage-pop-tabs button')].find((node) => node.textContent.includes('Claude')).click();
     await settle();
     out.claudeBefore = [...text('.usage-pop-empty b'), ...text('.usage-pop-empty .usage-pop-primary')];
-    // 一键接入: main writes the settings; until Claude Code replies once, the popover says it is waiting.
-    window.notchAPI.connectClaude = async () => ({ ok: true, changed: true, status: { usage: true, reminders: true } });
+    window.notchAPI.getClaudeUsage = async (options) => {
+      window.__claudeReads.push(options || {});
+      return { ok: true, source: 'cli', receivedAt: Date.now(), fiveHour: { usedPercent: 96, resetsAt: now + 3600000 }, sevenDay: { usedPercent: 30, resetsAt: now + 4 * 86400000 } };
+    };
     card().querySelector('.usage-pop-empty .usage-pop-primary').click();
-    await settle(150);
-    out.claudeWaiting = [...text('.usage-pop-empty b'), card().querySelectorAll('.usage-pop-empty .usage-pop-primary').length];
-    card().querySelector('.usage-pop-sync').click();
-    await settle(200);
+    await settle(250);
+    out.forced = window.__claudeReads.at(-1).force === true;
     out.claude = [...card().querySelectorAll('.usage-win')].map((node) => [node.querySelector('.usage-win-top span').textContent, node.querySelector('strong').textContent, node.dataset.level]);
     // A manual subscription only shows its plan and renewal.
     [...card().querySelectorAll('.usage-pop-tabs button')].find((node) => node.textContent.includes('Grok')).click();
@@ -109,8 +112,8 @@ app.whenReady().then(async () => {
   assert.deepEqual(result.codex.renewal, ['由你设置']);
   assert.deepEqual(result.codex.meta, ['刚刚同步']);
   assert.deepEqual(result.codex.sync, ['立即同步']);
-  assert.deepEqual(more.claudeBefore, ['还没接入 Claude Code', '一键接入']);
-  assert.deepEqual(more.claudeWaiting, ['已接入，等第一次上报', 0]);
+  assert.deepEqual(more.claudeBefore, ['登录一次 Claude Code', '登录 Claude']);
+  assert.equal(more.forced, true, 'after signing in it reads right away');
   assert.deepEqual(more.claude, [['本周', '70%', 'normal'], ['5 小时', '4%', 'critical']]);
   assert.match(more.manual.note, /^Grok 没有可读取的额度接口/);
   assert.deepEqual(more.manual.renewal, ['没有可读取的续费日']);

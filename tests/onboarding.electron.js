@@ -110,11 +110,11 @@ app.whenReady().then(async () => {
   assert.deepEqual(ai.features, [['clip', true], ['life', false]]);
   assert.equal(ai.step, 3);
   assert.equal(ai.next, '完成');
-  assert.deepEqual(ai.rows, [['Claude Code', '已检测到', 'onboard-primary', '一键接入'], ['Codex', '没有检测到，装好后可以在这里接入', 'onboard-secondary', '复制接入设置']]);
+  assert.deepEqual(ai.rows, [['Claude Code', '已检测到', 'onboard-primary', '接入提醒'], ['Codex', '没有检测到，装好后可以在这里接入', 'onboard-secondary', '复制接入设置']]);
   assert.equal(ai.connected.calls, 1);
   assert.match(ai.connected.note, /^已接入 Claude Code/);
   assert.deepEqual([ai.connected.row, ai.connected.button], ['已接入', false]);
-  assert.equal(ai.connected.toast, '已接入 · 在终端用 claude 回复一次后显示额度');
+  assert.equal(ai.connected.toast, '已接入提醒 · Claude Code 完成或需要你确认时会从刘海提醒你');
   assert.deepEqual(ai.copied, [{ type: 'text', text: 'notify = []' }]);
   assert.match(ai.note, /^已复制 · 粘贴到 ~\/\.codex\/config\.toml 最前面/);
   assert.deepEqual(ai.back, [2, 'true']);

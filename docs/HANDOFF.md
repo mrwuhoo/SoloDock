@@ -146,7 +146,11 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 - 打包版不在「应用程序」文件夹里运行时（从 DMG 或被系统临时转移的位置），启动时询问是否移过去（用 `app.moveToApplicationsFolder`，替换旧版本）；这种情况下 `claude:connect` 返回 `not_installed`。
 - 每次启动用 `repairClaudeSettings` 把已登记的 SoloDock 命令改成当前路径，只改不增。起因：用户曾直接从 DMG 运行，登记进去的是 `/Volumes/…` 路径。
 
-## 7. 进行中：Claude 订阅额度（最重要的待办）
+## 7. Claude 订阅额度（2026-09-29 已实现）
+
+**已实现**：`claude-usage.js`（虚拟终端 `createScreen`、`parseUsageScreen` / `parseResetTime` / `mergeUsageWindows`、`findClaude`、`claudeEnvironment`、`ensureOnboarded`、`createClaudeUsageService`），主进程 `claude:usage`（状态栏 10 分钟内的数据优先，否则自动读 `/usage`；成功缓存 15 分钟、失败 2 分钟）与 `claude:login`（运行 `claude auth login --claudeai`）。界面按错误码显示：`login_required` →「登录 Claude」，`not_installed` →「安装方法」，`network` / `rate_limited` / 其他 → 稍后自动重试。伪终端用 `/bin/sh -c 'cat | exec /usr/bin/script -q /dev/null …'`：Node 给子进程的输入是 socket，`script` 直接用会报 `tcgetattr: Operation not supported on socket`，中间的 `cat` 把它转成普通管道；进程组 `detached`，结束时整组清理。测试：`tests/claude-usage.test.js`，其中 `tests/fixtures/claude-usage-tui.txt` 是一次真实 `/usage` 输出（个人信息已按原长度替换，**替换时必须保持长度**，否则光标定位错乱）。
+
+以下是决策背景，保留备查。
 
 **目标**：像 Codex 一样自动显示 Claude 的 5 小时和每周额度，满足三个条件：不读取任何登录凭据、不消耗用户额度、用户不需要手动处理配置文件。
 
