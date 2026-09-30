@@ -103,7 +103,8 @@ app.whenReady().then(async () => {
       },
       tiles: [...document.querySelectorAll('#home-bento [data-home-module]:not([hidden])')].map((tile) => {
         const box = rect(tile);
-        return { id: tile.dataset.homeModule, inside: box.left >= bento.left - 1 && box.right <= bento.right + 1 && box.top >= bento.top - 1 && box.bottom <= bento.bottom + 1, overflow: tile.scrollHeight - tile.clientHeight };
+        const inner = [...tile.querySelectorAll('.now-idle, .now-running, .energy-body')].filter((block) => !block.hidden).map((block) => block.scrollHeight - block.clientHeight);
+        return { id: tile.dataset.homeModule, inside: box.left >= bento.left - 1 && box.right <= bento.right + 1 && box.top >= bento.top - 1 && box.bottom <= bento.bottom + 1, overflow: Math.max(tile.scrollHeight - tile.clientHeight, ...inner) };
       }),
       settings: [...document.querySelectorAll('[data-settings-home-module]')].map((input) => [input.dataset.settingsHomeModule, input.checked]),
     };

@@ -263,13 +263,12 @@
                 <!-- 空闲：当前这件事、开始专注、接下来 -->
                 <div class="now-idle" id="now-idle">
                   <div class="now-task" id="now-task">
-                    <span class="now-chip" id="now-task-chip" hidden></span>
                     <h2 class="now-title" id="now-task-title"></h2>
-                    <p class="now-due" id="now-task-due"></p>
+                    <div class="now-task-meta"><span class="now-chip" id="now-task-chip" hidden></span><p class="now-due" id="now-task-due"></p></div>
                   </div>
                   <div class="now-focus">
                     <div class="now-ring" id="now-ring" style="--ring-progress: 1">
-                      <svg class="now-ring-svg" viewBox="0 0 132 132" aria-hidden="true"><defs><linearGradient id="now-ring-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6AA8F5" /><stop offset="1" stop-color="#2C69C4" /></linearGradient></defs><circle class="now-ring-track" cx="66" cy="66" r="61" stroke-width="10" /><circle class="now-ring-fill" pathLength="100" stroke-dasharray="100 100" cx="66" cy="66" r="61" stroke-width="10" stroke="url(#now-ring-gradient)" /></svg>
+                      <svg class="now-ring-svg" viewBox="0 0 144 144" aria-hidden="true"><defs><linearGradient id="now-ring-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6AA8F5" /><stop offset="1" stop-color="#2C69C4" /></linearGradient></defs><circle class="now-ring-track" cx="72" cy="72" r="68" stroke-width="8" /><circle class="now-ring-fill" pathLength="100" stroke-dasharray="100 100" cx="72" cy="72" r="68" stroke-width="8" stroke="url(#now-ring-gradient)" /></svg>
                       <strong id="now-duration-readout">25:00</strong><span>专注</span>
                     </div>
                     <div class="now-focus-side">
@@ -294,13 +293,12 @@
                 <!-- 专注中 / 休息中 / 已暂停 -->
                 <div class="now-running" id="now-running" hidden>
                   <div class="now-ring big" id="now-ring-big" style="--ring-progress: 1">
-                    <svg class="now-ring-svg" viewBox="0 0 190 190" aria-hidden="true"><defs><linearGradient id="now-ring-gradient-big" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6AA8F5" /><stop offset="1" stop-color="#2C69C4" /></linearGradient></defs><circle class="now-ring-track" cx="95" cy="95" r="89" stroke-width="12" /><circle class="now-ring-fill" pathLength="100" stroke-dasharray="100 100" cx="95" cy="95" r="89" stroke-width="12" stroke="url(#now-ring-gradient-big)" /></svg>
+                    <svg class="now-ring-svg" viewBox="0 0 190 190" aria-hidden="true"><defs><linearGradient id="now-ring-gradient-big" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6AA8F5" /><stop offset="1" stop-color="#2C69C4" /></linearGradient></defs><circle class="now-ring-track" cx="95" cy="95" r="90" stroke-width="10" /><circle class="now-ring-fill" pathLength="100" stroke-dasharray="100 100" cx="95" cy="95" r="90" stroke-width="10" stroke="url(#now-ring-gradient-big)" /></svg>
                     <strong id="now-remaining">25:00</strong><span id="now-remaining-label">剩余</span>
                   </div>
                   <div class="now-running-side">
-                    <span class="now-chip" id="now-running-chip" hidden></span>
                     <h2 class="now-title" id="now-running-title"></h2>
-                    <p class="now-due" id="now-running-due"></p>
+                    <div class="now-task-meta"><span class="now-chip" id="now-running-chip" hidden></span><p class="now-due" id="now-running-due"></p></div>
                     <div class="now-tomatoes" id="now-tomatoes"></div>
                     <div class="now-actions">
                       <button class="now-button secondary" id="now-pause" type="button">暂停</button>

@@ -1300,15 +1300,19 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   gap: 14px;
   padding: 18px var(--sd-space-5);
 }
+.home-bento > .home-now { gap: var(--sd-space-3); }
 
-/* 矮屏（内容区不足 540）：卡片按自身高度收起次要内容，先收说明文字，再只留一条「接下来」。 */
+/* 矮屏（内容区不足 540）：卡片按自身内容区高度收起次要内容——「接下来」只留一条，7 天标题行收起。
+   正常高度下两张卡的内容区约 428，矮屏约 408。 */
 .home-bento > .home-now { container: now-card / size; }
 .home-bento > .home-energy { container: energy-card / size; }
-@container now-card (max-height: 450px) {
-  .now-hint { display: none; }
-}
 @container now-card (max-height: 420px) {
   .now-next-row:nth-child(n + 2) { display: none; }
+}
+/* 窄屏（卡片内容区宽度不足 420，正常约 470）：右侧控件一列放不下三行说明，收起说明文字。 */
+@container now-card (max-width: 420px) {
+  .now-hint { display: none; }
+  .now-focus { gap: var(--sd-space-4); }
 }
 @container energy-card (max-height: 420px) {
   .energy-week-head { display: none; }
@@ -1323,12 +1327,13 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
 /* ---- 现在 · 空闲：这件事 + 开始专注 + 接下来 ---- */
 .now-idle,
 .now-running { min-height: 0; }
-.now-idle { flex: 1; display: flex; flex-direction: column; gap: 14px; }
+/* 这件事、专注、接下来三段上下均分多出来的高度，而不是全堆在「记一笔」上面。 */
+.now-idle { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: var(--sd-space-3); }
 .now-idle[hidden],
 .now-running[hidden] { display: none; }
 .now-task { display: flex; flex-direction: column; min-width: 0; flex: none; }
 .now-chip {
-  align-self: flex-start;
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1344,7 +1349,7 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
 .now-chip::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: var(--chip, var(--sd-cat-4)); }
 .now-chip[hidden] { display: none; }
 .now-title {
-  margin: 8px 0 4px;
+  margin: 0 0 6px;
   overflow: hidden;
   color: var(--sd-text-1);
   font-size: var(--sd-fs-title);
@@ -1353,7 +1358,8 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.now-chip[hidden] + .now-title { margin-top: 0; }
+/* 标题下一行：分类 · 截止时间。 */
+.now-task-meta { display: flex; align-items: center; gap: var(--sd-space-2); min-width: 0; }
 .now-due {
   margin: 0;
   overflow: hidden;
@@ -1367,36 +1373,38 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
 .now-due b[data-tone='today'],
 .now-due b[data-tone='overdue'] { color: var(--sd-warning); }
 
+/* 圆环与右侧控件作为一组在框里水平居中。 */
 .now-focus {
   display: flex;
   align-items: center;
-  gap: 22px;
+  justify-content: center;
+  gap: var(--sd-space-6);
   flex: none;
-  padding: 14px 18px;
+  padding: var(--sd-space-3) 18px;
   border-radius: var(--sd-radius-control);
   background: var(--sd-surface-hover);
   box-shadow: inset 0 0 0 1px var(--sd-hairline);
 }
-.now-ring { position: relative; flex: none; display: grid; place-items: center; width: 136px; height: 136px; }
+.now-ring { position: relative; flex: none; display: grid; place-items: center; width: 144px; height: 144px; }
 .now-ring.big { width: 190px; height: 190px; }
 .now-ring-svg { position: absolute; inset: 0; width: 100%; height: 100%; transform: rotate(-90deg); }
 .now-ring-track { fill: none; stroke: var(--sd-accent-soft); }
 .now-ring-fill { fill: none; stroke-linecap: round; transition: stroke-dasharray 0.9s linear; }
+/* 数字只占环内六成多、用常规字重：和环之间留出呼吸，也不和描边抢分量。 */
 .now-ring strong {
   position: relative;
-  margin-top: -8px;
+  margin-top: -10px;
   color: var(--sd-text-1);
   font-size: var(--sd-fs-numeral);
-  font-weight: var(--sd-fw-semibold);
-  letter-spacing: -1px;
+  font-weight: var(--sd-fw-regular);
   font-variant-numeric: tabular-nums;
 }
-.now-ring span { position: absolute; bottom: 30px; color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
-.now-ring.big span { bottom: 52px; }
+.now-ring span { position: absolute; bottom: 32px; color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
+.now-ring.big span { bottom: 54px; }
 .home-now[data-state='paused'] .now-ring-fill { opacity: 0.5; }
 .home-now[data-state='break'] .now-ring-fill { stroke: var(--sd-success); }
 .home-now[data-state='break'] .now-ring-track { stroke: var(--sd-success-soft); }
-.now-focus-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.now-focus-side { flex: 0 1 auto; min-width: 0; max-width: 236px; display: flex; flex-direction: column; gap: var(--sd-space-3); }
 .now-seg {
   display: inline-flex;
   align-self: flex-start;
@@ -1414,6 +1422,7 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   color: var(--sd-text-2);
   font: var(--sd-fw-medium) var(--sd-fs-secondary) var(--sd-font);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   cursor: pointer;
 }
 .now-seg button:hover { color: var(--sd-text-1); }
@@ -1460,7 +1469,7 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   grid-template-columns: 10px 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: 10px;
-  height: 30px;
+  height: 28px;
   color: var(--sd-text-1);
   font-size: var(--sd-fs-secondary);
 }
@@ -1469,7 +1478,7 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
 .now-next-row b { font-weight: var(--sd-fw-semibold); font-variant-numeric: tabular-nums; }
 .now-next-row span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .now-next-row em { color: var(--sd-text-3); font-size: var(--sd-fs-caption); font-style: normal; white-space: nowrap; }
-.now-next-empty { display: flex; align-items: center; height: 30px; color: var(--sd-text-3); font-size: var(--sd-fs-secondary); }
+.now-next-empty { display: flex; align-items: center; height: 28px; color: var(--sd-text-3); font-size: var(--sd-fs-secondary); }
 
 /* 记一笔：和随手记同一套规则。 */
 .now-capture {
@@ -1510,9 +1519,10 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
 .home-now[data-state='paused'] .now-label::before { background: var(--sd-text-4); box-shadow: 0 0 0 4px var(--sd-accent-tint); }
 .home-now[data-state='break'] .now-label { color: var(--sd-success); }
 .home-now[data-state='break'] .now-label::before { background: var(--sd-success); box-shadow: 0 0 0 4px var(--sd-success-soft); }
-.now-running { flex: 1; display: flex; align-items: center; gap: 30px; padding: 4px 4px 0; }
-.now-running-side { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px; }
-.now-running .now-title { margin: 2px 0 0; display: -webkit-box; white-space: normal; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.now-running { flex: 1; display: flex; align-items: center; justify-content: center; gap: 30px; padding: 4px 4px 0; }
+.now-running-side { flex: 0 1 auto; min-width: 0; max-width: 260px; display: flex; flex-direction: column; gap: 10px; }
+.now-running .now-task-meta { flex-wrap: wrap; row-gap: 6px; }
+.now-running .now-title { margin: 0; display: -webkit-box; white-space: normal; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .now-tomatoes { display: flex; align-items: center; gap: var(--sd-space-2); color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
 .now-tomatoes[hidden] { display: none; }
 .now-tomatoes i { flex: none; width: 22px; height: 6px; border-radius: var(--sd-radius-pill); background: var(--sd-divider); }

@@ -532,7 +532,11 @@ async function main() {
                 );
               })
               .map((control) => control.id || control.className || control.tagName);
-            return { id: tile.dataset.homeModule, rect: box(rect), outsideControls, overflow: tile.scrollHeight - tile.clientHeight };
+            // Content that outgrows its own block would slide under the next one (e.g. 接下来 under 记一笔).
+            const inner = [...tile.querySelectorAll('.now-idle, .now-running, .energy-body')]
+              .filter((block) => !block.hidden)
+              .map((block) => block.scrollHeight - block.clientHeight);
+            return { id: tile.dataset.homeModule, rect: box(rect), outsideControls, overflow: Math.max(tile.scrollHeight - tile.clientHeight, ...inner) };
           });
         return {
           surface: box(surface),
