@@ -129,10 +129,10 @@ app.whenReady().then(async () => {
     await settle();
     out.undo = [copies().length, copies()[0].done];
 
-    // 在做: one at a time, a chip on the row and on the home card.
+    // 在做: one at a time, a chip on the row, and it becomes the home 「现在」 task.
     row('review').querySelector('[data-action="doing"]').click();
     await settle();
-    out.doing = [row('review').classList.contains('doing'), row('review').querySelector('.task-chip')?.textContent, window.NotchTodos.doing()?.text, document.querySelector('.today-item.doing .today-doing')?.textContent];
+    out.doing = [row('review').classList.contains('doing'), row('review').querySelector('.task-chip')?.textContent, window.NotchTodos.doing()?.text, document.getElementById('now-task-title')?.textContent];
     row('daily').querySelector('[data-action="doing"]').click();
     await settle();
     out.doingSwitch = [row('review').classList.contains('doing'), window.NotchTodos.doing()?.id];
@@ -225,7 +225,7 @@ app.whenReady().then(async () => {
   assert.deepEqual(result.repeat.slice(0, 2), [2, 1]);
   assert.equal(result.repeat[2], '已完成「回复学员」 · 已排好下一次');
   assert.deepEqual(result.undo, [1, false]);
-  assert.deepEqual(result.doing, [true, '在做', '原型评审', '在做']);
+  assert.deepEqual(result.doing, [true, '在做', '原型评审', '原型评审']);
   assert.deepEqual(result.doingSwitch, [false, 'daily']);
   assert.equal(result.doingCleared, null, 'finishing the 在做 todo clears it');
   assert.equal(result.inlineEdit, true);

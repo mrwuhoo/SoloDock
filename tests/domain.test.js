@@ -10,17 +10,9 @@ const {
   calculateRecordingDuration,
   completionMatchesWindow,
   deriveWindowDisplayName,
-  numberWindowLabels,
-  normalizeHomeWidgetSizes,
-  packHomeWidgetLayout,
   normalizeHiddenHomeModules,
   updateHomeModuleVisibility,
-  resolveHomeWidgetLayout,
-  validateHomeWidgetLayout,
-  layoutVariantForPlacement,
   calculateAudioLevel,
-  normalizeHomeLayout,
-  swapHomeLayoutSlots,
   resampleFloat32ToPcm16,
   shouldTogglePanelForSpace,
   updateRangeSelection,
@@ -42,7 +34,7 @@ const {
   createExclusiveAsyncTask,
 } = domain;
 
-const HOME_MODULES = ['music', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands'];
+const HOME_MODULES = ['now', 'energy', 'usage', 'mirror'];
 
 test('an exclusive async task coalesces repeated starts until the first attempt settles', async () => {
   let release;
@@ -275,27 +267,8 @@ test('calculateRecordingDuration does not double subtract an active pause', () =
   }), 5000);
 });
 
-test('window labels expose VS Code workspace names instead of app sequence numbers', () => {
-  assert.deepEqual(numberWindowLabels([
-    { appName: 'Code', id: 'a', title: 'main.js — 灵动岛 — Visual Studio Code' },
-    { appName: 'WeChat', id: 'b' },
-    { appName: 'Code', id: 'c', title: 'Lollipop-Test' },
-  ]).map((item) => item.displayName), ['灵动岛', 'WeChat', 'Lollipop-Test']);
-});
-
-test('window labels disambiguate duplicate workspace names without losing their identity', () => {
+test('window display names use the workspace from editor titles', () => {
   assert.equal(deriveWindowDisplayName({ appName: 'Cursor', title: 'README.md — CourseKit — Cursor' }), 'CourseKit');
-  assert.deepEqual(numberWindowLabels([
-    { appName: 'Code', id: 'a', title: '灵动岛' },
-    { appName: 'Code', id: 'b', title: '灵动岛' },
-  ]).map((item) => item.displayName), ['灵动岛 · 1', '灵动岛 · 2']);
-});
-
-test('multiple browser windows use page titles instead of generic app numbers', () => {
-  assert.deepEqual(numberWindowLabels([
-    { appName: 'Arc', id: 'a', title: '阿里云百炼控制台 — Arc' },
-    { appName: 'Arc', id: 'b', title: 'NotchTodo 设计稿 — Arc' },
-  ]).map((item) => item.displayName), ['阿里云百炼控制台', 'NotchTodo 设计稿']);
 });
 
 test('credential search matches service or account without exposing passwords', () => {
@@ -455,104 +428,20 @@ test('API credential statuses distinguish saved, missing, and legacy keys that n
   });
 });
 
-test('home layout swaps complete slot assignments without duplicates', () => {
-  const defaults = {
-    windows: 'tall-left',
-    clock: 'small-top',
-    recorder: 'medium-top',
-    mirror: 'square-top',
-    commands: 'tall-right',
-    note: 'wide-bottom',
-  };
-  assert.deepEqual(normalizeHomeLayout({ windows: 'wide-bottom' }, defaults), defaults);
-  assert.deepEqual(swapHomeLayoutSlots(defaults, 'mirror', 'clock'), {
-    windows: 'tall-left',
-    clock: 'square-top',
-    recorder: 'medium-top',
-    mirror: 'small-top',
-    commands: 'tall-right',
-    note: 'wide-bottom',
-  });
-});
-
-test('home widget sizes keep the requested tile large and adapt siblings to the grid budget', () => {
-  const defaults = {
-    character: 'small',
-    windows: 'large',
-    recorder: 'medium',
-    mirror: 'medium',
-    note: 'large',
-    commands: 'medium',
-  };
-  assert.deepEqual(normalizeHomeWidgetSizes({ windows: 'huge' }, defaults, 'windows', 22), defaults);
-  const fitted = normalizeHomeWidgetSizes({
-    character: 'large',
-    windows: 'large',
-    recorder: 'large',
-    mirror: 'large',
-    note: 'large',
-    commands: 'large',
-  }, defaults, 'mirror', 22);
-  assert.equal(fitted.mirror, 'large');
-  assert.ok(Object.values(fitted).some((size) => size !== 'large'));
-});
-
-test('home widget sizes fill the complete bento capacity without blank cells', () => {
-  const defaults = {
-    music: 'medium',
-    windows: 'large',
-    recorder: 'small',
-    mirror: 'medium',
-    note: 'medium',
-    commands: 'mini',
-    pomodoro: 'mini',
-  };
-  const area = { mini: 2, small: 4, medium: 8, large: 16 };
-  const fitted = normalizeHomeWidgetSizes({ ...defaults, mirror: 'large' }, defaults, 'mirror', 48);
-  assert.equal(fitted.mirror, 'large');
-  assert.equal(Object.values(fitted).reduce((total, size) => total + area[size], 0), 48);
-});
-
-test('home widget packing fills all four rows even when logical order would fragment the grid', () => {
-  const order = ['recorder', 'windows', 'commands', 'mirror', 'music', 'note', 'pomodoro'];
-  const sizes = {
-    recorder: 'small',
-    windows: 'large',
-    commands: 'mini',
-    mirror: 'medium',
-    music: 'medium',
-    note: 'medium',
-    pomodoro: 'mini',
-  };
-  const layout = packHomeWidgetLayout(order, sizes, 12, 4);
-  assert.ok(layout);
-  const occupied = new Set();
-  Object.entries(layout).forEach(([id, item]) => {
-    for (let row = item.row; row < item.row + item.height; row += 1) {
-      for (let column = item.column; column < item.column + item.width; column += 1) {
-        const cell = `${row}:${column}`;
-        assert.equal(occupied.has(cell), false, `${id} overlaps ${cell}`);
-        occupied.add(cell);
-      }
-    }
-  });
-  assert.equal(occupied.size, 48);
-});
-
 test('hidden homepage modules are deduplicated and normalized to module order', () => {
   assert.deepEqual(
-    normalizeHiddenHomeModules(['mirror', 'unknown', 'mirror', 'music'], HOME_MODULES),
-    ['music', 'mirror']
+    normalizeHiddenHomeModules(['mirror', 'unknown', 'mirror', 'energy'], HOME_MODULES),
+    ['energy', 'mirror']
   );
   assert.deepEqual(normalizeHiddenHomeModules('mirror', HOME_MODULES), []);
   assert.deepEqual(normalizeHiddenHomeModules([...HOME_MODULES], HOME_MODULES), []);
 });
 
 test('homepage visibility refuses to hide the final visible module', () => {
-  const sixHidden = HOME_MODULES.slice(0, 6);
+  const threeHidden = HOME_MODULES.slice(0, 3);
   assert.deepEqual(
-    updateHomeModuleVisibility(sixHidden, HOME_MODULES, 'commands', false),
-    { ok: false, error: 'at_least_one_required', hiddenIds: sixHidden }
+    updateHomeModuleVisibility(threeHidden, HOME_MODULES, 'mirror', false),
+    { ok: false, error: 'at_least_one_required', hiddenIds: threeHidden }
   );
   assert.deepEqual(
     updateHomeModuleVisibility(['mirror'], HOME_MODULES, 'mirror', true),
@@ -562,66 +451,6 @@ test('homepage visibility refuses to hide the final visible module', () => {
     updateHomeModuleVisibility([], HOME_MODULES, 'unknown', false),
     { ok: false, error: 'invalid_module', hiddenIds: [] }
   );
-});
-
-test('every non-empty homepage widget subset exactly covers the bento grid', () => {
-  const order = ['music', 'pomodoro', 'windows', 'recorder', 'mirror', 'note', 'commands'];
-  const sizes = {
-    music: 'medium', pomodoro: 'mini', windows: 'large', recorder: 'small',
-    mirror: 'medium', note: 'medium', commands: 'mini',
-  };
-  for (let visibleMask = 1; visibleMask < 2 ** order.length; visibleMask += 1) {
-    const hiddenIds = order.filter((id, index) => (visibleMask & (1 << index)) === 0);
-    const expectedIds = order.filter((id) => !hiddenIds.includes(id));
-    const before = JSON.stringify({ order, sizes, hiddenIds });
-    const layout = resolveHomeWidgetLayout(order, sizes, hiddenIds, 12, 4);
-    assertExactHomeCover(layout, expectedIds);
-    assert.equal(JSON.stringify({ order, sizes, hiddenIds }), before, 'resolver mutated its inputs');
-  }
-});
-
-test('five-widget layout chooses the largest preference and breaks ties by saved order', () => {
-  const order = ['music', 'pomodoro', 'windows', 'recorder', 'mirror', 'note', 'commands'];
-  const sizes = {
-    music: 'medium', pomodoro: 'mini', windows: 'large', recorder: 'small',
-    mirror: 'large', note: 'medium', commands: 'mini',
-  };
-  const layout = resolveHomeWidgetLayout(order, sizes, ['pomodoro', 'commands'], 12, 4);
-  assert.deepEqual(layout.placements.windows, { column: 0, row: 0, width: 4, height: 4 });
-  assert.equal(layout.variants.windows, 'tall');
-});
-
-test('layout variants reflect actual rectangles instead of saved preferences', () => {
-  assert.equal(layoutVariantForPlacement({ width: 2, height: 1 }), 'mini');
-  assert.equal(layoutVariantForPlacement({ width: 2, height: 2 }), 'compact');
-  assert.equal(layoutVariantForPlacement({ width: 6, height: 2 }), 'wide');
-  assert.equal(layoutVariantForPlacement({ width: 4, height: 4 }), 'tall');
-  assert.equal(layoutVariantForPlacement({ width: 12, height: 4 }), 'full');
-});
-
-test('home layout validation rejects every incomplete or unsafe shape', () => {
-  const valid = resolveHomeWidgetLayout(
-    ['music', 'windows'],
-    { music: 'large', windows: 'large' },
-    [],
-    12,
-    4
-  );
-  assert.equal(validateHomeWidgetLayout(valid, ['music', 'windows'], 12, 4), true);
-  assert.equal(validateHomeWidgetLayout(null, ['music'], 12, 4), false);
-  assert.equal(validateHomeWidgetLayout({ placements: {} }, ['music'], 12, 4), false);
-  assert.equal(validateHomeWidgetLayout({
-    placements: { music: { column: 0, row: 0, width: 12, height: 3 } },
-  }, ['music'], 12, 4), false);
-  assert.equal(validateHomeWidgetLayout({
-    placements: { music: { column: 0, row: 0, width: 12.5, height: 4 } },
-  }, ['music'], 12, 4), false);
-  assert.equal(validateHomeWidgetLayout({
-    placements: {
-      music: { column: 0, row: 0, width: 8, height: 4 },
-      windows: { column: 6, row: 0, width: 6, height: 4 },
-    },
-  }, ['music', 'windows'], 12, 4), false);
 });
 
 test('audio level returns stable RMS volume for recording strands', () => {

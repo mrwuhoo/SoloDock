@@ -47,14 +47,16 @@ app.whenReady().then(async () => {
     out.patches = window.__patches;
     out.after = { sitHint: $('settings-body-sit-hint').textContent, offworkHint: $('settings-body-offwork-hint').textContent, timeDisabled: $('settings-body-offwork-time').disabled };
 
-    // "休息 5 分钟" from a reminder: the pomodoro card shows a break, and the main process hears it is not focus.
+    // "休息 5 分钟" from a reminder: the home card shows a break, and the main process hears it is not focus.
     await setActiveTab('home');
     window.NotchPomodoro.start(300, 'break');
-    const card = $('home-pomodoro');
-    out.breakCard = { mode: card.dataset.mode, caption: card.querySelector('.pomodoro-caption').textContent, state: card.dataset.state };
+    await settle();
+    const card = $('home-now');
+    out.breakCard = { state: card.dataset.state, label: $('now-label').textContent, finish: $('now-finish').textContent };
     out.focusReports = window.__focus.map((state) => [state.running, state.mode, state.endsAt > Date.now()]);
-    $('pomodoro-reset').click();
-    out.afterReset = { mode: card.dataset.mode, caption: card.querySelector('.pomodoro-caption').textContent, last: window.__focus.at(-1) };
+    $('now-finish').click();
+    await settle();
+    out.afterReset = { state: card.dataset.state, label: $('now-label').textContent, last: window.__focus.at(-1) };
 
     // "待办挪到明天" moves today's and overdue undone todos, keeping the clock time.
     const today = new Date();
@@ -75,9 +77,9 @@ app.whenReady().then(async () => {
   assert.equal(result.sitHint, '连续用电脑 50 分钟，提醒起来活动');
   assert.deepEqual(result.patches, [{ eye: { enabled: true } }, { sit: { minutes: 45 } }, { offwork: { time: '21:45' } }, { offwork: { enabled: false } }]);
   assert.deepEqual(result.after, { sitHint: '连续用电脑 45 分钟，提醒起来活动', offworkHint: '21:45 还在用电脑时，提醒把剩下的挪到明天', timeDisabled: true });
-  assert.deepEqual(result.breakCard, { mode: 'break', caption: '休息中', state: 'running' });
+  assert.deepEqual(result.breakCard, { state: 'break', label: '休息中', finish: '结束休息' });
   assert.deepEqual(result.focusReports, [[true, 'break', true]]);
-  assert.deepEqual(result.afterReset, { mode: 'focus', caption: 'Timer', last: { running: false, mode: 'focus', endsAt: 0 } });
+  assert.deepEqual(result.afterReset, { state: 'idle', label: '现在', last: { running: false, mode: 'focus', endsAt: 0 } });
   assert.deepEqual(result.moved, { count: 2, today: true, overdue: true, untouched: true, reminded: 0 });
   assert.deepEqual(result.completed, [true, true, false], 'completing twice does not reopen the todo');
 

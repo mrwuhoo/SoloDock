@@ -244,7 +244,7 @@ async function main() {
       api: true,
       mirror: true,
       features: 9,
-      homeModules: 7,
+      homeModules: 4,
       shortcut: true,
       defaultTab: { exists: true, value: 'home', options: 11 },
       workspace: true,
@@ -333,21 +333,19 @@ async function main() {
             },
           };
           document.getElementById('tab-button-recordings').click();
-          document.getElementById('record-start').dispatchEvent(new MouseEvent('click', { bubbles: true }));
           document.getElementById('recording-new').dispatchEvent(new MouseEvent('click', { bubbles: true }));
+          window.NotchWorkspace.startRecording();
           await waitFor(() => (
             permissionRequests === 1
-            && document.getElementById('record-start').disabled
             && document.getElementById('recording-new').disabled
-            && document.getElementById('home-live-transcript').textContent === '等待确认麦克风权限…'
+            && document.getElementById('recording-new').getAttribute('aria-label') === '正在请求麦克风权限'
           ), 'permission pending UI');
           const pending = {
             permissionRequests,
             streamRequests,
             recorderStarts,
-            startDisabled: document.getElementById('record-start').disabled,
             newDisabled: document.getElementById('recording-new').disabled,
-            feedback: document.getElementById('home-live-transcript').textContent,
+            feedback: document.getElementById('recording-new').getAttribute('aria-label'),
             drafts: document.querySelectorAll('.recording-item.is-live').length,
           };
           releasePermission(true);
@@ -363,7 +361,7 @@ async function main() {
             drafts: document.querySelectorAll('.recording-item.is-live').length,
             active: window.NotchWorkspace.isRecordingActive(),
           };
-          document.getElementById('record-stop').click();
+          window.NotchWorkspace.stopRecording();
           await waitFor(() => (
             !window.NotchWorkspace.isRecordingActive()
             && document.querySelectorAll('.recording-item.is-live').length === 0
@@ -375,7 +373,7 @@ async function main() {
           return { pending, started, cleaned };
         } finally {
           if (window.NotchWorkspace.isRecordingActive()) {
-            document.getElementById('record-stop').click();
+            window.NotchWorkspace.stopRecording();
             await waitFor(() => !window.NotchWorkspace.isRecordingActive(), 'emergency recording cleanup')
               .catch(() => {});
           }
@@ -390,9 +388,8 @@ async function main() {
         permissionRequests: 1,
         streamRequests: 0,
         recorderStarts: 0,
-        startDisabled: true,
         newDisabled: true,
-        feedback: '等待确认麦克风权限…',
+        feedback: '正在请求麦克风权限',
         drafts: 0,
       },
       started: {
@@ -520,27 +517,13 @@ async function main() {
     await window.webContents.executeJavaScript(`
       window.__measureHomepage = function measureHomepage() {
         const surface = document.getElementById('home-bento').getBoundingClientRect();
-        const protectedSelectors = {
-          pomodoro: ['.pomodoro-readout', '.pomodoro-toggle', '.pomodoro-reset:not([hidden])'],
-          recorder: ['.recorder-head', '.home-transcript:not([hidden])', '.recorder-controls'],
-          windows: ['.tile-head', '.window-list'],
-          mirror: ['.mirror-stage'],
-          note: ['.note-toolbar', '.note-body'],
-          today: ['.today-head', '.today-list'],
-        };
+        const box = (rect) => ({ left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom });
         const tiles = [...document.querySelectorAll('#home-bento [data-home-module]')]
           .filter((tile) => !tile.hidden)
           .map((tile) => {
             const rect = tile.getBoundingClientRect();
-            const regions = (protectedSelectors[tile.dataset.homeModule] || [])
-              .map((selector) => tile.querySelector(selector))
-              .filter(Boolean)
-              .map((node) => {
-                const region = node.getBoundingClientRect();
-                return { left: region.left, top: region.top, right: region.right, bottom: region.bottom };
-              })
-              .filter((region) => region.right > region.left && region.bottom > region.top);
-            const outsideControls = [...tile.querySelectorAll('button:not([hidden]), input:not([hidden]), textarea:not([hidden])')]
+            const outsideControls = [...tile.querySelectorAll('button, input')]
+              .filter((control) => control.getClientRects().length && !control.closest('[hidden]'))
               .filter((control) => {
                 const child = control.getBoundingClientRect();
                 return child.width > 0 && child.height > 0 && !(
@@ -548,106 +531,59 @@ async function main() {
                   && child.top >= rect.top - 1 && child.bottom <= rect.bottom + 1
                 );
               })
-              .map((control) => {
-                const controlRect = control.getBoundingClientRect();
-                return {
-                  name: control.id || control.className || control.tagName,
-                  rect: { left: controlRect.left, top: controlRect.top, right: controlRect.right, bottom: controlRect.bottom },
-                };
-              });
-            return {
-              id: tile.dataset.homeModule,
-              rect: { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom },
-              controlsInside: outsideControls.length === 0,
-              outsideControls,
-              variant: tile.dataset.layoutVariant,
-              area: Number(tile.dataset.layoutWidth) * Number(tile.dataset.layoutHeight),
-              regions,
-            };
+              .map((control) => control.id || control.className || control.tagName);
+            return { id: tile.dataset.homeModule, rect: box(rect), outsideControls, overflow: tile.scrollHeight - tile.clientHeight };
           });
         return {
-          surface: { left: surface.left, top: surface.top, right: surface.right, bottom: surface.bottom },
+          surface: box(surface),
           tiles,
-          sizeControls: [...document.querySelectorAll('#home-bento [data-widget-size-cycle]')].map((control) => ({
-            hidden: control.hidden,
-            disabled: control.disabled,
-            tabIndex: control.tabIndex,
-            size: control.dataset.currentSize,
-            tileHidden: control.closest('[data-home-module]').hidden,
-          })),
           reducedMotion: matchMedia('(prefers-reduced-motion: reduce)').matches,
-          ghostCount: document.querySelectorAll('.home-layout-ghost').length,
-          animations: document.getElementById('home-bento').getAnimations().map((animation) => ({
-            name: animation.animationName || '',
-            playState: animation.playState,
-            target: animation.effect?.target?.className || '',
-            duration: animation.effect?.getTiming?.().duration,
-          })),
+          animations: document.getElementById('home-bento').getAnimations().length,
         };
       };
       void 0;
     `);
 
-    function assertHomepageMeasurement(measurement, visibleCount) {
-      assert.equal(measurement.tiles.length, visibleCount);
-      assert.equal(measurement.tiles.reduce((total, tile) => total + tile.area, 0), 48);
-      const outside = measurement.tiles.filter((tile) => !tile.controlsInside)
-        .map((tile) => `${tile.id}(${tile.variant}): ${JSON.stringify(tile.outsideControls)} tile=${JSON.stringify(tile.rect)}`);
-      assert.deepEqual(outside, [], `组件控件必须保持在各自卡片内：${outside.join('; ')}`);
+    function assertHomepageMeasurement(measurement, visibleIds, label) {
+      assert.deepEqual(measurement.tiles.map((tile) => tile.id), visibleIds, label);
       assert.equal(measurement.reducedMotion, true);
-      assert.equal(measurement.ghostCount, 0, '减弱动态效果时不得创建 Auto Layout ghost');
-      assert.ok(
-        measurement.animations.every((animation) => Number(animation.duration) <= 0.01),
-        `减弱动态效果时不得创建有感布局动画：${JSON.stringify(measurement.animations)}`
-      );
+      assert.equal(measurement.animations, 0, `${label}: 显隐不做布局动画`);
       measurement.tiles.forEach((tile) => {
-        assert.ok(tile.rect.left >= measurement.surface.left - 1, `${tile.id} 越过首页左边界`);
-        assert.ok(tile.rect.right <= measurement.surface.right + 1, `${tile.id} 越过首页右边界`);
-        assert.ok(tile.rect.top >= measurement.surface.top - 1, `${tile.id} 越过首页上边界`);
-        assert.ok(tile.rect.bottom <= measurement.surface.bottom + 1, `${tile.id} 越过首页下边界`);
-        assert.ok(['mini', 'compact', 'wide', 'tall', 'full'].includes(tile.variant));
-        for (let left = 0; left < tile.regions.length; left += 1) {
-          for (let right = left + 1; right < tile.regions.length; right += 1) {
-            const a = tile.regions[left];
-            const b = tile.regions[right];
-            const overlaps = a.left < b.right - 1 && a.right > b.left + 1
-              && a.top < b.bottom - 1 && a.bottom > b.top + 1;
-            assert.equal(overlaps, false, `${tile.id}(${tile.variant}) 的关键内容区域发生重叠：${JSON.stringify([a, b])}`);
-          }
-        }
+        assert.deepEqual(tile.outsideControls, [], `${label}: ${tile.id} 的控件必须留在卡片里`);
+        assert.ok(tile.overflow <= 1, `${label}: ${tile.id} 内容溢出 ${tile.overflow}px`);
+        assert.ok(tile.rect.left >= measurement.surface.left - 1, `${label}: ${tile.id} 越过首页左边界`);
+        assert.ok(tile.rect.right <= measurement.surface.right + 1, `${label}: ${tile.id} 越过首页右边界`);
+        assert.ok(tile.rect.top >= measurement.surface.top - 1, `${label}: ${tile.id} 越过首页上边界`);
+        assert.ok(tile.rect.bottom <= measurement.surface.bottom + 1, `${label}: ${tile.id} 越过首页下边界`);
       });
       for (let left = 0; left < measurement.tiles.length; left += 1) {
         for (let right = left + 1; right < measurement.tiles.length; right += 1) {
           const a = measurement.tiles[left].rect;
           const b = measurement.tiles[right].rect;
-          const overlaps = a.left < b.right - 1 && a.right > b.left + 1
-            && a.top < b.bottom - 1 && a.bottom > b.top + 1;
-          assert.equal(overlaps, false, '首页组件矩形不得重叠');
+          const overlaps = a.left < b.right - 1 && a.right > b.left + 1 && a.top < b.bottom - 1 && a.bottom > b.top + 1;
+          assert.equal(overlaps, false, `${label}: 首页卡片不得重叠`);
         }
       }
-      if (visibleCount < 7) {
-        assert.ok(measurement.sizeControls.every((control) => control.hidden && control.disabled && control.tabIndex === -1));
-      } else {
-        assert.ok(measurement.sizeControls.every((control) => control.tileHidden
-          ? control.hidden && control.disabled && control.tabIndex === -1
-          : !control.hidden && !control.disabled && control.tabIndex === 0));
-      }
+      // Hidden cards leave no gap: the visible cards span the full width of the home page.
+      const left = Math.min(...measurement.tiles.map((tile) => tile.rect.left));
+      const right = Math.max(...measurement.tiles.map((tile) => tile.rect.right));
+      assert.ok(left <= measurement.surface.left + 1 && right >= measurement.surface.right - 1, `${label}: 卡片应铺满首页`);
     }
 
     for (const [width, height] of [[1240, 616], [1000, 576]]) {
       window.setSize(width, height);
       const matrix = await window.webContents.executeJavaScript(`
         (async () => {
-          const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
+          const ids = ['now', 'energy', 'usage', 'mirror'];
           ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
           const results = [];
-          for (let count = 7; count >= 1; count -= 1) {
+          for (let count = 4; count >= 1; count -= 1) {
             document.getElementById('tab-button-home').click();
             await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-            results.push(window.__measureHomepage());
+            results.push({ visible: window.NotchHome.getVisibility().visibleIds, measurement: window.__measureHomepage() });
             if (count > 1) {
               document.getElementById('tab-button-settings').click();
-              const input = document.querySelector('[data-settings-home-module="' + ids[7 - count] + '"]');
+              const input = document.querySelector('[data-settings-home-module="' + ids[4 - count] + '"]');
               input.checked = false;
               input.dispatchEvent(new Event('change', { bubbles: true }));
               await new Promise((resolve) => setTimeout(resolve, 20));
@@ -656,7 +592,7 @@ async function main() {
           return results;
         })()
       `);
-      matrix.forEach((measurement, index) => assertHomepageMeasurement(measurement, 7 - index));
+      matrix.forEach(({ visible, measurement }) => assertHomepageMeasurement(measurement, visible, `${width}×${height} ${visible.join('+')}`));
 
       const finalWidgetGuard = await window.webContents.executeJavaScript(`
         (async () => {
@@ -668,69 +604,45 @@ async function main() {
           return {
             checked: enabled.checked,
             visibleCount: window.NotchHome.getVisibility().visibleIds.length,
-            storedCount: JSON.parse(localStorage.getItem('notch-home-hidden-modules-v1')).length,
+            storedCount: JSON.parse(localStorage.getItem('notch-home-hidden-modules-v2')).length,
             message: document.getElementById('status-toast-message').textContent,
           };
         })()
       `);
       assert.equal(finalWidgetGuard.checked, true);
       assert.equal(finalWidgetGuard.visibleCount, 1);
-      assert.equal(finalWidgetGuard.storedCount, 6);
+      assert.equal(finalWidgetGuard.storedCount, 3);
       assert.match(finalWidgetGuard.message, /至少保留一个/);
     }
+    window.setSize(1240, 616);
 
     const transactionAudit = await window.webContents.executeJavaScript(`
       (() => {
-        const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
+        const ids = ['now', 'energy', 'usage', 'mirror'];
         ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
         const first = window.NotchHome.setModuleVisible('mirror', false);
-        const second = window.NotchHome.setModuleVisible('note', false);
+        const second = window.NotchHome.setModuleVisible('now', false);
         const rapidHidden = [...window.NotchHome.getVisibility().hiddenIds];
         ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
-        window.NotchHome.setModuleVisible('today', false);
-        window.NotchHome.setModuleVisible('today', true);
-        window.NotchHome.setModuleVisible('today', false);
+        window.NotchHome.setModuleVisible('energy', false);
         let eventCount = 0;
         const onChange = () => { eventCount += 1; };
         document.addEventListener('notch:home-modules-changed', onChange);
-        const storageBeforeNoop = localStorage.getItem('notch-home-hidden-modules-v1');
-        const noop = window.NotchHome.setModuleVisible('today', false);
-        const noOpStorageStable = storageBeforeNoop === localStorage.getItem('notch-home-hidden-modules-v1');
+        const storageBeforeNoop = localStorage.getItem('notch-home-hidden-modules-v2');
+        const noop = window.NotchHome.setModuleVisible('energy', false);
+        const noOpStorageStable = storageBeforeNoop === localStorage.getItem('notch-home-hidden-modules-v2');
         document.removeEventListener('notch:home-modules-changed', onChange);
-        const beforeRollback = {
-          hidden: JSON.stringify(window.NotchHome.getVisibility().hiddenIds),
-          stored: localStorage.getItem('notch-home-hidden-modules-v1'),
-          visible: [...document.querySelectorAll('[data-home-module]')].filter((tile) => !tile.hidden).map((tile) => tile.dataset.homeModule).join(','),
-          styles: [...document.querySelectorAll('[data-home-module]')].map((tile) => tile.getAttribute('style')).join('|'),
-        };
-        const originalResolver = window.NotchDomain.resolveHomeWidgetLayout;
-        window.NotchDomain.resolveHomeWidgetLayout = () => null;
-        const rollback = window.NotchHome.setModuleVisible('pomodoro', false);
-        window.NotchDomain.resolveHomeWidgetLayout = originalResolver;
-        const afterRollback = {
-          hidden: JSON.stringify(window.NotchHome.getVisibility().hiddenIds),
-          stored: localStorage.getItem('notch-home-hidden-modules-v1'),
-          visible: [...document.querySelectorAll('[data-home-module]')].filter((tile) => !tile.hidden).map((tile) => tile.dataset.homeModule).join(','),
-          styles: [...document.querySelectorAll('[data-home-module]')].map((tile) => tile.getAttribute('style')).join('|'),
-        };
+        const invalid = window.NotchHome.setModuleVisible('windows', false);
         ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
-        const originalWorkspace = window.NotchWorkspace;
-        window.NotchWorkspace = { ...originalWorkspace, isRecordingActive: () => true };
-        document.dispatchEvent(new CustomEvent('notch:recording-state-changed', { detail: { active: true } }));
-        const recordingGuard = window.NotchHome.setModuleVisible('recorder', false);
-        window.NotchWorkspace = originalWorkspace;
         const durations = [];
         for (let index = 0; index < 100; index += 1) {
           const start = performance.now();
-          window.NotchHome.setModuleVisible('note', index % 2 === 0 ? false : true);
+          window.NotchHome.setModuleVisible('energy', index % 2 === 0 ? false : true);
           durations.push(performance.now() - start);
         }
         durations.sort((a, b) => a - b);
         return {
-          first, second, rapidHidden, noop, eventCount,
-          noOpStorageStable,
-          rollback, rollbackStable: JSON.stringify(beforeRollback) === JSON.stringify(afterRollback),
-          recordingGuard,
+          first, second, rapidHidden, noop, eventCount, noOpStorageStable, invalid,
           p95: durations[Math.floor(durations.length * .95)],
           maximum: durations[durations.length - 1],
           animationCount: document.getElementById('home-bento').getAnimations().length,
@@ -739,63 +651,44 @@ async function main() {
     `);
     assert.equal(transactionAudit.first.ok, true);
     assert.equal(transactionAudit.second.ok, true);
-    // Hidden ids follow the registry order (note comes before mirror).
-    assert.deepEqual(transactionAudit.rapidHidden, ['note', 'mirror']);
+    // Hidden ids follow the registry order (now comes before mirror).
+    assert.deepEqual(transactionAudit.rapidHidden, ['now', 'mirror']);
     assert.equal(transactionAudit.noop.changed, false);
     assert.equal(transactionAudit.eventCount, 0);
     assert.equal(transactionAudit.noOpStorageStable, true);
-    assert.equal(transactionAudit.rollback.error, 'layout_invalid');
-    assert.equal(transactionAudit.rollbackStable, true);
-    assert.equal(transactionAudit.recordingGuard.error, 'recording_active');
+    assert.equal(transactionAudit.invalid.error, 'invalid_module', 'the removed windows card cannot come back');
     assert.ok(transactionAudit.p95 < 16, `显隐事务 p95 ${transactionAudit.p95.toFixed(2)}ms 超过 16ms`);
     assert.ok(transactionAudit.maximum < 50, `显隐事务最长 ${transactionAudit.maximum.toFixed(2)}ms 超过 50ms`);
-    assert.ok(transactionAudit.animationCount <= 1);
+    assert.equal(transactionAudit.animationCount, 0);
 
-    const persistenceAndRecorderAudit = await window.webContents.executeJavaScript(`
+    const persistenceAudit = await window.webContents.executeJavaScript(`
       (() => {
-        const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
+        const ids = ['now', 'energy', 'usage', 'mirror'];
         ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
         const originalSetItem = Storage.prototype.setItem;
-        const storedBefore = localStorage.getItem('notch-home-hidden-modules-v1');
+        const storedBefore = localStorage.getItem('notch-home-hidden-modules-v2');
         Storage.prototype.setItem = function setItem(key, value) {
-          if (key === 'notch-home-hidden-modules-v1') throw new Error('simulated quota failure');
+          if (key === 'notch-home-hidden-modules-v2') throw new Error('simulated quota failure');
           return originalSetItem.call(this, key, value);
         };
         const degraded = window.NotchHome.setModuleVisible('mirror', false);
         const degradedState = window.NotchHome.getVisibility();
         const degradedStatus = document.getElementById('settings-home-module-status').textContent;
-        const degradedStorageStable = storedBefore === localStorage.getItem('notch-home-hidden-modules-v1');
-        ['pomodoro', 'recorder', 'windows', 'note', 'usage'].forEach((id) => {
-          window.NotchHome.setModuleVisible(id, false);
-        });
-        const rejectedWhileDirty = window.NotchHome.setModuleVisible('today', false);
+        const degradedStorageStable = storedBefore === localStorage.getItem('notch-home-hidden-modules-v2');
+        ['usage', 'energy'].forEach((id) => window.NotchHome.setModuleVisible(id, false));
+        const rejectedWhileDirty = window.NotchHome.setModuleVisible('now', false);
         Storage.prototype.setItem = originalSetItem;
-        const recovered = window.NotchHome.setModuleVisible('pomodoro', true);
+        const recovered = window.NotchHome.setModuleVisible('usage', true);
         const recoveredState = window.NotchHome.getVisibility();
-        const recoveredStored = JSON.parse(localStorage.getItem('notch-home-hidden-modules-v1'));
-
+        const recoveredStored = JSON.parse(localStorage.getItem('notch-home-hidden-modules-v2'));
         ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
-        const recorderHidden = window.NotchHome.setModuleVisible('recorder', false);
-        const originalWorkspace = window.NotchWorkspace;
-        window.NotchWorkspace = { ...originalWorkspace, isRecordingActive: () => true };
-        document.dispatchEvent(new CustomEvent('notch:recording-state-changed', { detail: { active: true } }));
-        const recorderSwitch = document.querySelector('[data-settings-home-module="recorder"]');
-        const hiddenSwitchEnabled = !recorderSwitch.disabled && !recorderSwitch.checked;
-        const recorderRestored = window.NotchHome.setModuleVisible('recorder', true);
-        document.dispatchEvent(new CustomEvent('notch:recording-state-changed', { detail: { active: true } }));
-        const visibleSwitchLocked = recorderSwitch.disabled && recorderSwitch.checked;
-        const recordingsActionAvailable = !document.getElementById('recording-new').disabled;
-        window.NotchWorkspace = originalWorkspace;
-        document.dispatchEvent(new CustomEvent('notch:recording-state-changed', { detail: { active: false } }));
 
-        const noteInput = document.getElementById('home-note');
-        noteInput.focus();
-        const noteTile = noteInput.closest('[data-home-module]');
-        window.NotchHome.setModuleVisible('note', false);
-        const focusReleased = !noteTile.contains(document.activeElement)
-          && noteTile.hidden
-          && noteTile.querySelector('[data-widget-size-cycle]').tabIndex === -1;
-        window.NotchHome.setModuleVisible('note', true);
+        const captureInput = document.getElementById('now-capture-input');
+        captureInput.focus();
+        const nowTile = captureInput.closest('[data-home-module]');
+        window.NotchHome.setModuleVisible('now', false);
+        const focusReleased = !nowTile.contains(document.activeElement) && nowTile.hidden;
+        window.NotchHome.setModuleVisible('now', true);
         return {
           degraded,
           degradedPersisted: degradedState.persisted,
@@ -805,32 +698,22 @@ async function main() {
           recovered,
           recoveredPersisted: recoveredState.persisted,
           recoveredStored,
-          recorderHidden,
-          hiddenSwitchEnabled,
-          recorderRestored,
-          visibleSwitchLocked,
-          recordingsActionAvailable,
           focusReleased,
         };
       })()
     `);
-    assert.equal(persistenceAndRecorderAudit.degraded.ok, true);
-    assert.equal(persistenceAndRecorderAudit.degraded.persisted, false);
-    assert.equal(persistenceAndRecorderAudit.degradedPersisted, false);
-    assert.equal(persistenceAndRecorderAudit.degradedStorageStable, true);
-    assert.match(persistenceAndRecorderAudit.degradedStatus, /仅当前会话/);
-    assert.equal(persistenceAndRecorderAudit.rejectedWhileDirty.ok, false);
-    assert.equal(persistenceAndRecorderAudit.rejectedWhileDirty.persisted, false);
-    assert.equal(persistenceAndRecorderAudit.recovered.ok, true);
-    assert.equal(persistenceAndRecorderAudit.recovered.persisted, true);
-    assert.equal(persistenceAndRecorderAudit.recoveredPersisted, true);
-    assert.ok(Array.isArray(persistenceAndRecorderAudit.recoveredStored));
-    assert.equal(persistenceAndRecorderAudit.recorderHidden.ok, true);
-    assert.equal(persistenceAndRecorderAudit.hiddenSwitchEnabled, true);
-    assert.equal(persistenceAndRecorderAudit.recorderRestored.ok, true);
-    assert.equal(persistenceAndRecorderAudit.visibleSwitchLocked, true);
-    assert.equal(persistenceAndRecorderAudit.recordingsActionAvailable, true);
-    assert.equal(persistenceAndRecorderAudit.focusReleased, true);
+    assert.equal(persistenceAudit.degraded.ok, true);
+    assert.equal(persistenceAudit.degraded.persisted, false);
+    assert.equal(persistenceAudit.degradedPersisted, false);
+    assert.equal(persistenceAudit.degradedStorageStable, true);
+    assert.match(persistenceAudit.degradedStatus, /仅当前会话/);
+    assert.equal(persistenceAudit.rejectedWhileDirty.ok, false);
+    assert.equal(persistenceAudit.rejectedWhileDirty.persisted, false);
+    assert.equal(persistenceAudit.recovered.ok, true);
+    assert.equal(persistenceAudit.recovered.persisted, true);
+    assert.equal(persistenceAudit.recoveredPersisted, true);
+    assert.deepEqual(persistenceAudit.recoveredStored, ['energy', 'mirror']);
+    assert.equal(persistenceAudit.focusReleased, true);
 
     await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
       features: [
@@ -884,54 +767,28 @@ async function main() {
 
     const lifecycleAudit = await window.webContents.executeJavaScript(`
       (async () => {
-        const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
-        ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
+        ['now', 'energy', 'usage', 'mirror'].forEach((id) => window.NotchHome.setModuleVisible(id, true));
         document.getElementById('tab-button-home').click();
         document.getElementById('app').classList.remove('collapsed', 'closing', 'opening');
         document.getElementById('app').classList.add('expanded');
         document.dispatchEvent(new CustomEvent('notch:modechange', { detail: { expanded: true } }));
-        let windowScans = 0;
-        window.notchAPI = {
-          listWindows: async () => { windowScans += 1; return { items: [] }; },
-        };
-        await new Promise((resolve) => setTimeout(resolve, 30));
-        windowScans = 0;
-        window.NotchHome.setModuleVisible('windows', false);
-        await window.NotchWorkspace.refreshWindows(true);
-        await window.NotchWorkspace.refreshWindows(true);
-        const scansWhileHidden = windowScans;
-        window.NotchHome.setModuleVisible('windows', true);
-        await new Promise((resolve) => setTimeout(resolve, 30));
-        const scansAfterRestore = windowScans;
-
         await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-        const minutes = document.getElementById('pomodoro-minutes');
-        const seconds = document.getElementById('pomodoro-seconds');
-        minutes.value = '00';
-        seconds.value = '10';
-        seconds.dispatchEvent(new Event('blur'));
-        document.getElementById('pomodoro-toggle').click();
-        const before = Number(minutes.value) * 60 + Number(seconds.value);
-        window.NotchHome.setModuleVisible('pomodoro', false);
+        window.NotchPomodoro.start(10, 'focus');
+        const before = window.NotchPomodoro.state().remaining;
+        window.NotchHome.setModuleVisible('now', false);
         await new Promise((resolve) => setTimeout(resolve, 1150));
-        const whileHidden = Number(minutes.value) * 60 + Number(seconds.value);
-        window.NotchHome.setModuleVisible('pomodoro', true);
-        const after = Number(minutes.value) * 60 + Number(seconds.value);
-        document.getElementById('pomodoro-reset').click();
-        return {
-          scansWhileHidden,
-          scansAfterRestore,
-          before,
-          whileHidden,
-          after,
-        };
+        const whileHidden = window.NotchPomodoro.state().remaining;
+        window.NotchHome.setModuleVisible('now', true);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        const shown = document.getElementById('now-remaining').textContent;
+        const expected = '00:' + String(window.NotchPomodoro.state().remaining).padStart(2, '0');
+        window.NotchPomodoro.finish();
+        return { before, whileHidden, shown, expected, running: document.getElementById('home-now').dataset.state };
       })()
     `);
-    assert.equal(lifecycleAudit.scansWhileHidden, 0);
-    assert.equal(lifecycleAudit.scansAfterRestore, 1);
-    assert.ok(lifecycleAudit.whileHidden < lifecycleAudit.before, '番茄钟隐藏后应继续计时');
-    assert.equal(lifecycleAudit.after, lifecycleAudit.whileHidden);
+    assert.ok(lifecycleAudit.whileHidden < lifecycleAudit.before, '「现在」隐藏后番茄钟应继续计时');
+    assert.equal(lifecycleAudit.shown, lifecycleAudit.expected, '重新显示时读数与计时一致');
+    assert.equal(lifecycleAudit.running, 'idle');
 
     const idlePerformanceAudit = await window.webContents.executeJavaScript(`
       (async () => {
@@ -969,75 +826,6 @@ async function main() {
       '玻璃版面板必须使用足够强的实时背景模糊来压住复杂桌面壁纸'
     );
 
-    const autoLayoutMotionAudit = await window.webContents.executeJavaScript(`
-      (async () => {
-        const ids = ['note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows'];
-        ids.forEach((id) => window.NotchHome.setModuleVisible(id, true));
-        document.getElementById('tab-button-home').click();
-        await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-        const sizeButton = document.querySelector('[data-widget-size-cycle="windows"]');
-        const beforeSize = sizeButton.dataset.currentSize;
-        sizeButton.click();
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        const ghosts = [...document.querySelectorAll('.home-layout-ghost')];
-        const tileAnimations = [...document.querySelectorAll('#home-bento [data-home-module]:not([hidden])')]
-          .flatMap((tile) => tile.getAnimations());
-        const tileDurations = tileAnimations
-          .map((animation) => Number(animation.effect?.getTiming?.().duration) || 0)
-          .filter((duration) => duration > 0);
-        const animatedOpacities = tileAnimations.flatMap((animation) => (
-          animation.effect?.getKeyframes?.().map((frame) => Number(frame.opacity)).filter(Number.isFinite) || []
-        ));
-        const minimumTileOpacity = animatedOpacities.length ? Math.min(...animatedOpacities) : 1;
-        const realTileHasScale = [...document.querySelectorAll('#home-bento [data-home-module]:not([hidden])')]
-          .some((tile) => tile.getAnimations().some((animation) => (
-            animation.effect?.getKeyframes?.().some((frame) => /scale/.test(String(frame.transform || '')))
-          )));
-        const during = {
-          beforeSize,
-          afterSize: sizeButton.dataset.currentSize,
-          ghostCount: ghosts.length,
-          tileDurations,
-          minimumTileOpacity,
-          realTileHasScale,
-        };
-        await new Promise((resolve) => setTimeout(resolve, 700));
-        const ghostsAfter = document.querySelectorAll('.home-layout-ghost').length;
-        const tileAnimationsAfter = [...document.querySelectorAll('#home-bento [data-home-module]:not([hidden])')]
-          .reduce((count, tile) => count + tile.getAnimations().length, 0);
-        sizeButton.click();
-        sizeButton.click();
-        await new Promise((resolve) => requestAnimationFrame(resolve));
-        const rapidGhostIds = [...document.querySelectorAll('.home-layout-ghost')]
-          .map((ghost) => ghost.dataset.homeLayoutGhost);
-        const rapidDuplicateGhosts = new Set(rapidGhostIds).size !== rapidGhostIds.length;
-        const rapidMaxTileAnimations = Math.max(...[...document.querySelectorAll('#home-bento [data-home-module]:not([hidden])')]
-          .map((tile) => tile.getAnimations().length));
-        await new Promise((resolve) => setTimeout(resolve, 700));
-        return {
-          ...during,
-          ghostsAfter,
-          tileAnimationsAfter,
-          rapidDuplicateGhosts,
-          rapidMaxTileAnimations,
-          rapidGhostsAfter: document.querySelectorAll('.home-layout-ghost').length,
-        };
-      })()
-    `);
-    assert.notEqual(autoLayoutMotionAudit.afterSize, autoLayoutMotionAudit.beforeSize);
-    assert.equal(autoLayoutMotionAudit.ghostCount, 0, '尺寸切换不得用空外壳遮成黑块');
-    assert.ok(
-      autoLayoutMotionAudit.tileDurations.length > 0
-        && autoLayoutMotionAudit.tileDurations.every((duration) => duration >= 500 && duration <= 650),
-      'Auto Layout 应保留过程感，也不得拖沓'
-    );
-    assert.ok(autoLayoutMotionAudit.minimumTileOpacity >= 0.72, '重排期间真实卡片不得熄灭成黑块');
-    assert.equal(autoLayoutMotionAudit.realTileHasScale, true, '真实卡片应恢复连续 FLIP 几何过渡');
-    assert.equal(autoLayoutMotionAudit.ghostsAfter, 0, 'Auto Layout ghost 必须在动画后清理');
-    assert.equal(autoLayoutMotionAudit.tileAnimationsAfter, 0, '重排动画结束后不得残留组件动画');
-    assert.equal(autoLayoutMotionAudit.rapidDuplicateGhosts, false, '连续切换必须先清理上一轮 Auto Layout ghost');
-    assert.ok(autoLayoutMotionAudit.rapidMaxTileAnimations <= 1, '连续切换不得叠加多轮组件动画');
-    assert.equal(autoLayoutMotionAudit.rapidGhostsAfter, 0, '连续切换结束后不得残留 Auto Layout ghost');
     // Separately verify the accessibility fallback instead of inheriting the host's preference.
     await window.webContents.debugger.sendCommand('Emulation.setEmulatedMedia', {
       features: [

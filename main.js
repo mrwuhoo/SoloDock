@@ -13,7 +13,6 @@ const {
   globalShortcut,
   safeStorage,
   dialog,
-  desktopCapturer,
   ClipboardItem,
   powerMonitor,
 } = require('electron');
@@ -600,6 +599,12 @@ function flushHeldFocusNotifications() {
   if (focusFlushTimer) clearTimeout(focusFlushTimer);
   focusFlushTimer = null;
   for (const notification of focusHold.flush(Date.now())) enqueueTaskNotification(notification);
+  sendFocusHeld();
+}
+
+// 首页「现在」显示专注期间收起了几条 AI 完成通知。
+function sendFocusHeld() {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('focus:held', focusHold.size());
 }
 
 ipcMain.on('focus:state', (event, payload) => {
@@ -820,6 +825,25 @@ ipcMain.handle('worklog:todo', (event, delta) => {
   return true;
 });
 
+// 首页「精力」：距离上次休息（离开电脑 5 分钟以上算休息过）、收工时间、专注期间收起的 AI 通知数。
+ipcMain.handle('energy:status', () => {
+  const settings = bodyTracker.settings();
+  return {
+    activeSince: bodyTracker.state().activeSince,
+    breakMinutes: settings.sit.minutes,
+    offwork: settings.offwork,
+    worklogEnabled,
+    held: focusHold.size(),
+  };
+});
+
+// 首页「休息 5 分钟」：和提醒浮窗上的同一个按钮一样，从现在起重新计时。
+ipcMain.handle('body:break', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return false;
+  bodyTracker.startBreak(Date.now());
+  return true;
+});
+
 function sampleBodyActivity() {
   let idleMs = 0;
   try { idleMs = powerMonitor.getSystemIdleTime() * 1000; } catch (error) { return; }
@@ -900,7 +924,10 @@ function enqueueTaskNotification(notification) {
       mainWindow.webContents.send('task-completion:new', notification);
     }
     // 番茄钟专注期间：AI 完成只计数不弹出，专注结束后汇总为一条。
-    if (focusHold.hold(notification, now)) return 'held';
+    if (focusHold.hold(notification, now)) {
+      sendFocusHeld();
+      return 'held';
+    }
   }
 
   // 暂停提醒：照常记进通知中心，只是不弹出；恢复时汇总成一句。
@@ -2576,36 +2603,6 @@ async function requestMacMediaAccess(mediaType) {
 // macOS 渲染层 getUserMedia 不会自动弹 TCC 授权，必须由主进程申请摄像头/麦克风权限。
 ipcMain.handle('media:microphone', () => requestMacMediaAccess('microphone'));
 
-// macOS 没有 askForMediaAccess('screen')。只能在明确的用户操作后调用
-// desktopCapturer，让系统创建/更新屏幕录制授权记录；授权注入仍需重启应用。
-ipcMain.handle('media:screen-recording', async () => {
-  if (process.platform !== 'darwin') return { granted: true, status: 'granted' };
-  const before = systemPreferences.getMediaAccessStatus('screen');
-  if (before === 'granted') return { granted: true, status: before, restartRequired: true };
-  if (before === 'denied' || before === 'restricted') {
-    return { granted: false, status: before, settingsRequired: true };
-  }
-  try {
-    await mediaPermissionCoordinator.run({
-      owner: mainWindow,
-      activate: () => app.focus({ steal: true }),
-      track: () => {},
-      request: () => desktopCapturer.getSources({
-        types: ['screen'],
-        thumbnailSize: { width: 1, height: 1 },
-        fetchWindowIcons: false,
-      }),
-    });
-  } catch (error) {}
-  const status = systemPreferences.getMediaAccessStatus('screen');
-  return {
-    granted: status === 'granted',
-    status,
-    restartRequired: status === 'granted',
-    settingsRequired: status !== 'granted',
-  };
-});
-
 ipcMain.handle('tasks:recent', () => taskCompletionHistory);
 
 // 快捷链接：URL 走外部浏览器（仅 http/https），本地路径走系统打开（仅绝对路径）
@@ -3003,20 +3000,6 @@ async function scanCurrentWindows() {
     return { items: [], error: 'accessibility_permission_required' };
   }
 }
-
-ipcMain.handle('windows:list', async () => {
-  return scanCurrentWindows();
-});
-
-ipcMain.handle('windows:focus', async (event, windowId) => {
-  const target = windowScanCache.get(windowId);
-  if (!target || process.platform !== 'darwin') return false;
-  try {
-    return (await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true';
-  } catch (error) {
-    return false;
-  }
-});
 
 function taskWindowMatchScore(notification, target) {
   const project = String(notification && notification.project || '').trim().toLocaleLowerCase();
@@ -4436,8 +4419,7 @@ app.whenReady().then(() => {
   setTimeout(() => {
     if (!isQuitting) createCaptureWindow();
   }, 1500);
-  // 不在启动时索要权限：只有用户在「当前窗口」卡片里点了授权按钮才申请，
-  // 那条路径会先调用 desktopCapturer，让 SoloDock 出现在系统的录屏权限列表里。
+  // 不在启动时索要任何系统权限：麦克风在第一次录音时申请，辅助功能只在点通知「打开」切窗口时用到。
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

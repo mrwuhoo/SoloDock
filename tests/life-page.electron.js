@@ -24,6 +24,10 @@ app.whenReady().then(async () => {
     const card = (id) => document.querySelector('.life-card[data-habit="' + id + '"]');
     await setMode(true);
     await setActiveTab('life');
+    // Opening the panel on the home page reads today's work log for the energy card; only count
+    // what happens on the life page from here on.
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    window.__calls.length = 0;
     await settle(200);
     const out = {
       cards: [...document.querySelectorAll('.life-card')].map((node) => [node.querySelector('b').textContent, node.querySelector('.life-count strong').textContent, node.querySelector('.life-streak').textContent, node.querySelectorAll('.life-dot').length]),
@@ -146,6 +150,8 @@ app.whenReady().then(async () => {
     document.querySelector('#tab-life').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
     out.settingsClosed = $('life-settings').hidden;
 
+    out.workCalls = window.__calls.filter((call) => ['worklog', 'act', 'read-all'].includes(call[0])).length;
+
     // 「记一笔」 on a habit reminder opens this habit's log form.
     await setActiveTab('home');
     window.__handlers.onLogHabit.forEach((callback) => callback({ habitId: 'meditate' }));
@@ -154,7 +160,6 @@ app.whenReady().then(async () => {
     document.querySelector('#tab-life').dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
 
     out.stored = JSON.parse(localStorage.getItem('notch-life-v1')).records.length;
-    out.workCalls = window.__calls.filter((call) => ['worklog', 'act', 'read-all'].includes(call[0])).length;
     const box = document.querySelector('.life-page').getBoundingClientRect();
     out.overflow = [...document.querySelectorAll('.life-card, .life-month, .life-recent, .life-day, .life-dot')].filter((node) => {
       const r = node.getBoundingClientRect();

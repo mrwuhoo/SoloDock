@@ -1,6 +1,6 @@
-// Home "AI 用量" card with up to three subscriptions, plus the subscription list in Settings.
-// The Codex column is updated by codex-usage.js; this file renders the Claude and manual
-// columns, orders every column and picks the 1 / 2 / 3 column layout.
+// Home "AI 用量" card (one compact row per subscription), plus the subscription list in Settings.
+// The Codex row is updated by codex-usage.js; this file renders the Claude and manual
+// rows and orders them.
 (function bootstrapAiUsage() {
   'use strict';
 
@@ -156,13 +156,12 @@
     return Ai.homeSubscriptions(subscriptions);
   }
 
-  // Small or compact cards only have room for one subscription.
+  // The card sits in the home page's right column and is as tall as its rows (up to three);
+  // the photo frame below takes the rest of the column.
   function render() {
-    const variant = tile.dataset.layoutVariant || '';
-    const available = onHome();
-    const shown = ['mini', 'compact'].includes(variant) ? available.slice(0, 1) : available;
+    const shown = onHome();
     tile.dataset.count = String(Math.max(1, shown.length));
-    tile.dataset.stack = variant === 'tall' ? 'rows' : 'columns';
+    tile.dataset.stack = 'rows';
     columns.querySelectorAll('.usage-col-extra, .usage-col-empty').forEach((element) => element.remove());
 
     const codexIndex = shown.findIndex((item) => item.id === 'codex');
@@ -470,7 +469,6 @@
   });
   if (addDay) dayOptions(addDay, null);
 
-  new MutationObserver(render).observe(tile, { attributes: true, attributeFilter: ['data-layout-variant'] });
   for (const eventName of ['notch:tabchange', 'notch:modechange', 'notch:home-modules-changed', 'visibilitychange']) {
     document.addEventListener(eventName, () => refreshClaude());
   }

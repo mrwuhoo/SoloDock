@@ -87,9 +87,8 @@ async function main() {
   assert.equal(await evaluate('window.notchAPI.platform'), 'win32');
   assert.equal(await evaluate('window.notchAPI.getAppSettings().then(s => s.features.clip)'), false);
   assert.equal(await evaluate('document.getElementById("mirror-video").srcObject === null'), true);
-  assert.deepEqual(await evaluate('window.NotchHome.getVisibility().visibleIds'), ['pomodoro', 'recorder', 'mirror', 'note', 'commands', 'usage']);
+  assert.deepEqual(await evaluate('window.NotchHome.getVisibility().visibleIds'), ['now', 'energy', 'usage', 'mirror']);
   assert.equal(await evaluate('window.NotchHome.setModuleVisible("music", true).ok'), false);
-  assert.equal(await evaluate('window.notchAPI.listWindows().then(r => r.error)'), 'unsupported');
   await evaluate('document.getElementById("notch").click()');
   await until(() => evaluate('document.getElementById("app").classList.contains("expanded")'), 'expand');
   assert.equal(await evaluate('window.notchAPI.getMetrics().then(m => m.stripHeight)'), 38);
@@ -100,7 +99,7 @@ async function main() {
   assert.equal(await evaluate('window.notchAPI.setPanelShortcut("Control+Shift+F9").then(r => r.ok)'), true);
   assert.equal(await evaluate('window.notchAPI.setPanelShortcut("Space").then(r => r.ok)'), true);
   if (retained) {
-    assert.equal(await evaluate('localStorage.getItem("notch-home-note")'), 'Windows retained data');
+    assert.equal(await evaluate('localStorage.getItem("notch-focus-minutes-v1")'), '45');
     assert.equal(await evaluate('window.notchAPI.listCredentials().then(r => r.items.some(i => i.service === "CI smoke"))'), true);
     assert.equal(await evaluate('window.notchAPI.listCredentials().then(async r => (await window.notchAPI.getCredential(r.items.find(i => i.service === "CI smoke").id)).item.password)'), 'test-only-password');
     const recordings = await evaluate('JSON.parse(localStorage.getItem("notch-recordings") || "[]")');
@@ -123,15 +122,15 @@ async function main() {
     await until(() => evaluate('window.smokeTracks.some(t => t.kind === "video" && t.readyState === "live")'), 'fake camera starts on click');
     await evaluate('document.getElementById("tab-button-todo").click()');
     await until(() => evaluate('window.smokeTracks.every(t => t.readyState === "ended")'), 'camera released leaving home');
-    await evaluate('document.getElementById("tab-button-home").click(); document.getElementById("record-start").click()');
+    await evaluate('document.getElementById("tab-button-recordings").click(); document.getElementById("recording-new").click()');
     await until(() => evaluate('window.NotchWorkspace.isRecordingActive() && window.smokeTracks.some(t => t.kind === "audio" && t.readyState === "live")'), 'fake recording starts');
     await delay(1500);
-    await evaluate('document.getElementById("record-stop").click()');
+    await evaluate('window.NotchWorkspace.stopRecording()');
     await until(() => evaluate('!window.NotchWorkspace.isRecordingActive() && window.smokeTracks.every(t => t.readyState === "ended")'), 'microphone released');
     await until(() => evaluate('JSON.parse(localStorage.getItem("notch-recordings") || "[]").some(r => r.audioPath)'), 'recording persisted');
     assert.ok(fs.readdirSync(path.join(profile, 'recordings')).some((file) => fs.statSync(path.join(profile, 'recordings', file)).size > 0));
-    await evaluate('document.getElementById("home-note").value = "Windows retained data"; document.getElementById("home-note").dispatchEvent(new Event("input", {bubbles:true}))');
-    await until(() => evaluate('localStorage.getItem("notch-home-note") === "Windows retained data"'), 'note persisted');
+    await evaluate('document.getElementById("tab-button-home").click(); document.querySelector(\'#now-duration [data-minutes="45"]\').click()');
+    await until(() => evaluate('localStorage.getItem("notch-focus-minutes-v1") === "45"'), 'focus length persisted');
     await evaluate('window.notchAPI.saveWorkspaceData(Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)])))');
   }
   const notify = await fetch('http://127.0.0.1:43821/notify/gpt', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Windows smoke complete', task_id: `smoke-${Date.now()}` }) });
@@ -140,7 +139,7 @@ async function main() {
   await until(() => evaluate('window.notchAPI.listTaskCompletions().then(r => r.some(i => i.title === "Windows smoke complete"))'), 'notification recorded');
   await evaluate('document.getElementById("tab-button-settings").click()');
   await delay(300);
-  assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("[data-settings-home-module]")).filter(i => !i.closest("label").hidden).map(i => i.dataset.settingsHomeModule)'), ['pomodoro', 'recorder', 'mirror', 'note', 'commands', 'usage']);
+  assert.deepEqual(await evaluate('Array.from(document.querySelectorAll("[data-settings-home-module]")).filter(i => !i.closest("label").hidden).map(i => i.dataset.settingsHomeModule)'), ['now', 'energy', 'usage', 'mirror']);
   const screenshot = await send('Page.captureScreenshot', { format: 'png' });
   fs.writeFileSync(path.join(evidence, retained ? 'retained.png' : 'windows-settings.png'), Buffer.from(screenshot.data, 'base64'));
   assert.deepEqual(exceptions, [], 'No uncaught renderer errors');

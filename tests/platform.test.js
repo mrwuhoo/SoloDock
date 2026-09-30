@@ -20,19 +20,9 @@ test('Mac retains notch height and physical top origin', () => {
 });
 
 test('Windows capabilities cannot enable Mac-only integrations', () => {
-  assert.deepEqual(platform.capabilities('win32').unavailableHomeModules, ['windows']);
   assert.equal(platform.capabilities('win32').automaticPaste, false);
   assert.equal(platform.capabilities('win32').autoLaunch, true);
-  assert.deepEqual(platform.capabilities('darwin').unavailableHomeModules, []);
-});
-
-test('platform filtering leaves saved preferences intact and recovers a usable home', () => {
-  const registry = ['music', 'pomodoro', 'recorder', 'windows', 'mirror', 'note', 'commands'];
-  const hidden = ['pomodoro', 'recorder', 'mirror', 'note', 'commands'];
-  const before = [...hidden];
-  assert.deepEqual(platform.effectiveHiddenModules(hidden, registry, ['music', 'windows']), ['music', 'recorder', 'windows', 'mirror', 'note', 'commands']);
-  assert.deepEqual(hidden, before);
-  assert.deepEqual(platform.effectiveHiddenModules(hidden, registry, []), hidden);
+  assert.equal(platform.capabilities('darwin').automaticPaste, true);
 });
 
 test('media references use portable separators for both Windows and Mac workspace files', () => {

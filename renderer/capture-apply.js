@@ -46,7 +46,7 @@
       habits: lifeHabits,
       habitId: entry?.habitId,
     });
-    if (!result.valid) return;
+    if (!result.valid) return null;
     const saved = save(result, at);
     const message = saved ? (saved.message || Capture.confirmation(result, { now: at, habits: lifeHabits })) : '没存上，请在面板里再试一次';
     const expanded = document.getElementById('app')?.classList.contains('expanded');
@@ -59,9 +59,13 @@
     } else {
       window.NotchNotchStatus?.flash?.(message, saved ? saved.tab : '');
     }
+    return saved;
   }
 
   window.notchAPI.onCaptureAdd((entry) => {
     apply(entry).catch(() => {});
   });
+
+  // 首页「记一笔」走同一条路：{ text, at } → 待办 / 链接 / 生活 / 随手记笔记。
+  window.NotchCaptureApply = { apply: (entry) => apply(entry || {}).catch(() => null) };
 })();

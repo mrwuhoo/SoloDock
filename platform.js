@@ -5,20 +5,9 @@
   function capabilities(platform) {
     return {
       platform,
-      unavailableHomeModules: platform === 'darwin' ? [] : ['windows'],
       automaticPaste: platform === 'darwin',
       autoLaunch: platform === 'darwin' || platform === 'win32',
     };
-  }
-
-  function effectiveHiddenModules(hidden, registry, unavailable) {
-    const available = registry.filter((id) => !unavailable.includes(id));
-    const result = registry.filter((id) => hidden.includes(id) || unavailable.includes(id));
-    // A workspace moved from Mac may have only unavailable widgets visible.
-    if (available.length && available.every((id) => result.includes(id))) {
-      return result.filter((id) => id !== available[0]);
-    }
-    return result;
   }
 
   function panelBounds(platform, display, expanded) {
@@ -31,5 +20,5 @@
   function portableMediaPath(directory, value) {
     return `${directory}/${String(value).replace(/\\/g, '/').split('/').pop()}`;
   }
-  return { capabilities, effectiveHiddenModules, panelBounds, portableMediaPath };
+  return { capabilities, panelBounds, portableMediaPath };
 });

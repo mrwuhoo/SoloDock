@@ -29,7 +29,7 @@
   };
   const ACTION_HINT = { todo: '打开', note: '打开', prompt: '复制', link: '打开', clip: '复制', credential: '复制密码', action: '执行' };
   const QUICK_ACTIONS = [
-    { type: 'action', id: 'new-note', title: '新建笔记', subtitle: '在随笔里写', icon: 'note' },
+    { type: 'action', id: 'new-note', title: '新建笔记', subtitle: '在笔记页新建一篇', icon: 'note' },
     { type: 'action', id: 'new-todo', title: '添加待办', subtitle: '到待办页输入', icon: 'todo' },
     { type: 'action', id: 'start-focus', title: '开始专注', subtitle: '按番茄钟设定的时长', icon: 'focus' },
     { type: 'action', id: 'start-recording', title: '开始录音', subtitle: '录制页', icon: 'record' },
@@ -211,15 +211,14 @@
 
   async function runAction(id) {
     if (id === 'new-note') {
-      await window.setActiveTab?.('home');
-      get('home-note')?.focus();
+      await window.setActiveTab?.('notes');
+      window.NotchNotes?.create?.();
     } else if (id === 'new-todo') {
       await window.setActiveTab?.('todo');
       document.querySelector('.add-row input[data-priority]')?.focus();
     } else if (id === 'start-focus') {
       await window.setActiveTab?.('home');
-      const state = window.NotchPomodoro?.state?.();
-      if (!state?.running) get('pomodoro-toggle')?.click();
+      if (!window.NotchPomodoro?.state?.().running) window.NotchPomodoro?.toggle?.();
     } else if (id === 'start-recording') {
       await window.setActiveTab?.('recordings');
       window.NotchWorkspace?.startRecording?.();

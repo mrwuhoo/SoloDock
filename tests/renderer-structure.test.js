@@ -8,6 +8,8 @@ const appJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'app.js'), 
 const workspaceJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'workspace.js'), 'utf8');
 const effectsJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'effects.js'), 'utf8');
 const mainJs = fs.readFileSync(path.join(__dirname, '..', 'main.js'), 'utf8');
+const preloadJs = fs.readFileSync(path.join(__dirname, '..', 'preload.js'), 'utf8');
+const homeJs = fs.readFileSync(path.join(__dirname, '..', 'renderer', 'home.js'), 'utf8');
 
 test('clipboard rows define both favorite icons before rendering entries', () => {
   assert.match(appJs, /const starOutlineSvg\s*=/);
@@ -22,11 +24,12 @@ test('notes have a dedicated top-level tab and management panel', () => {
   assert.match(html, /id="notes-detail"/);
 });
 
-test('home scratch note keeps only the save action', () => {
-  const homeNote = html.match(/<section class="tile home-note"[\s\S]*?<\/section>/)?.[0] || '';
-  assert.match(homeNote, /id="note-save-btn"/);
-  assert.doesNotMatch(homeNote, /id="note-library-btn"/);
-  assert.doesNotMatch(homeNote, /id="note-library"/);
+test('home is four fixed cards and 记一笔 reuses the capture rules', () => {
+  const modules = [...html.matchAll(/data-home-module="([^"]+)"/g)].map((match) => match[1]);
+  assert.deepEqual(modules, ['now', 'energy', 'usage', 'mirror']);
+  assert.doesNotMatch(html, /id="home-(note|today|pomodoro|recorder)"|id="window-list"|data-widget-size/);
+  assert.match(html, /id="now-capture-input"/);
+  assert.match(homeJs, /window\.NotchCaptureApply\.apply\(/);
 });
 
 test('recordings expose in-page API settings and create a live draft while recording', () => {
@@ -43,23 +46,19 @@ test('a live recording can be paused, resumed, and stopped from the recordings t
   assert.match(workspaceJs, /stopRecording/);
 });
 
-test('homepage visibility has one storage key, exact validation, and lifecycle events', () => {
+test('homepage visibility has one storage key, migrates the old one, and announces changes', () => {
+  assert.match(appJs, /const HOME_MODULE_REGISTRY = \['now', 'energy', 'usage', 'mirror'\];/);
+  assert.match(appJs, /notch-home-hidden-modules-v2/);
   assert.match(appJs, /notch-home-hidden-modules-v1/);
-  assert.match(appJs, /validateHomeWidgetLayout/);
   assert.match(appJs, /window\.NotchHome\s*=/);
   assert.match(appJs, /notch:home-modules-changed/);
-  assert.match(appJs, /notch:home-layout-error/);
-  assert.match(appJs, /new Set\(homeTiles\.map\(\(tile\) => tile\.dataset\.homeModule\)\)/);
+  assert.doesNotMatch(appJs, /resolveHomeWidgetLayout|data-widget-size-cycle/);
 });
 
 test('settings exposes exactly one switch for every homepage widget', () => {
   const switches = [...html.matchAll(/data-settings-home-module="([^"]+)"/g)]
     .map((match) => match[1]);
-  assert.deepEqual(switches, [
-    'note', 'today', 'pomodoro', 'usage', 'mirror', 'recorder', 'windows',
-  ]);
-  assert.match(workspaceJs, /isRecordingActive/);
-  assert.match(workspaceJs, /recording_active/);
+  assert.deepEqual(switches, ['now', 'energy', 'usage', 'mirror']);
   assert.match(workspaceJs, /at_least_one_required/);
 });
 
@@ -81,11 +80,11 @@ test('usage belongs to home widgets while reset news is an independent feature',
   assert.match(html, /id="tab-resets"/);
 });
 
-test('hidden widgets stop background work and no WebGL effect remains', () => {
+test('the home refreshes only while it is on screen and no WebGL effect remains', () => {
   // The Soda Music widget and its WebGL shader were removed in v0.2.
   assert.doesNotMatch(effectsJs, /getContext\(['"]webgl/);
   assert.doesNotMatch(html, /home-music|music-color-bends/);
-  assert.match(workspaceJs, /NotchHome\?\.isVisible/);
+  assert.match(homeJs, /if \(visible\(\)\) refreshAll\(\)/);
 });
 
 test('the photo frame shows a chosen picture and never opens the camera', () => {
@@ -95,12 +94,12 @@ test('the photo frame shows a chosen picture and never opens the camera', () => 
   assert.doesNotMatch(appJs, /getUserMedia\(\s*\{\s*video/);
 });
 
-test('startup never asks for system permissions; they are requested in context', () => {
+test('startup never asks for system permissions and nothing asks for screen recording', () => {
   // A launch-time dialog sent people to a Screen Recording list where SoloDock was not yet
-  // registered. Permissions are requested only from the current-windows card.
+  // registered. The current-windows card that needed it is gone, and so is the request.
   assert.doesNotMatch(mainJs, /promptForMissingPermissions/);
-  assert.match(mainJs, /ipcMain\.handle\('media:screen-recording'/);
-  assert.match(workspaceJs, /requestScreenRecording/);
+  assert.doesNotMatch(mainJs, /ipcMain\.handle\('(media:screen-recording|windows:list|windows:focus)'/);
+  assert.doesNotMatch(preloadJs, /requestScreenRecording|listWindows|focusWindow/);
 });
 
 test('tabs sit in two groups on either side of the notch, ordered by weight', () => {

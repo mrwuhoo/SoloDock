@@ -109,23 +109,23 @@ app.whenReady().then(async () => {
   await win.webContents.executeJavaScript(`(async () => { window.__claude = { ok: true, receivedAt: Date.now(), fiveHour: { usedPercent: 82, resetsAt: Date.now() + 7200000 }, sevenDay: { usedPercent: 46, resetsAt: Date.now() + 259200000 } }; await window.NotchAiUsageState.refreshClaude(); })()`);
   await shot('usage-3');
 
-  // Small cards show only the first subscription, and every control stays inside the card.
-  const sizes = await win.webContents.executeJavaScript(`(async () => {
-    ['recorder', 'windows'].forEach((id) => window.NotchHome.setModuleVisible(id, true));
-    await new Promise((resolve) => setTimeout(resolve, 60));
+  // Three rows fit next to the photo frame; with the frame hidden the card takes the whole column.
+  const column = await win.webContents.executeJavaScript(`(async () => {
     const tile = document.getElementById('home-usage');
-    const out = [];
-    for (let i = 0; i < 4; i += 1) {
-      tile.querySelector('[data-widget-size-cycle]').click();
-      await new Promise((resolve) => setTimeout(resolve, 80));
-      out.push({ variant: tile.dataset.layoutVariant, ...${measure} });
-    }
-    return out;
+    const frame = document.getElementById('home-mirror');
+    const before = { usage: tile.getBoundingClientRect().height, frame: frame.getBoundingClientRect().height, ...${measure} };
+    window.NotchHome.setModuleVisible('mirror', false);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    const side = document.getElementById('home-side').getBoundingClientRect().height;
+    const after = { usage: tile.getBoundingClientRect().height, side, ...${measure} };
+    window.NotchHome.setModuleVisible('mirror', true);
+    return { before, after };
   })()`);
-  sizes.forEach((entry) => {
-    assert.deepEqual(entry.outside, [], JSON.stringify(entry));
-    if (['mini', 'compact'].includes(entry.variant)) assert.equal(entry.providers.length, 1, entry.variant);
-  });
+  assert.equal(column.before.providers.length, 3);
+  assert.deepEqual(column.before.outside, []);
+  assert.ok(column.before.frame >= 100, `the frame keeps a usable height: ${column.before.frame}`);
+  assert.ok(Math.abs(column.after.usage - column.after.side) <= 1, JSON.stringify(column.after));
+  assert.deepEqual(column.after.outside, []);
   assert.deepEqual(errors, []);
   console.log('AI usage checks passed');
   clearTimeout(deadline);

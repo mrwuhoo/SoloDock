@@ -90,6 +90,7 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 | AI 用量详情浮层 | 305040d | 见 6.6 |
 | Claude 一键接入 | 0ab68b5 | 见 6.7 |
 | 移出 DMG、修正路径 | 7672e70 | 见 6.8 |
+| 首页改版 + 番茄钟新界面 | 见 `git log` | 见 6.9 |
 | 更早：时间页、生活页、通知中心、刘海下沿状态、统一提醒卡片、密钥锁、相框、今天时间线等 | f9cc782 及之前 | 详见 `AGENTS.md` 和 `CHANGELOG.md` 的「未发布」 |
 
 ## 6. 本轮新增细节（`AGENTS.md` 还没写）
@@ -145,6 +146,14 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 
 - 打包版不在「应用程序」文件夹里运行时（从 DMG 或被系统临时转移的位置），启动时询问是否移过去（用 `app.moveToApplicationsFolder`，替换旧版本）；这种情况下 `claude:connect` 返回 `not_installed`。
 - 每次启动用 `repairClaudeSettings` 把已登记的 SoloDock 命令改成当前路径，只改不增。起因：用户曾直接从 DMG 运行，登记进去的是 `/Volumes/…` 路径。
+
+### 6.9 首页改版（2026-09-30，原型经用户确认）
+
+- 布局固定为四张卡片：「现在」（1.55 份宽）· 「精力」· 右侧一列（AI 用量在上、相框在下）。拖动换位和四档尺寸已删除；设置里只能隐藏卡片（至少留一张），隐藏的不占位。显隐存 `notch-home-hidden-modules-v2`；第一次启动从 v1 只沿用「隐藏了 AI 用量 / 相框」。随笔、今天、番茄钟三张卡合并进「现在」，快速录音与当前窗口从首页移除（录音的暂停 / 结束本来就在录音页详情里；`windows:list` / `windows:focus` / `media:screen-recording` 一并删除）。
+- 「现在」（`renderer/home.js`，对外 `window.NotchHomeNow`）：这件事 = 「在做」的待办，否则今天最急的一件；「换一件事」从待办里挑，选中即设为「在做」。接下来 = 今天剩下的日程与截止（最多两条）。「记一笔」走随手记同一条路（`window.NotchCaptureApply.apply`）。
+- 番茄钟计时（`renderer/focus-timer.js`，对外 `window.NotchPomodoro`）：按结束时刻计时；15 / 25 / 45 / 60 分钟存 `notch-focus-minutes-v1`（旧的 `[分, 秒]` 只沿用正好是四档之一的）；暂停、+5 分钟（总长不超过 2 小时）、提前结束（专注满 1 分钟记下时长，专注记录多一个 `complete: false`，不算番茄）。专注中收起的 AI 通知数由主进程 `focus:held` 推送。
+- 「精力」：主进程 `energy:status` 给距离上次休息（`bodyTracker.state().activeSince`）、久坐提醒分钟数、收工时间与 `worklogEnabled`；「休息 5 分钟」调 `body:break` 再开始 5 分钟休息。纯函数在 `renderer/home-domain.js`。**用户要求：只陈述事实，不和平时比较、不显示平均、不打分**；暖色只用来提醒该歇了或某天超过 10 小时。
+- 矮屏（内容区不足 540）靠 `@container` 收起说明文字与第二条「接下来」。
 
 ## 7. Claude 订阅额度（2026-09-29 已实现）
 
@@ -220,8 +229,9 @@ Resets Oct 6 at 4pm (America/Los_Angeles)
 
 ## 10. 等用户决定的事
 
+0. **新 logo（2026-09-29 记下，暂缓）**：用户认为现在的 logo（AI 生成的「方块 + U 形托」，边缘有黑色杂点）不好看。已出三个矢量方向：A 刘海下拉 / B 光点与底座 / C S 字玻璃。推荐 B，用户还没选，要求先集中优化功能。选定后精修，生成 `build/solodock-icon.png` / `.icns` / `solodock.iconset` 与 `docs/brand/solodock-logo.png`，并更新 `docs/brand/README.md`。
 1. **付费或支持者项目的内容**（规范里的「支持者提醒主题」：水波、极光、光带、晨露）：用户说体验一段时间后再定。解锁方式、素材包怎么分发（规范要求素材包不放进 MIT 代码）都没定。
-2. **是否出 `0.2.0-beta.3` 体验包**，把 6.8 的修复带上。用户当前用的是 beta.2，并且是从 DMG 里直接运行的。
+2. **是否出 `0.2.0-beta.4` 体验包**，带上 6.9 的首页改版。beta.3（含 6.8 与 Claude 额度自动读取）已打好：`dist.noindex/SoloDock-0.2.0-beta.3-arm64.dmg`。
 3. **正式发布 v0.2**：推送分支和标签、改版本号、更新 README 和官网下载链接、Windows 检查。都要用户确认，并遵守 `AGENTS.md` 的「GitHub 推送与发布联动」。
 4. 第 7 节里 `hasCompletedOnboarding` 由谁补。
 

@@ -253,136 +253,140 @@
                 </div>
               </div>
             </div>
-            <div class="home-bento" id="home-bento" aria-label="可长按拖动调整的首页布局">
-
-              <section class="tile home-pomodoro" id="home-pomodoro" data-home-module="pomodoro" data-widget-size="mini" aria-label="番茄钟">
-                <button class="pomodoro-toggle" id="pomodoro-toggle" type="button" aria-label="开始番茄钟">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 7 8 5-8 5z" /></svg>
-                </button>
-                <div class="pomodoro-readout">
-                  <div class="pomodoro-status" aria-label="预计结束时间">
-                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9ZM9.7 19a2.5 2.5 0 0 0 4.6 0H9.7Z" /></svg>
-                    <time id="pomodoro-end-time">--:--</time>
+            <!-- 首页：现在（这件事 + 专注）· 精力 · AI 用量 · 相框。布局固定，只能在设置里隐藏卡片。 -->
+            <div class="home-bento" id="home-bento" aria-label="首页">
+              <section class="tile home-now" id="home-now" data-home-module="now" data-state="idle" aria-labelledby="now-label">
+                <header class="now-head">
+                  <span class="now-label" id="now-label">现在</span>
+                  <span class="now-meta" id="now-meta"></span>
+                </header>
+                <!-- 空闲：当前这件事、开始专注、接下来 -->
+                <div class="now-idle" id="now-idle">
+                  <div class="now-task" id="now-task">
+                    <span class="now-chip" id="now-task-chip" hidden></span>
+                    <h2 class="now-title" id="now-task-title"></h2>
+                    <p class="now-due" id="now-task-due"></p>
                   </div>
-                  <div class="pomodoro-dial" id="pomodoro-dial" aria-label="设置番茄钟时长">
-                    <input id="pomodoro-minutes" value="05" inputmode="numeric" maxlength="2" aria-label="分钟" />
-                    <span>:</span>
-                    <input id="pomodoro-seconds" value="00" inputmode="numeric" maxlength="2" aria-label="秒" />
-                  </div>
-                  <span class="pomodoro-caption">Timer</span>
-                </div>
-                <button class="pomodoro-reset" id="pomodoro-reset" type="button" aria-label="重置番茄钟" hidden>
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M7 7l10 10M17 7 7 17" /></svg>
-                </button>
-              </section>
-
-              <!-- 快速录音与实时转写 -->
-              <section class="tile home-recorder" id="home-recorder" data-home-module="recorder" data-widget-size="medium">
-                <div class="recorder-head">
-                  <span class="recording-state-dot" id="home-recording-dot"></span>
-                  <span class="tile-label" id="home-recording-state">快速录音</span>
-                  <time id="home-recording-time">00:00</time>
-                </div>
-                <p class="home-transcript" id="home-live-transcript" aria-live="polite" hidden></p>
-                <div class="recorder-controls">
-                  <button class="record-control record-start" id="record-start" type="button" aria-label="开始录音">
-                    <span></span>
-                  </button>
-                  <button class="record-control" id="record-pause" type="button" aria-label="暂停录音" disabled>
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 7v10M15 7v10" /></svg>
-                  </button>
-                  <button class="record-control" id="record-stop" type="button" aria-label="结束录音" disabled>
-                    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="1.5" /></svg>
-                  </button>
-                </div>
-              </section>
-
-              <!-- 当前打开的窗口 -->
-              <section class="tile home-windows" data-home-module="windows" data-widget-size="large">
-                <div class="tile-head">
-                  <span class="tile-label">当前窗口</span>
-                  <button class="windows-hidden" id="windows-hidden" type="button" hidden title="恢复已隐藏窗口"></button>
-                  <button class="squircle windows-refresh" id="windows-refresh" type="button" aria-label="刷新当前窗口">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                      <path d="M20 11a8 8 0 1 0-2.35 5.65" /><path d="M20 5v6h-6" />
-                    </svg>
-                  </button>
-                </div>
-                <div class="window-list" id="window-list">
-                  <div class="window-empty">展开后读取当前窗口…</div>
-                </div>
-              </section>
-
-              <!-- 相框：用户自选的照片（原镜子封面，已移除摄像头） -->
-              <!-- 相框：单张或相册；展开面板时按设置换一张，平时静止。两层图片用于 1.2 秒淡入。 -->
-              <section class="tile home-mirror" id="home-mirror" data-home-module="mirror" data-widget-size="medium" data-state="empty" aria-label="相框">
-                <div class="mirror-stage" id="mirror-stage">
-                  <img class="mirror-photo frame-layer is-front" src="assets/solodock-mirror.png" alt="" draggable="false" />
-                  <img class="mirror-photo frame-layer" alt="" draggable="false" />
-                  <div class="frame-caption" id="frame-caption" hidden><b id="frame-caption-text"></b><span id="frame-countdown"></span></div>
-                  <div class="frame-dots" id="frame-dots" aria-hidden="true"></div>
-                  <div class="frame-empty" id="frame-empty"><b>放一张让你开心的照片</b><span>家人合照、想去的地方</span><button class="frame-empty-add" id="frame-empty-add" type="button">选择照片</button></div>
-                  <button class="frame-nav prev" id="frame-prev" type="button" aria-label="上一张照片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6" /></svg></button>
-                  <button class="frame-nav next" id="frame-next" type="button" aria-label="下一张照片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6" /></svg></button>
-                  <button class="frame-more" id="frame-more" type="button" aria-label="相框选项" aria-haspopup="menu" aria-expanded="false" aria-controls="frame-menu"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="18" cy="12" r="1.6" /></svg></button>
-                  <div class="frame-menu" id="frame-menu" role="menu" aria-label="相框选项" hidden>
-                    <button type="button" role="menuitem" data-frame-action="pin">固定这张</button>
-                    <button type="button" role="menuitem" data-frame-action="add">添加照片…</button>
-                    <button type="button" role="menuitem" data-frame-action="settings">相框设置</button>
-                  </div>
-                </div>
-              </section>
-
-              <!-- 速记 -->
-              <section class="tile home-note" data-home-module="note" data-widget-size="large">
-                <div class="note-toolbar" role="toolbar" aria-label="随笔记操作">
-                  <span class="tile-label">随笔记</span>
-                  <div class="note-persist-actions" role="group" aria-label="速记保存操作">
-                    <button class="note-mode note-save-btn" id="note-save-btn" type="button" aria-label="保存笔记" title="保存笔记">
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4h12l2 2v14H5z"/><path d="M8 4v6h8V4M8 20v-6h8v6"/></svg>
-                    </button>
-                  </div>
-                </div>
-                <div class="note-body">
-                  <textarea
-                    id="home-note"
-                    class="note-input"
-                    placeholder="用 Markdown 随手记点什么…"
-                    aria-label="Markdown 速记内容"
-                    spellcheck="false"
-                  ></textarea>
-                </div>
-              </section>
-
-              <!-- 今天：今天到期和已逾期的待办 -->
-              <section class="tile home-today" id="home-today" data-home-module="today" data-widget-size="medium" aria-labelledby="home-today-title">
-                <div class="tile-head today-head">
-                  <span class="tile-label" id="home-today-title">今天</span>
-                  <span class="today-summary" id="home-today-summary"></span>
-                  <button class="today-all" id="home-today-all" type="button">全部 ›</button>
-                </div>
-                <ul class="today-list" id="home-today-list" aria-live="polite"></ul>
-              </section>
-
-              <section class="tile home-usage" id="home-usage" data-state="empty" data-count="1" data-home-module="usage" data-widget-size="medium" aria-label="AI 用量">
-                <div class="usage-widget-heading"><h2>AI 用量</h2><span class="usage-meta" id="usage-meta"></span><button class="icon-button usage-configure" type="button" aria-label="AI 用量设置" title="AI 用量设置"></button></div>
-                <!-- 每个订阅一栏：Codex 这一栏的元素由 codex-usage.js 更新；Claude 与手动订阅由 ai-usage.js 渲染。 -->
-                <div class="usage-columns" id="usage-columns">
-                  <div class="usage-col usage-col-codex" data-provider="codex" data-subscription="codex">
-                    <div class="usage-col-head"><span class="usage-mark" data-kind="codex">Cx</span><b>Codex</b><span class="usage-plan" data-plan-for="codex" hidden></span></div>
-                    <div class="usage-widget-body">
-                      <div class="usage-widget-value"><strong id="usage-remaining">—</strong><span id="usage-period">剩余额度</span></div>
-                      <progress id="usage-meter" max="100" value="0" aria-label="Codex 剩余额度" hidden></progress>
-                      <p id="usage-reset">连接后查看重置时间</p>
-                      <div id="usage-empty"><button class="workspace-button compact" id="usage-connect" type="button">连接 Codex</button></div>
-                      <p id="usage-secondary" hidden></p>
+                  <div class="now-focus">
+                    <div class="now-ring" id="now-ring" style="--ring-progress: 1">
+                      <svg class="now-ring-svg" viewBox="0 0 132 132" aria-hidden="true"><defs><linearGradient id="now-ring-gradient" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6AA8F5" /><stop offset="1" stop-color="#2C69C4" /></linearGradient></defs><circle class="now-ring-track" cx="66" cy="66" r="61" stroke-width="10" /><circle class="now-ring-fill" pathLength="100" stroke-dasharray="100 100" cx="66" cy="66" r="61" stroke-width="10" stroke="url(#now-ring-gradient)" /></svg>
+                      <strong id="now-duration-readout">25:00</strong><span>专注</span>
                     </div>
-                    <div class="usage-widget-footer"><span id="usage-credits">重置卡 —</span><span class="usage-renewal" data-renewal-for="codex" hidden></span><button id="usage-news" class="usage-text-button" type="button">重置资讯 <span aria-hidden="true">›</span></button></div>
+                    <div class="now-focus-side">
+                      <div class="now-seg" id="now-duration" role="radiogroup" aria-label="专注时长">
+                        <button type="button" role="radio" data-minutes="15" aria-checked="false">15</button>
+                        <button type="button" role="radio" data-minutes="25" aria-checked="true">25</button>
+                        <button type="button" role="radio" data-minutes="45" aria-checked="false">45</button>
+                        <button type="button" role="radio" data-minutes="60" aria-checked="false">60 分钟</button>
+                      </div>
+                      <div class="now-actions">
+                        <button class="now-button primary" id="now-start" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>开始专注</button>
+                        <button class="now-button ghost" id="now-switch" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="now-picker">换一件事</button>
+                      </div>
+                      <p class="now-hint">专注时，AI 完成的通知会先收起，结束后一起告诉你</p>
+                    </div>
                   </div>
+                  <div class="now-next">
+                    <span class="now-sub">接下来</span>
+                    <ul class="now-next-list" id="now-next-list"></ul>
+                  </div>
+                </div>
+                <!-- 专注中 / 休息中 / 已暂停 -->
+                <div class="now-running" id="now-running" hidden>
+                  <div class="now-ring big" id="now-ring-big" style="--ring-progress: 1">
+                    <svg class="now-ring-svg" viewBox="0 0 190 190" aria-hidden="true"><defs><linearGradient id="now-ring-gradient-big" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6AA8F5" /><stop offset="1" stop-color="#2C69C4" /></linearGradient></defs><circle class="now-ring-track" cx="95" cy="95" r="89" stroke-width="12" /><circle class="now-ring-fill" pathLength="100" stroke-dasharray="100 100" cx="95" cy="95" r="89" stroke-width="12" stroke="url(#now-ring-gradient-big)" /></svg>
+                    <strong id="now-remaining">25:00</strong><span id="now-remaining-label">剩余</span>
+                  </div>
+                  <div class="now-running-side">
+                    <span class="now-chip" id="now-running-chip" hidden></span>
+                    <h2 class="now-title" id="now-running-title"></h2>
+                    <p class="now-due" id="now-running-due"></p>
+                    <div class="now-tomatoes" id="now-tomatoes"></div>
+                    <div class="now-actions">
+                      <button class="now-button secondary" id="now-pause" type="button">暂停</button>
+                      <button class="now-button ghost" id="now-extend" type="button">+5 分钟</button>
+                      <button class="now-button ghost danger" id="now-finish" type="button">结束</button>
+                    </div>
+                  </div>
+                </div>
+                <p class="now-held" id="now-held" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 16.5V11a5 5 0 0 1 10 0v5.5l1.5 1.5h-13Z" /><path d="M10.2 20.2a2 2 0 0 0 3.6 0" /></svg><span id="now-held-text"></span></p>
+                <!-- 记一笔：和随手记同一套规则，带时间的变成待办，网址变成链接，其余进笔记 -->
+                <form class="now-capture" id="now-capture" autocomplete="off">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19h3.8L19.2 8.6a2.1 2.1 0 0 0-3-3L5.8 16v3Z" /></svg>
+                  <input id="now-capture-input" maxlength="500" placeholder="记一笔，带时间的会变成待办" aria-label="记一笔" spellcheck="false" />
+                  <kbd id="now-capture-key" title="在任何应用里都能用这个快捷键随手记">⌥⇧N</kbd>
+                </form>
+                <div class="now-picker" id="now-picker" role="menu" aria-label="换一件事" hidden></div>
+              </section>
+
+              <!-- 精力：今天在电脑前多久、距离上次休息、今天专注、收工；只陈述事实，不和平时比 -->
+              <section class="tile home-energy" id="home-energy" data-home-module="energy" aria-labelledby="energy-label">
+                <header class="now-head">
+                  <span class="now-label" id="energy-label">精力</span>
+                  <span class="energy-state" id="energy-state" data-tone="ok">状态不错</span>
+                </header>
+                <div class="energy-body" id="energy-body">
+                  <div class="energy-big"><strong id="energy-total">0<small>分钟</small></strong><span>今天在电脑前</span></div>
+                  <div class="energy-day">
+                    <div class="energy-track" id="energy-track" role="img" aria-label="今天用电脑与专注的时间段"></div>
+                    <div class="energy-ticks" id="energy-ticks"></div>
+                  </div>
+                  <ul class="energy-stats">
+                    <li class="energy-break" id="energy-break"><span>距离上次休息</span><b id="energy-break-value">刚休息过</b><button class="energy-rest" id="energy-rest" type="button">休息 5 分钟</button><i class="energy-meter" aria-hidden="true"><i id="energy-break-meter"></i></i></li>
+                    <li><span>今天专注</span><b id="energy-focus">0 分钟</b></li>
+                    <li id="energy-offwork"><span>收工</span><b id="energy-offwork-value"></b></li>
+                  </ul>
+                  <div class="energy-week">
+                    <div class="energy-week-head"><span>最近 7 天</span><span class="energy-week-note" id="energy-week-note" hidden>橙色：超过 10 小时</span></div>
+                    <div class="energy-bars" id="energy-bars" role="img" aria-label="最近 7 天每天在电脑前的时间"></div>
+                    <div class="energy-days" id="energy-days"></div>
+                  </div>
+                </div>
+                <div class="energy-off" id="energy-off" hidden>
+                  <b>工作时间统计已关闭</b>
+                  <span>打开后只记「在用电脑 / 专注」的时间段，不记应用和内容。</span>
+                  <button class="now-button secondary" id="energy-open-settings" type="button">去设置打开</button>
                 </div>
               </section>
 
+              <div class="home-side" id="home-side">
+                <section class="tile home-usage" id="home-usage" data-state="empty" data-count="1" data-home-module="usage" aria-label="AI 用量">
+                  <div class="usage-widget-heading"><h2>AI 用量</h2><span class="usage-meta" id="usage-meta"></span><button class="icon-button usage-configure" type="button" aria-label="AI 用量设置" title="AI 用量设置"></button></div>
+                  <!-- 每个订阅一栏：Codex 这一栏的元素由 codex-usage.js 更新；Claude 与手动订阅由 ai-usage.js 渲染。 -->
+                  <div class="usage-columns" id="usage-columns">
+                    <div class="usage-col usage-col-codex" data-provider="codex" data-subscription="codex">
+                      <div class="usage-col-head"><span class="usage-mark" data-kind="codex">Cx</span><b>Codex</b><span class="usage-plan" data-plan-for="codex" hidden></span></div>
+                      <div class="usage-widget-body">
+                        <div class="usage-widget-value"><strong id="usage-remaining">—</strong><span id="usage-period">剩余额度</span></div>
+                        <progress id="usage-meter" max="100" value="0" aria-label="Codex 剩余额度" hidden></progress>
+                        <p id="usage-reset">连接后查看重置时间</p>
+                        <div id="usage-empty"><button class="workspace-button compact" id="usage-connect" type="button">连接 Codex</button></div>
+                        <p id="usage-secondary" hidden></p>
+                      </div>
+                      <div class="usage-widget-footer"><span id="usage-credits">重置卡 —</span><span class="usage-renewal" data-renewal-for="codex" hidden></span><button id="usage-news" class="usage-text-button" type="button">重置资讯 <span aria-hidden="true">›</span></button></div>
+                    </div>
+                  </div>
+                </section>
 
+                <!-- 相框：单张或相册；展开面板时按设置换一张，平时静止。两层图片用于 1.2 秒淡入。 -->
+                <section class="tile home-mirror" id="home-mirror" data-home-module="mirror" data-state="empty" aria-label="相框">
+                  <div class="mirror-stage" id="mirror-stage">
+                    <img class="mirror-photo frame-layer is-front" src="assets/solodock-mirror.png" alt="" draggable="false" />
+                    <img class="mirror-photo frame-layer" alt="" draggable="false" />
+                    <div class="frame-caption" id="frame-caption" hidden><b id="frame-caption-text"></b><span id="frame-countdown"></span></div>
+                    <div class="frame-dots" id="frame-dots" aria-hidden="true"></div>
+                    <div class="frame-empty" id="frame-empty"><b>放一张让你开心的照片</b><span>家人合照、想去的地方</span><button class="frame-empty-add" id="frame-empty-add" type="button">选择照片</button></div>
+                    <button class="frame-nav prev" id="frame-prev" type="button" aria-label="上一张照片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14.5 6-6 6 6 6" /></svg></button>
+                    <button class="frame-nav next" id="frame-next" type="button" aria-label="下一张照片"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6 6 6-6 6" /></svg></button>
+                    <button class="frame-more" id="frame-more" type="button" aria-label="相框选项" aria-haspopup="menu" aria-expanded="false" aria-controls="frame-menu"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="18" cy="12" r="1.6" /></svg></button>
+                    <div class="frame-menu" id="frame-menu" role="menu" aria-label="相框选项" hidden>
+                      <button type="button" role="menuitem" data-frame-action="pin">固定这张</button>
+                      <button type="button" role="menuitem" data-frame-action="add">添加照片…</button>
+                      <button type="button" role="menuitem" data-frame-action="settings">相框设置</button>
+                    </div>
+                  </div>
+                </section>
+              </div>
             </div>
           </section>
 
@@ -787,13 +791,10 @@
                   </div>
                   <label class="settings-strip-toggle"><span><b>今天时间线</b><small>首页顶部的日程、截止、专注与 AI 完成</small></span><input type="checkbox" id="settings-today-strip" aria-label="显示今天时间线" /><i aria-hidden="true"></i></label>
                   <div class="settings-home-module-grid" id="settings-home-module-list">
-                    <label><span><b>随笔记</b><small>首页快速记录</small></span><input type="checkbox" data-settings-home-module="note" aria-label="显示随笔记" /><i aria-hidden="true"></i></label>
-                    <label><span><b>今天</b><small>今天到期的待办</small></span><input type="checkbox" data-settings-home-module="today" aria-label="显示今天的待办" /><i aria-hidden="true"></i></label>
-                    <label><span><b>番茄钟</b><small>专注计时</small></span><input type="checkbox" data-settings-home-module="pomodoro" aria-label="显示番茄钟" /><i aria-hidden="true"></i></label>
-                    <label><span><b>订阅用量</b><small>AI 订阅额度与续费</small></span><input type="checkbox" data-settings-home-module="usage" aria-label="显示订阅用量" /><i aria-hidden="true"></i></label>
+                    <label><span><b>现在</b><small>这件事、番茄钟与接下来</small></span><input type="checkbox" data-settings-home-module="now" aria-label="显示现在" /><i aria-hidden="true"></i></label>
+                    <label><span><b>精力</b><small>今天在电脑前的时间与休息</small></span><input type="checkbox" data-settings-home-module="energy" aria-label="显示精力" /><i aria-hidden="true"></i></label>
+                    <label><span><b>AI 用量</b><small>AI 订阅额度与续费</small></span><input type="checkbox" data-settings-home-module="usage" aria-label="显示 AI 用量" /><i aria-hidden="true"></i></label>
                     <label><span><b>相框</b><small>你喜欢的照片</small></span><input type="checkbox" data-settings-home-module="mirror" aria-label="显示相框" /><i aria-hidden="true"></i></label>
-                    <label><span><b>快速录音</b><small data-home-module-setting-note="recorder">默认隐藏 · 录音与转写</small></span><input type="checkbox" data-settings-home-module="recorder" aria-label="显示快速录音" /><i aria-hidden="true"></i></label>
-                    <label><span><b>当前窗口</b><small>默认隐藏 · 使用时才申请权限</small></span><input type="checkbox" data-settings-home-module="windows" aria-label="显示当前窗口" /><i aria-hidden="true"></i></label>
                   </div>
                 </section>
                 <section data-settings-group="home" class="tile settings-card settings-frame-card" id="settings-frame-card">
@@ -1019,7 +1020,9 @@
     <script src="capture-domain.js"></script>
     <script src="todo-domain.js"></script>
     <script src="onboarding.js"></script>
+    <script src="home-domain.js"></script>
     <script src="app.js"></script>
+    <script src="focus-timer.js"></script>
     <script src="todo-page.js"></script>
     <script src="notes-domain.js"></script>
     <script src="notes-page.js"></script>
@@ -1049,6 +1052,7 @@
     <script src="search-domain.js"></script>
     <script src="command-palette.js"></script>
     <script src="capture-apply.js"></script>
+    <script src="home.js"></script>
     <script src="icon-motion.js"></script>
   </body>
 </html>

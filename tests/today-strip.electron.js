@@ -93,11 +93,18 @@ app.whenReady().then(async () => {
       const r = tile.getBoundingClientRect();
       return r.top < bento.top - 1 || r.bottom > bento.bottom + 1;
     }).map((tile) => tile.id);
-    // The shorter bento must not squeeze the usage card's rows on top of each other.
-    const rows = [...document.querySelectorAll('.usage-col-codex .usage-col-head, .usage-col-codex .usage-widget-body > *, .usage-col-codex .usage-widget-footer')]
-      .filter((node) => node.getClientRects().length && getComputedStyle(node).display !== 'none')
-      .map((node) => ({ id: node.id || node.className, rect: node.getBoundingClientRect() }));
-    out.usageOverlaps = rows.slice(1).filter((row, index) => row.rect.top < rows[index].rect.bottom - 0.5).map((row) => row.id);
+    // The shorter bento must not squeeze the usage row's three lines (name, bar, note) on top of each other.
+    const col = document.querySelector('.usage-col-codex');
+    const box2 = (selector) => {
+      const node = col.querySelector(selector);
+      return node && node.getClientRects().length && getComputedStyle(node).display !== 'none' ? node.getBoundingClientRect() : null;
+    };
+    const lines = [['.usage-mark', '#usage-empty', '.usage-widget-value strong'], ['#usage-meter'], ['#usage-reset', '.usage-widget-footer']]
+      .map((selectors) => selectors.map(box2).filter(Boolean))
+      .filter((group) => group.length);
+    out.usageOverlaps = lines.slice(1)
+      .filter((group, index) => Math.min(...group.map((rect) => rect.top)) < Math.max(...lines[index].map((rect) => rect.bottom)) - 0.5)
+      .map((group, index) => 'line ' + (index + 2));
     return out;
   })()`);
 

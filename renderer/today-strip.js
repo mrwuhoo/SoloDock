@@ -42,6 +42,7 @@
     writeJson(EVENTS_KEY, events);
     scheduleReminders();
     render();
+    document.dispatchEvent(new CustomEvent('notch:events-changed'));
   }
 
   function saveLater() {

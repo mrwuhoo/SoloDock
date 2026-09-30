@@ -3,7 +3,6 @@
   if (!Domain) return;
 
   const RECORDINGS_KEY = 'notch-recordings';
-  const HIDDEN_WINDOWS_KEY = 'notch-hidden-windows';
 
   const COPY_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/></svg>';
   const DELETE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V5h6v2M7 7l1 12h8l1-12"/></svg>';
@@ -65,15 +64,7 @@
   }
 
   // ============ 录音与转写 ============
-  const homeRecorder = document.getElementById('home-recorder');
-  const recordingDot = document.getElementById('home-recording-dot');
-  const recordingStateLabel = document.getElementById('home-recording-state');
-  const recordingTime = document.getElementById('home-recording-time');
   const recordingStrands = document.getElementById('recording-strands');
-  const liveTranscript = document.getElementById('home-live-transcript');
-  const recordStart = document.getElementById('record-start');
-  const recordPause = document.getElementById('record-pause');
-  const recordStop = document.getElementById('record-stop');
   const recordingNew = document.getElementById('recording-new');
   const recordingConfigure = document.getElementById('recording-configure');
   const recordingList = document.getElementById('recording-list');
@@ -255,7 +246,6 @@
     context.fillStyle = core;
     context.fillRect(cssWidth * 0.08, centerY - 1.3 - activeLevel, cssWidth * 0.84, 2.6 + activeLevel * 2);
     context.restore();
-    homeRecorder?.style.setProperty('--recording-level', strandsLevel.toFixed(3));
     recordingDetail?.style.setProperty('--recording-level', Math.min(1, strandsLevel * 6).toFixed(3));
     strandsFrame = requestAnimationFrame(drawRecordingStrands);
   }
@@ -349,25 +339,14 @@
   function renderHomeModuleSettings() {
     const state = window.NotchHome?.getVisibility?.();
     const hidden = new Set(state?.hiddenIds || []);
-    const recordingActive = window.NotchWorkspace?.isRecordingActive?.() ?? isRecordingActive();
     document.querySelectorAll('input[data-settings-home-module]').forEach((input) => {
-      const moduleId = input.dataset.settingsHomeModule;
-      const unavailable = state?.unavailableIds?.includes(moduleId) === true;
-      input.closest('label').hidden = unavailable;
-      input.checked = !hidden.has(moduleId);
-      input.disabled = unavailable || state?.readOnly === true
-        || (moduleId === 'recorder' && recordingActive && input.checked);
+      input.checked = !hidden.has(input.dataset.settingsHomeModule);
+      input.disabled = false;
     });
-    const recorderNote = settingsHomeModuleList?.querySelector('[data-home-module-setting-note="recorder"]');
-    if (recorderNote) recorderNote.textContent = recordingActive ? '录音进行中' : '录音与转写';
     const status = document.getElementById('settings-home-module-status');
     if (status) {
-      status.textContent = state?.readOnly
-        ? '安全模式 · 暂不可修改'
-        : state?.persisted === false
-          ? '仅当前会话 · 未能保存'
-          : '隐藏后自动填充 · 至少保留一个';
-      status.dataset.state = state?.readOnly || state?.persisted === false ? 'warning' : 'saved';
+      status.textContent = state?.persisted === false ? '仅当前会话 · 未能保存' : '隐藏后自动填充 · 至少保留一个';
+      status.dataset.state = state?.persisted === false ? 'warning' : 'saved';
     }
   }
 
@@ -706,28 +685,6 @@
   function updateRecordingUi() {
     const recordingActive = isRecordingActive();
     const recordingBusy = isRecordingBusy();
-    const visualState = recordingStartTask.isPending() ? 'requesting' : recordingStatus;
-    if (homeRecorder) homeRecorder.dataset.state = visualState;
-    if (recordingDot) recordingDot.dataset.state = visualState;
-    if (recordingStateLabel) {
-      recordingStateLabel.textContent = recordingStartTask.isPending()
-        ? '等待录音权限'
-        : recordingStatus === 'recording'
-        ? '正在录音'
-        : recordingStatus === 'paused'
-          ? '已暂停'
-          : recordingStatus === 'saving'
-            ? '正在保存'
-            : '快速录音';
-    }
-    if (recordingTime) recordingTime.textContent = formatClock(recordingActive ? currentDuration() : 0);
-    if (recordStart) recordStart.disabled = recordingBusy;
-    if (recordPause) {
-      recordPause.disabled = !['recording', 'paused'].includes(recordingStatus);
-      recordPause.setAttribute('aria-label', recordingStatus === 'paused' ? '继续录音' : '暂停录音');
-      recordPause.classList.toggle('resume', recordingStatus === 'paused');
-    }
-    if (recordStop) recordStop.disabled = !['recording', 'paused'].includes(recordingStatus);
     if (recordingNew) {
       recordingNew.disabled = recordingBusy;
       const label = recordingNew.querySelector('span');
@@ -738,20 +695,7 @@
         ? '正在请求麦克风权限'
         : recordingActive ? '录音进行中' : '开始录音');
     }
-    if (liveTranscript && recordingBusy) {
-      const text = currentRecordingText();
-      // asrNeedsReentry = 密文还在但当前应用解不开它。safeStorage 的密钥存在钥匙串里、
-      // ACL 绑代码签名，所以开发版存的 Key 装成 DMG 后就读不出来（ad-hoc 签名每次打包
-      // 都会换 cdhash，也是同样的结果）。这种情况下录音正常、只有转写不工作，
-      // 原来只在设置面板里提示一行，录音的人看不到，表现就是「能录但不转写」。
-      const fallback = currentRecordingFeedback();
-      const needsAttention = recordingCaptureIssue || transcriptionAudioGap
-        || ['error', 'reconnecting', 'connecting', 'browser-error'].includes(transcriptionStatus);
-      liveTranscript.textContent = needsAttention && text ? `${fallback}\n${text}` : text || fallback;
-      liveTranscript.hidden = !(text || fallback);
-    }
     syncRecordingDraftUi();
-    renderHomeModuleSettings();
     document.dispatchEvent(new CustomEvent('notch:recording-state-changed', {
       detail: { active: recordingBusy },
     }));
@@ -833,10 +777,7 @@
       recordingStatus = 'idle';
       recordingCaptureIssue = '';
       discardRecordingDraft();
-      if (liveTranscript) {
-        liveTranscript.textContent = '录音为空 · 请检查麦克风输入';
-        liveTranscript.hidden = false;
-      }
+      showRecorderNotice('录音为空 · 请检查麦克风输入');
       updateRecordingUi();
       return;
     }
@@ -876,18 +817,12 @@
           renderRecordings();
         }).catch(() => {});
       }
-      if (liveTranscript) {
-        liveTranscript.textContent = recording.transcript || (transcriptionConfig.configured
-          ? '录音已保存 · 暂无转写'
-          : '录音已保存 · 请配置转写 API');
-        liveTranscript.hidden = false;
+      if (!recording.transcript) {
+        showRecorderNotice(transcriptionConfig.configured ? '录音已保存 · 暂无转写' : '录音已保存 · 请配置转写 API');
       }
     } else {
       discardRecordingDraft();
-      if (liveTranscript) {
-        liveTranscript.textContent = '录音保存失败，请检查本机存储权限';
-        liveTranscript.hidden = false;
-      }
+      showRecorderNotice('录音保存失败，请检查本机存储权限');
     }
     recordingStatus = 'idle';
     recordingStartedAt = 0;
@@ -900,14 +835,17 @@
     updateRecordingUi();
   }
 
+  // 录音没能开始或保存时说一声；录音中的状态、转写与暂停 / 结束都在录音页的详情里。
+  function showRecorderNotice(text) {
+    if (typeof showStatusToast === 'function') showStatusToast(text);
+  }
+
   async function startRecordingAttempt() {
     if (recordingStatus !== 'idle' || !navigator.mediaDevices || !window.MediaRecorder) return;
     try {
       if (window.notchAPI && !(await window.notchAPI.ensureMicrophone())) {
-        if (liveTranscript) {
-          liveTranscript.textContent = '无法访问麦克风 · 请在系统设置中授权';
-          liveTranscript.hidden = false;
-        }
+        showRecorderNotice('无法访问麦克风 · 请在系统设置中授权');
+        updateRecordingUi();
         return;
       }
       mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -974,10 +912,7 @@
       recordingStatus = 'idle';
       recordingCaptureIssue = '';
       discardRecordingDraft();
-      if (liveTranscript) {
-        liveTranscript.textContent = '无法开始录音 · 请检查麦克风权限';
-        liveTranscript.hidden = false;
-      }
+      showRecorderNotice('无法开始录音 · 请检查麦克风权限');
       updateRecordingUi();
     }
   }
@@ -1024,9 +959,6 @@
     }
   }
 
-  if (recordStart) recordStart.addEventListener('click', startRecording);
-  if (recordPause) recordPause.addEventListener('click', togglePauseRecording);
-  if (recordStop) recordStop.addEventListener('click', stopRecording);
   if (recordingNew) recordingNew.addEventListener('click', startRecording);
   if (recordingConfigure) recordingConfigure.addEventListener('click', openTranscriptionSettings);
   if (settingsApiConfigure) settingsApiConfigure.addEventListener('click', openTranscriptionSettings);
@@ -1074,23 +1006,13 @@
     );
     renderHomeModuleSettings();
     if (!result?.ok) {
-      const message = result?.error === 'at_least_one_required'
-        ? '首页至少保留一个组件'
-        : result?.error === 'recording_active'
-          ? '录音进行中，暂时不能隐藏快速录音'
-          : result?.error === 'layout_read_only'
-            ? '首页布局已进入安全模式，本次会话不能修改组件'
-            : result?.error === 'layout_invalid'
-              ? '新布局校验失败，原布局已保留'
-              : result?.error === 'dom_apply_failed'
-                ? '布局应用失败，原布局已恢复'
-                : '首页组件设置未更新';
+      const message = result?.error === 'at_least_one_required' ? '首页至少保留一个组件' : '首页组件设置未更新';
       if (typeof showStatusToast === 'function') showStatusToast(message);
       return;
     }
     if (result.changed === false) return;
     const message = result.persisted === false
-      ? '布局已更新，仅当前会话生效，设置未能保存'
+      ? '首页已更新，仅当前会话生效，设置未能保存'
       : input.checked ? '首页组件已恢复' : '首页组件已隐藏';
     if (typeof showStatusToast === 'function') showStatusToast(message);
   });
@@ -1728,255 +1650,16 @@
     renderRecordings();
   });
 
-  // ============ 当前窗口 ============
-  const windowsRefresh = document.getElementById('windows-refresh');
-  const windowsHidden = document.getElementById('windows-hidden');
-  const windowList = document.getElementById('window-list');
-  let windows = [];
-  let hiddenWindows = new Set(loadJson(HIDDEN_WINDOWS_KEY, []).filter((item) => typeof item === 'string'));
-  let windowsLoading = false;
-  let workspaceTab = document.querySelector('.tab.active')?.dataset.tab || 'home';
-  let workspaceExpanded = document.getElementById('app')?.classList.contains('expanded') || false;
-  let homeWindowsVisible = window.NotchHome?.isVisible?.('windows') !== false;
-  let windowDrag = null;
-  let suppressWindowClickUntil = 0;
-
-  function windowHideKey(windowInfo) {
-    return `${String(windowInfo.appName || '').trim()}\u0000${String(windowInfo.title || '').trim()}`;
-  }
-
-  function persistHiddenWindows() {
-    saveJson(HIDDEN_WINDOWS_KEY, [...hiddenWindows]);
-  }
-
-  function clearWindowDragVisuals() {
-    const drag = windowDrag;
-    windowDrag = null;
-    if (drag) {
-      clearTimeout(drag.timer);
-      try {
-        if (drag.item.hasPointerCapture?.(drag.pointerId)) drag.item.releasePointerCapture(drag.pointerId);
-      } catch (error) {}
-      drag.item.classList.remove('dragging', 'remove-ready');
-      drag.item.style.removeProperty('--window-drag-x');
-      drag.item.style.removeProperty('--window-drag-y');
-    }
-    document.querySelectorAll('.home-windows.drag-active').forEach((card) => {
-      card.classList.remove('drag-active');
-    });
-    return drag;
-  }
-
-  function renderWindows(error = '', details = null) {
-    if (!windowList) return;
-    // 轮询可能在长按过程中重建列表；先清理捕获与卡片移除态，避免红色区域残留。
-    clearWindowDragVisuals();
-    windowList.replaceChildren();
-    if (error) {
-      const empty = document.createElement('div');
-      empty.className = 'window-empty permission';
-      // 两种权限的现象完全一样（列表空），但要开的开关不同，必须分开说：
-      // 「屏幕录制」决定能不能读到窗口标题，「辅助功能」决定能不能枚举和聚焦窗口。
-      // 缺屏幕录制时系统既不报错也不弹提示，所以只能由这里告诉用户。
-      const screenRecording = error === 'screen_recording_permission_required';
-      const restartRequired = screenRecording && details?.screenStatus === 'granted';
-      const title = restartRequired
-        ? '权限已开启 · 请重新启动应用'
-        : screenRecording ? '需要“屏幕录制”权限' : '需要“辅助功能”权限';
-      const pane = screenRecording ? '屏幕录制与系统录音' : '辅助功能';
-      const heading = document.createElement('strong');
-      heading.textContent = title;
-      const hint = document.createElement('span');
-      hint.textContent = restartRequired
-        ? 'macOS 只会在应用启动时注入屏幕录制权限。请完全退出 SoloDock，再重新打开。'
-        : `系统设置 → 隐私与安全性 → ${pane}，允许 SoloDock；开启后请重新启动应用。`;
-      const action = document.createElement('button');
-      action.type = 'button';
-      action.className = 'window-permission-open';
-      action.textContent = restartRequired ? '重新检查' : screenRecording ? '请求录屏权限' : '打开系统设置';
-      action.addEventListener('click', async () => {
-        if (screenRecording && window.notchAPI?.requestScreenRecording) {
-          action.disabled = true;
-          let permission = null;
-          try { permission = await window.notchAPI.requestScreenRecording(); } catch (error) {}
-          action.disabled = false;
-          if (permission?.granted || permission?.restartRequired) {
-            if (typeof showStatusToast === 'function') showStatusToast('录屏权限已开启，请完全退出并重新打开应用');
-            return;
-          }
-        }
-        if (window.notchAPI && typeof window.notchAPI.openPrivacySettings === 'function') {
-          window.notchAPI.openPrivacySettings(screenRecording ? 'screen-recording' : 'accessibility');
-        }
-      });
-      empty.append(heading, hint, action);
-      windowList.appendChild(empty);
-      return;
-    }
-    const visibleWindows = Domain.numberWindowLabels(
-      windows.filter((item) => !hiddenWindows.has(windowHideKey(item)))
-    );
-    if (windowsHidden) {
-      windowsHidden.hidden = hiddenWindows.size === 0;
-      windowsHidden.textContent = '隐藏';
-      windowsHidden.setAttribute('aria-label', `恢复已隐藏的 ${hiddenWindows.size} 个窗口`);
-    }
-    if (!visibleWindows.length) {
-      const empty = document.createElement('div');
-      empty.className = 'window-empty';
-      empty.textContent = windowsLoading
-        ? '正在读取当前窗口…'
-        : hiddenWindows.size
-          ? '窗口均已隐藏 · 点击上方恢复'
-          : '没有读取到可切换窗口';
-      windowList.appendChild(empty);
-      return;
-    }
-    visibleWindows.slice(0, 15).forEach((windowInfo) => {
-      const button = document.createElement('button');
-      button.className = 'window-item';
-      button.type = 'button';
-      button.dataset.id = windowInfo.id;
-      button.title = `${windowInfo.displayName}\n${windowInfo.title}\n长按后拖出卡片可隐藏`;
-      const mark = document.createElement('span');
-      mark.className = 'window-app-mark';
-      if (windowInfo.icon) {
-        const icon = document.createElement('img');
-        icon.src = windowInfo.icon;
-        icon.alt = '';
-        icon.draggable = false;
-        mark.appendChild(icon);
-      } else {
-        mark.textContent = (windowInfo.appName.charAt(0) || '·').toUpperCase();
-      }
-      const appName = document.createElement('strong');
-      appName.textContent = windowInfo.displayName;
-      button.append(mark, appName);
-      windowList.appendChild(button);
-    });
-  }
-
-  async function refreshWindows(force = false) {
-    if (!window.NotchHome?.isVisible?.('windows')) return;
-    if (windowsLoading || !window.notchAPI || (!force && (!workspaceExpanded || workspaceTab !== 'home'))) return;
-    windowsLoading = true;
-    renderWindows();
-    let result;
-    try {
-      result = await window.notchAPI.listWindows();
-    } catch (error) {
-      result = { items: [], error: 'accessibility_permission_required' };
-    }
-    windowsLoading = false;
-    windows = result && Array.isArray(result.items) ? result.items : [];
-    renderWindows(result && result.error, result);
-  }
-
-  if (windowsRefresh) windowsRefresh.addEventListener('click', () => refreshWindows(true));
-  if (windowsHidden) {
-    windowsHidden.addEventListener('click', () => {
-      hiddenWindows.clear();
-      persistHiddenWindows();
-      renderWindows();
-    });
-  }
-  if (windowList) {
-    windowList.addEventListener('click', (event) => {
-      if (Date.now() < suppressWindowClickUntil) return;
-      const item = event.target.closest('.window-item[data-id]');
-      if (item && window.notchAPI) window.notchAPI.focusWindow(item.dataset.id);
-    });
-    windowList.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0 || windowDrag) return;
-      const item = event.target.closest('.window-item[data-id]');
-      if (!item) return;
-      windowDrag = {
-        item,
-        pointerId: event.pointerId,
-        startX: event.clientX,
-        startY: event.clientY,
-        active: false,
-        removeReady: false,
-        timer: setTimeout(() => {
-          if (!windowDrag || windowDrag.item !== item) return;
-          windowDrag.active = true;
-          item.classList.add('dragging');
-          try { item.setPointerCapture(event.pointerId); } catch (error) {}
-          item.closest('.home-windows')?.classList.add('drag-active');
-        }, 460),
-      };
-    });
-    document.addEventListener('pointermove', (event) => {
-      if (!windowDrag || windowDrag.pointerId !== event.pointerId) return;
-      const dx = event.clientX - windowDrag.startX;
-      const dy = event.clientY - windowDrag.startY;
-      if (!windowDrag.active) {
-        if (Math.hypot(dx, dy) > 8) {
-          clearTimeout(windowDrag.timer);
-          windowDrag = null;
-        }
-        return;
-      }
-      event.preventDefault();
-      windowDrag.item.style.setProperty('--window-drag-x', `${dx}px`);
-      windowDrag.item.style.setProperty('--window-drag-y', `${dy}px`);
-      const bounds = windowList.closest('.home-windows').getBoundingClientRect();
-      windowDrag.removeReady = event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom;
-      windowDrag.item.classList.toggle('remove-ready', windowDrag.removeReady);
-    });
-    const finishWindowDrag = (event) => {
-      if (!windowDrag || (event.pointerId != null && windowDrag.pointerId !== event.pointerId)) return;
-      const drag = clearWindowDragVisuals();
-      if (!drag) return;
-      if (!drag.active) return;
-      suppressWindowClickUntil = Date.now() + 450;
-      if (drag.removeReady) {
-        const windowInfo = windows.find((item) => item.id === drag.item.dataset.id);
-        if (windowInfo) {
-          hiddenWindows.add(windowHideKey(windowInfo));
-          persistHiddenWindows();
-          renderWindows();
-        }
-      }
-    };
-    document.addEventListener('pointerup', finishWindowDrag);
-    document.addEventListener('pointercancel', finishWindowDrag);
-    windowList.addEventListener('lostpointercapture', () => clearWindowDragVisuals(), true);
-    window.addEventListener('blur', clearWindowDragVisuals);
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) clearWindowDragVisuals();
-    });
-  }
-
   document.addEventListener('notch:tabchange', (event) => {
-    clearWindowDragVisuals();
-    workspaceTab = event.detail && event.detail.tab || 'home';
-    if (workspaceTab === 'home') refreshWindows();
-    if (workspaceTab === 'settings') refreshSettingsPanel();
+    if ((event.detail && event.detail.tab) === 'settings') refreshSettingsPanel();
   });
-  document.addEventListener('notch:modechange', (event) => {
-    clearWindowDragVisuals();
-    workspaceExpanded = !!(event.detail && event.detail.expanded);
-    if (workspaceExpanded && workspaceTab === 'home') refreshWindows();
-  });
-  document.addEventListener('notch:home-modules-changed', (event) => {
-    const nextVisible = Array.isArray(event.detail?.visibleIds)
-      ? event.detail.visibleIds.includes('windows')
-      : window.NotchHome?.isVisible?.('windows') !== false;
-    const restored = !homeWindowsVisible && nextVisible;
-    homeWindowsVisible = nextVisible;
-    renderHomeModuleSettings();
-    if (restored && workspaceExpanded && workspaceTab === 'home') refreshWindows(true);
-  });
-  document.addEventListener('notch:recording-state-changed', renderHomeModuleSettings);
+  document.addEventListener('notch:home-modules-changed', renderHomeModuleSettings);
 
   document.addEventListener('notch:clear-selection', () => {
     recordingSelection.clear();
     recordingSelectionAnchor = selectedRecordingId || null;
     renderRecordingList();
   });
-
-  setInterval(() => refreshWindows(), 6000);
 
   window.addEventListener('beforeunload', () => {
     stopSpeechRecognition();
@@ -1987,13 +1670,11 @@
   });
 
   renderRecordings();
-  renderWindows();
   updateRecordingUi();
   loadTranscriptionConfig();
   refreshSettingsPanel();
 
   window.NotchWorkspace = {
-    refreshWindows,
     startRecording,
     stopRecording,
     isRecordingActive: isRecordingBusy,

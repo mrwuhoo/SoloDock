@@ -100,7 +100,7 @@ app.whenReady().then(async () => {
   assert.match(pausedStatus.detail, /^2[45]:\d\d$/, 'the remaining time, frozen while paused');
 
   // With focus over, the later reminder shows; then off-work quietly shows the time.
-  await win.webContents.executeJavaScript(`document.getElementById('pomodoro-reset').click()`);
+  await win.webContents.executeJavaScript(`window.NotchPomodoro.finish()`);
   const later = await read();
   assert.deepEqual([later.kind, later.icon], ['later', 'bell']);
   assert.match(later.detail, /^\d\d:\d\d$/);

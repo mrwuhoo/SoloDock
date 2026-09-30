@@ -12,7 +12,7 @@ const fakeHome = path.join(profile, 'home');
 fs.mkdirSync(path.join(fakeHome, '.claude'), { recursive: true });
 app.setPath('home', fakeHome);
 fs.writeFileSync(path.join(profile, 'workspace.json'), JSON.stringify({version:1, localStorage:{
-  'notch-home-note':'Recovered workspace note',
+  'notch-focus-minutes-v1':'45',
   'notch-recordings':JSON.stringify([{id:'startup-recording',createdAt:1788709776699,durationMs:1558,transcript:'',audioPath:'recordings/retained.webm',mimeType:'audio/webm',title:'Saved recording',category:'未分类'}]),
 }}));
 const errors = [];
@@ -32,14 +32,14 @@ app.on('web-contents-created', (_event, contents) => {
     if (!contents.getURL().endsWith('/renderer/index.html')) return;
     // Recovery imports workspace.json asynchronously and then reloads the page.
     // Poll across that reload instead of assuming it finishes within a fixed delay.
-    const expected = {home:true,workspace:true,note:'Recovered workspace note',recordings:1};
+    const expected = {home:true,workspace:true,focus:'45:00',recordings:1};
     const deadline = Date.now() + 20000;
     let state = null;
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 250));
       if (contents.isDestroyed()) break;
       try {
-        state = await contents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,note:document.getElementById('home-note')?.value ?? '',recordings:document.querySelectorAll('.recording-item').length})`);
+        state = await contents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,focus:document.getElementById('now-duration-readout')?.textContent ?? '',recordings:document.querySelectorAll('.recording-item').length})`);
       } catch (error) { continue; }
       if (JSON.stringify(state) === JSON.stringify(expected)) break;
     }
@@ -136,7 +136,7 @@ app.on('web-contents-created', (_event, contents) => {
       assert.equal(pomodoroNotice && pomodoroNotice.handled, true, 'the reminder is kept in the notice center, marked handled');
       await new Promise((resolve) => setTimeout(resolve, 600));
       assert.equal(fs.existsSync(path.join(profile, 'notices.json')), true, 'notices are saved for 7 days');
-      await contents.executeJavaScript(`document.getElementById('pomodoro-reset').click()`);
+      await contents.executeJavaScript(`window.NotchPomodoro.finish()`);
 
       // The collapsed notch grows 24pt downward for a status and keeps its 200pt width.
       const panelWindow = Windows.getAllWindows().find((win) => win.webContents.getURL().endsWith('/renderer/index.html'));

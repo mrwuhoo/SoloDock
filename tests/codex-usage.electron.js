@@ -9,22 +9,6 @@ app.whenReady().then(async () => {
   const errors = [];
   win.webContents.on('console-message', (details) => { if (details.level === 'error') errors.push(details.message); });
   await win.loadFile(path.join(__dirname, '..', 'renderer/index.html'));
-  // v0.2 replaces a pre-0.2 home layout once with the new default (old cards would land in the
-  // wrong slots of the new layout); afterwards the user's order, sizes and visibility are kept.
-  const oldOrder = ['commands','note','mirror','recorder','windows','pomodoro','music'];
-  await win.webContents.executeJavaScript(`localStorage.removeItem('notch-home-layout-version'); localStorage.setItem('notch-home-order-v3',${JSON.stringify(JSON.stringify(oldOrder))}); localStorage.setItem('notch-home-widget-sizes-v2',JSON.stringify({music:'medium',pomodoro:'mini',windows:'large',recorder:'small',mirror:'medium',note:'medium',commands:'mini'})); localStorage.setItem('notch-home-hidden-modules-v1','[]');`);
-  await win.reload();
-  await new Promise(resolve => win.webContents.once('did-finish-load', resolve));
-  const migrated = await win.webContents.executeJavaScript(`({
-    order: [...document.querySelectorAll('[data-home-module]')].sort((a,b)=>Number(a.style.order)-Number(b.style.order)).map(t=>t.dataset.homeModule),
-    hidden: window.NotchHome.getVisibility().hiddenIds,
-    version: localStorage.getItem('notch-home-layout-version'),
-  })`);
-  assert.deepEqual(migrated, {
-    order: ['note','today','pomodoro','usage','mirror','recorder','windows'],
-    hidden: ['recorder','windows'],
-    version: '2',
-  });
   await win.webContents.debugger.attach('1.3');
   await win.webContents.debugger.sendCommand('Emulation.setEmulatedMedia',{features:[{name:'prefers-reduced-motion',value:'reduce'},{name:'prefers-reduced-transparency',value:'no-preference'}]});
   const result = await win.webContents.executeJavaScript(`(async () => {
@@ -49,22 +33,9 @@ app.whenReady().then(async () => {
     get('usage-news').click();await settle();
     const internalNews=get('tab-resets').classList.contains('active');
     await setActiveTab('home');
-    // Per-card sizes apply when all seven cards are shown.
-    ['recorder','windows'].forEach(id=>window.NotchHome.setModuleVisible(id,true));await settle();
-    const checks=[];
-    for(let i=0;i<4;i++){
-      const button=tile.querySelector('[data-widget-size-cycle]');button.click();await settle();
-      const rect=tile.getBoundingClientRect();
-      const outside=[...tile.querySelectorAll('button,progress')].filter(x=>{const r=x.getBoundingClientRect();return r.width&&r.height&&(r.left<rect.left-1||r.right>rect.right+1||r.top<rect.top-1||r.bottom>rect.bottom+1)}).map(x=>x.id||x.className);
-      checks.push({size:tile.dataset.widgetSize,outside,visible:!tile.hidden});
-    }
-    window.NotchHome.setModuleVisible('mirror',false);await settle();
-    const sizeButton=tile.querySelector('[data-widget-size-cycle]');
-    const hiddenResizeBefore={available:!sizeButton.hidden&&!sizeButton.disabled,size:sizeButton.dataset.currentSize};
-    sizeButton.click();await settle();
-    const hiddenResizeAfter={size:sizeButton.dataset.currentSize,stored:JSON.parse(localStorage.getItem('notch-home-widget-sizes-v2')).usage,valid:[...document.querySelectorAll('#home-bento [data-home-module]:not([hidden])')].reduce((sum,item)=>sum+Number(item.dataset.layoutWidth)*Number(item.dataset.layoutHeight),0)===48};
-    window.NotchHome.setModuleVisible('mirror',true);await settle();
-    const restoredAfterResize=!tile.hidden&&![...document.querySelectorAll('#home-bento [data-home-module]:not([hidden])')].some(item=>!item.dataset.layoutWidth);
+    // Every control stays inside the compact card.
+    const rect=tile.getBoundingClientRect();
+    const outside=[...tile.querySelectorAll('button,progress')].filter(x=>{const r=x.getBoundingClientRect();return r.width&&r.height&&(r.left<rect.left-1||r.right>rect.right+1||r.top<rect.top-1||r.bottom>rect.bottom+1)}).map(x=>x.id||x.className);
     tile.querySelector('.usage-configure').click();await new Promise(r=>setTimeout(r,260));
     const configOpens=get('tab-settings').classList.contains('active') && document.activeElement===get('codex-usage-refresh');
     const toggle=document.querySelector('#settings-home-module-list [data-settings-home-module="usage"]');
@@ -84,21 +55,14 @@ app.whenReady().then(async () => {
     const escaped=get('usage-details').querySelectorAll('img').length===0;
     data.buckets[0].name='codex';clock=initialClock;get('codex-usage-refresh').click();await settle();
     await setActiveTab('home');
-    return {noReadBeforeConsent,noUsageTab,connected,external,internalNews,checks,hiddenResizeBefore,hiddenResizeAfter,restoredAfterResize,configOpens,hidden,hiddenCalls,restoredCalls,collapsedCalls,reopenedCalls,manualCalls,failed,expired,escaped};
+    return {noReadBeforeConsent,noUsageTab,connected,external,internalNews,outside,configOpens,hidden,hiddenCalls,restoredCalls,collapsedCalls,reopenedCalls,manualCalls,failed,expired,escaped};
   })()`);
   assert.equal(result.noReadBeforeConsent,true);
   assert.equal(result.noUsageTab,true);
   assert.deepEqual(result.connected,{calls:1,percent:'68%',meter:68,credits:'重置卡 1 张',sync:'5'});
   assert.equal(result.external,'');
   assert.equal(result.internalNews,true);
-  assert.deepEqual(result.checks.map(x=>x.size),['large','mini','small','medium']);
-  for(const check of result.checks){assert.equal(check.visible,true);assert.deepEqual(check.outside,[],JSON.stringify(check));}
-  // With seven registered widgets, hiding one leaves six visible:
-  // the gapless auto-fill template takes over and per-card resizing is disabled.
-  assert.equal(result.hiddenResizeBefore.available,false);
-  assert.equal(result.hiddenResizeAfter.size,result.hiddenResizeBefore.size);
-  assert.equal(result.hiddenResizeAfter.valid,true);
-  assert.equal(result.restoredAfterResize,true);
+  assert.deepEqual(result.outside,[]);
   assert.equal(result.configOpens,true);assert.equal(result.hidden,true);
   assert.deepEqual([result.hiddenCalls,result.restoredCalls,result.collapsedCalls,result.reopenedCalls,result.manualCalls],[1,2,2,3,3]);
   assert.deepEqual(result.failed,{percent:'—',hidden:true,status:'error'});
@@ -111,48 +75,7 @@ app.whenReady().then(async () => {
     await win.webContents.executeJavaScript("setActiveTab('settings')");
     await new Promise(r=>setTimeout(r,250));
     fs.writeFileSync(process.env.SOLODOCK_USAGE_SCREENSHOT.replace('.png','-settings.png'),(await win.webContents.capturePage()).toPNG());
-    await win.webContents.executeJavaScript("setActiveTab('home')");
-    for(let i=0;i<4;i++){
-      const capture=await win.webContents.executeJavaScript(`(async()=>{
-        const tile=document.getElementById('home-usage');
-        tile.querySelector('[data-widget-size-cycle]').click();
-        await new Promise(r=>setTimeout(r,60));
-        const r=tile.getBoundingClientRect();
-        return {size:tile.dataset.widgetSize,rect:{x:Math.floor(r.x),y:Math.floor(r.y),width:Math.ceil(r.width),height:Math.ceil(r.height)}};
-      })()`);
-      fs.writeFileSync(process.env.SOLODOCK_USAGE_SCREENSHOT.replace('.png','-'+capture.size+'.png'),(await win.webContents.capturePage(capture.rect)).toPNG());
-    }
   }
-  await win.webContents.executeJavaScript("setActiveTab('home')");
-  const drag=await win.webContents.executeJavaScript(`(()=>{
-    const point=id=>{const r=document.querySelector('[data-home-module="'+id+'"]').getBoundingClientRect();return {x:Math.round(r.x+24),y:Math.round(r.y+24)}};
-    return {from:point('usage'),to:point('pomodoro'),order:JSON.parse(localStorage.getItem('notch-home-order-v3')),sizes:localStorage.getItem('notch-home-widget-sizes-v2')};
-  })()`);
-  win.webContents.sendInputEvent({type:'mouseDown',...drag.from,button:'left',clickCount:1});
-  await new Promise(r=>setTimeout(r,460));
-  win.webContents.sendInputEvent({type:'mouseMove',...drag.to,button:'left'});
-  await new Promise(r=>setTimeout(r,60));
-  win.webContents.sendInputEvent({type:'mouseUp',...drag.to,button:'left',clickCount:1});
-  await new Promise(r=>setTimeout(r,60));
-  const reordered=await win.webContents.executeJavaScript(`({order:JSON.parse(localStorage.getItem('notch-home-order-v3')),sizes:localStorage.getItem('notch-home-widget-sizes-v2')})`);
-  const expected=[...drag.order], source=expected.indexOf('usage'), target=expected.indexOf('pomodoro');
-  [expected[source],expected[target]]=[expected[target],expected[source]];
-  assert.deepEqual(reordered.order,expected,'Usage participates in the shared long-press reorder');
-  assert.equal(reordered.sizes,drag.sizes,'Dragging keeps widget sizes');
-  const savedHiddenSize=await win.webContents.executeJavaScript(`(()=>{
-    window.NotchHome.setModuleVisible('mirror',false);
-    const button=document.querySelector('#home-usage [data-widget-size-cycle]');
-    button.click();
-    return {size:button.dataset.currentSize,hidden:window.NotchHome.getVisibility().hiddenIds.includes('mirror')};
-  })()`);
-  assert.equal(savedHiddenSize.hidden,true);
-  await win.reload();
-  await new Promise(resolve=>win.webContents.once('did-finish-load',resolve));
-  const reloadedHiddenSize=await win.webContents.executeJavaScript(`(()=>{
-    const button=document.querySelector('#home-usage [data-widget-size-cycle]');
-    return {size:button.dataset.currentSize,available:!button.hidden&&!button.disabled,hidden:window.NotchHome.getVisibility().hiddenIds.includes('mirror')};
-  })()`);
-  assert.deepEqual(reloadedHiddenSize,{size:savedHiddenSize.size,available:false,hidden:true},'Hidden-card state and saved size survive restart');
-  console.log('Codex widget: migration, four sizes, drag reorder, visibility, configuration, lifecycle and quota states passed');
+  console.log('Codex widget: compact row, visibility, configuration, lifecycle and quota states passed');
   clearTimeout(deadline);app.quit();
 }).catch(error=>{console.error(error);app.exit(1)});

@@ -53,8 +53,13 @@ app.whenReady().then(async () => {
     out.groups = view();
     out.excerpt = document.querySelector('[data-note-id="tools"] .notes-row-excerpt').textContent;
 
-    // The home 随笔 becomes today's 「M月D日 随笔」, pinned first with a chip.
-    const home = $('home-note');
+    // A 随笔 left over from the old home card becomes today's 「M月D日 随笔」, pinned first with a chip.
+    // (The home card itself is gone; its text lives on in notch-home-note until the day rolls over.)
+    const home = {
+      get value() { return localStorage.getItem('notch-home-note') || ''; },
+      set value(text) { localStorage.setItem('notch-home-note', text); window.NotchNotes.syncHomeNote(text); },
+      dispatchEvent() {},
+    };
     home.value = '今日重点：回复王总的报价邮件';
     home.dispatchEvent(new Event('input', { bubbles: true }));
     await settle(450);
