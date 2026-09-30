@@ -1540,7 +1540,8 @@ ipcMain.handle('app:move-to-applications', (event) => {
 });
 
 async function offerMoveToApplications() {
-  if (appLocationStable()) return;
+  // 只对用户的正式数据文件夹询问；测试与开发实例（指定了 --user-data-dir）不弹，免得把测试包移进「应用程序」。
+  if (appLocationStable() || app.commandLine.hasSwitch('user-data-dir')) return;
   updateTransientSystemInteraction(1);
   let response = 1;
   try {
