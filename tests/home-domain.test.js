@@ -27,10 +27,17 @@ test('focus minutes stay on the four choices and migrate the old timer', () => {
   assert.equal(Home.focusMinutesFromLegacy(null), 25);
 });
 
-test('the time disc is a 60-minute face drawn clockwise from 12 o\'clock', () => {
-  assert.deepEqual(Home.discFraction(25 * 60), { fraction: 25 / 60, overflow: 0 });
-  assert.deepEqual(Home.discFraction(65 * 60), { fraction: 1, overflow: 5 / 60 });
-  assert.deepEqual(Home.discFraction(-3), { fraction: 0, overflow: 0 });
+test('the time disc starts white and fills with elapsed time; one turn is the session', () => {
+  assert.equal(Home.elapsedFraction(1500, 1500), 0, 'pure white before any time has passed');
+  assert.equal(Home.elapsedFraction(375, 1500), 0.75);
+  assert.equal(Home.elapsedFraction(0, 1500), 1, 'fully blue when the session ends');
+  assert.equal(Home.elapsedFraction(-5, 0), 1);
+  const ticks = Home.discTicks(25);
+  assert.equal(ticks.length, 25, 'one tick per minute of the session');
+  assert.deepEqual(ticks.filter((tick) => tick.major).length, 5);
+  assert.deepEqual([ticks[0].x1, ticks[0].y1, ticks[0].y2], [50, 4, 9.5], 'the 12 o\'clock tick is the longest');
+  assert.equal(Home.discTicks(45).length, 45);
+  assert.equal(Home.discTicks(500).length, 120);
   assert.equal(Home.wedgePath(50, 50, 40, 0), '');
   assert.equal(Home.wedgePath(50, 50, 40, 0.25), 'M50 50L50 10A40 40 0 0 1 90 50Z');
   assert.equal(Home.wedgePath(50, 50, 40, 0.75), 'M50 50L50 10A40 40 0 1 1 10 50Z');

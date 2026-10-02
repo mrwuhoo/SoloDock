@@ -1393,17 +1393,16 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   background: var(--sd-surface-hover);
   box-shadow: inset 0 0 0 1px var(--sd-hairline);
 }
-/* 时间圆盘（仿实体 Time Timer）：一圈 60 分钟，冰蓝扇形是剩下的时间，随时间缩回 12 点；
+/* 时间圆盘：一圈就是这一轮的时长，开始时纯白，走过的时间从 12 点顺时针慢慢染蓝；每分钟一格刻度。
    暂停变灰、休息是薄荷色（扇形颜色由 home.js 换渐变）。不显示数字，悬停才浮出还剩几分钟。 */
 .now-disc { position: relative; flex: none; width: 144px; height: 144px; }
 .now-disc.big { width: 190px; height: 190px; }
 .now-disc-svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.now-disc-face { stroke: rgba(23, 50, 80, 0.1); stroke-width: 0.8; }
+.now-disc-face { fill: #ffffff; stroke: rgba(23, 50, 80, 0.1); stroke-width: 0.8; }
 .now-disc-shine { fill: none; stroke: var(--sd-hairline); stroke-width: 0.8; }
 .now-disc-ticks line { stroke-linecap: round; }
-.now-disc-ticks .minor { stroke: var(--sd-divider); stroke-width: 0.6; }
+.now-disc-ticks .minor { stroke: rgba(23, 50, 80, 0.14); stroke-width: 0.6; }
 .now-disc-ticks .major { stroke: rgba(23, 50, 80, 0.32); stroke-width: 0.9; }
-.now-disc-overflow { fill: none; stroke: var(--sd-accent); stroke-width: 1.4; stroke-linecap: round; transform: rotate(-90deg); transform-origin: 50px 50px; }
 .now-disc-knob { fill: var(--sd-surface-selected); stroke: rgba(23, 50, 80, 0.12); stroke-width: 0.8; }
 .now-disc-peek {
   position: absolute;

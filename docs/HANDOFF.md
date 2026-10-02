@@ -151,7 +151,7 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 
 - 布局固定为四张卡片：「现在」（1.55 份宽）· 「精力」· 右侧一列（AI 用量在上、相框在下）。拖动换位和四档尺寸已删除；设置里只能隐藏卡片（至少留一张），隐藏的不占位。显隐存 `notch-home-hidden-modules-v2`；第一次启动从 v1 只沿用「隐藏了 AI 用量 / 相框」。随笔、今天、番茄钟三张卡合并进「现在」，快速录音与当前窗口从首页移除（录音的暂停 / 结束本来就在录音页详情里；`windows:list` / `windows:focus` / `media:screen-recording` 一并删除）。
 - 「现在」（`renderer/home.js`，对外 `window.NotchHomeNow`）：这件事 = 「在做」的待办，否则今天最急的一件；「换一件事」从待办里挑，选中即设为「在做」。接下来 = 今天剩下的日程与截止（最多两条）。「记一笔」走随手记同一条路（`window.NotchCaptureApply.apply`）。
-- 2026-10-01 用户选定「时间圆盘 + 刘海光带」：卡片里的计时是仿 Time Timer 的圆盘（一圈 60 分钟，扇形 = 剩余时间，`home-domain.js` 的 `discFraction` / `wedgePath`，不显示数字，悬停浮出 `remainingText`）；收起时下沿底边一道光从正中向两边延长（`notch-status-domain.js` 的 `progress` / `bandTone`），下沿文字写几点结束。同时做过的滴水、冰晶、月相等方向的原型只在 artifact 里，没有进仓库。
+- 2026-10-01 用户选定「时间圆盘 + 刘海光带」：卡片里的计时是时间圆盘（同日改为：一圈 = 这一轮的时长，每分钟一格刻度，开始纯白、走过的时间顺时针染蓝，`home-domain.js` 的 `elapsedFraction` / `discTicks` / `wedgePath`；不显示数字，悬停浮出 `remainingText`）；收起时下沿底边一道光从正中向两边延长（`notch-status-domain.js` 的 `progress` / `bandTone`），下沿文字写几点结束。同时做过的滴水、冰晶、月相等方向的原型只在 artifact 里，没有进仓库。
 - 番茄钟计时（`renderer/focus-timer.js`，对外 `window.NotchPomodoro`）：按结束时刻计时；15 / 25 / 45 / 60 分钟存 `notch-focus-minutes-v1`（旧的 `[分, 秒]` 只沿用正好是四档之一的）；暂停、+5 分钟（总长不超过 2 小时）、提前结束（专注满 1 分钟记下时长，专注记录多一个 `complete: false`，不算番茄）。专注中收起的 AI 通知数由主进程 `focus:held` 推送。
 - 「精力」：主进程 `energy:status` 给距离上次休息（`bodyTracker.state().activeSince`）、久坐提醒分钟数、收工时间与 `worklogEnabled`；「休息 5 分钟」调 `body:break` 再开始 5 分钟休息。纯函数在 `renderer/home-domain.js`。**用户要求：只陈述事实，不和平时比较、不显示平均、不打分**；暖色只用来提醒该歇了或某天超过 10 小时。
 - 矮屏（内容区不足 540）靠 `@container` 收起说明文字与第二条「接下来」。

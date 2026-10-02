@@ -118,10 +118,10 @@
   }
 
   // ---------------- 时间圆盘 ----------------
-  // 仿实体 Time Timer：一圈是 60 分钟，60 格刻度（每 5 分钟一格长刻度，一刻钟最长），扇形是剩下的时间。
+  // 一圈就是这一轮的时长：开始时表盘纯白，走过的时间从 12 点顺时针慢慢染蓝，走完整圈正好结束。
+  // 每分钟一格刻度，所以没开始时也看得出这一轮有多长。
   const SVG_NS = 'http://www.w3.org/2000/svg';
   const WEDGE_R = 38;
-  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
   let discSeq = 0;
 
   function svgNode(tag, attrs, parent) {
@@ -141,52 +141,32 @@
       svgNode('stop', { offset: 0, 'stop-color': from }, gradient);
       svgNode('stop', { offset: 1, 'stop-color': to }, gradient);
     }
-    const face = svgNode('radialGradient', { id: `${id}-face`, cx: 0.4, cy: 0.32, r: 0.75 }, defs);
-    svgNode('stop', { offset: 0, 'stop-color': '#ffffff' }, face);
-    svgNode('stop', { offset: 1, 'stop-color': '#e6effb' }, face);
-    svgNode('circle', { cx: 50, cy: 50, r: 48.5, class: 'now-disc-face', fill: `url(#${id}-face)` }, root);
+    svgNode('circle', { cx: 50, cy: 50, r: 48.5, class: 'now-disc-face' }, root);
     svgNode('circle', { cx: 50, cy: 50, r: 47.4, class: 'now-disc-shine' }, root);
-    const ticks = svgNode('g', { class: 'now-disc-ticks' }, root);
-    for (let index = 0; index < 60; index += 1) {
-      const angle = (index / 60) * Math.PI * 2 - Math.PI / 2;
-      const inner = index % 15 === 0 ? 40.5 : index % 5 === 0 ? 42 : 44;
-      svgNode('line', {
-        x1: (50 + Math.cos(angle) * 46).toFixed(2), y1: (50 + Math.sin(angle) * 46).toFixed(2),
-        x2: (50 + Math.cos(angle) * inner).toFixed(2), y2: (50 + Math.sin(angle) * inner).toFixed(2),
-        class: index % 5 === 0 ? 'major' : 'minor',
-      }, ticks);
-    }
     const wedge = svgNode('path', { class: 'now-disc-wedge', fill: `url(#${id}-focus)`, d: '' }, root);
-    const overflow = svgNode('circle', { cx: 50, cy: 50, r: 41.5, class: 'now-disc-overflow', pathLength: 100, 'stroke-dasharray': '0 100' }, root);
+    const ticks = svgNode('g', { class: 'now-disc-ticks' }, root);
     svgNode('circle', { cx: 50, cy: 50, r: 6.5, class: 'now-disc-knob' }, root);
     host.prepend(root);
-    return { id, wedge, overflow, fraction: null, tone: 'focus', frame: 0 };
+    return { id, wedge, ticks, minutes: 0, tone: 'focus' };
   }
 
-  // seconds 是扇形代表的时间；animate 时扇形用 0.32 秒缓动到新大小（换时长时用）。
-  function paintDisc(disc, seconds, tone, animate = false) {
+  function setTicks(disc, minutes) {
+    if (!disc || disc.minutes === minutes) return;
+    disc.minutes = minutes;
+    disc.ticks.replaceChildren();
+    for (const tick of Home.discTicks(minutes)) {
+      svgNode('line', { x1: tick.x1, y1: tick.y1, x2: tick.x2, y2: tick.y2, class: tick.major ? 'major' : 'minor' }, disc.ticks);
+    }
+  }
+
+  // fraction 是已经走过的比例：0 纯白，1 整圈染蓝（暂停时灰，休息时薄荷色）。
+  function paintDisc(disc, fraction, tone) {
     if (!disc) return;
-    const { fraction, overflow } = Home.discFraction(seconds);
     if (disc.tone !== tone) {
       disc.wedge.setAttribute('fill', `url(#${disc.id}-${tone})`);
       disc.tone = tone;
     }
-    disc.overflow.setAttribute('stroke-dasharray', `${(overflow * 100).toFixed(2)} 100`);
-    const from = disc.fraction === null ? fraction : disc.fraction;
-    disc.fraction = fraction;
-    cancelAnimationFrame(disc.frame);
-    if (!animate || reducedMotion || Math.abs(from - fraction) < 0.002) {
-      disc.wedge.setAttribute('d', Home.wedgePath(50, 50, WEDGE_R, fraction));
-      return;
-    }
-    const started = performance.now();
-    const step = (now) => {
-      const k = Math.min(1, (now - started) / 320);
-      const eased = 1 - Math.pow(1 - k, 3);
-      disc.wedge.setAttribute('d', Home.wedgePath(50, 50, WEDGE_R, from + (fraction - from) * eased));
-      if (k < 1) disc.frame = requestAnimationFrame(step);
-    };
-    disc.frame = requestAnimationFrame(step);
+    disc.wedge.setAttribute('d', Home.wedgePath(50, 50, WEDGE_R, fraction));
   }
 
   const idleDisc = buildDisc(el.disc);
@@ -211,7 +191,8 @@
       el.due.textContent = '挑一件事，或者直接开始专注';
     }
     el.switcher.textContent = task ? '换一件事' : '选一件事';
-    paintDisc(idleDisc, minutes * 60, 'focus', true);
+    setTicks(idleDisc, minutes);
+    paintDisc(idleDisc, 0, 'focus');
     el.disc.setAttribute('aria-label', `专注 ${minutes} 分钟`);
     el.duration.querySelectorAll('[data-minutes]').forEach((button) => {
       const on = Number(button.dataset.minutes) === minutes;
@@ -291,7 +272,8 @@
   function tick(state, tomatoes = lastTomatoes) {
     const fraction = state.remaining / Math.max(1, state.session);
     const tone = state.mode === 'break' ? 'break' : state.running ? 'focus' : 'paused';
-    paintDisc(runningDisc, state.remaining, tone);
+    setTicks(runningDisc, Math.round(state.session / 60));
+    paintDisc(runningDisc, Home.elapsedFraction(state.remaining, state.session), tone);
     const left = Home.remainingText(state.remaining, state.mode);
     el.peek.textContent = left;
     el.bigDisc.setAttribute('aria-label', state.running ? `${left}，${Home.clock(state.endsAt)} 结束` : `已暂停，${left}`);

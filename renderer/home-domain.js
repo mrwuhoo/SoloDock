@@ -76,13 +76,29 @@
     return focusMinutes(parts[parts.length - 1] ? NaN : minutes);
   }
 
-  // ---------------- 时间圆盘（仿实体 Time Timer：一圈是 60 分钟） ----------------
-  const DISC_SECONDS = 60 * 60;
+  // ---------------- 时间圆盘 ----------------
+  // 一圈就是这一轮的时长：开始时表盘纯白，走过的时间从 12 点顺时针慢慢染蓝，走完整圈正好结束。
+  const MAX_DISC_MINUTES = 120;
 
-  // 扇形占一圈的比例；超过 60 分钟的部分另记（+5 分钟可能让一段专注超过一小时）。
-  function discFraction(seconds) {
-    const safe = Math.max(0, Number(seconds) || 0);
-    return { fraction: Math.min(1, safe / DISC_SECONDS), overflow: Math.max(0, Math.min(1, (safe - DISC_SECONDS) / DISC_SECONDS)) };
+  function elapsedFraction(remaining, session) {
+    const total = Math.max(1, Number(session) || 1);
+    return Math.max(0, Math.min(1, 1 - Math.max(0, Number(remaining) || 0) / total));
+  }
+
+  // 每分钟一格刻度（每 5 分钟一格长刻度，12 点那格最长），所以没开始时也看得出这一轮有多长。
+  function discTicks(minutes, cx = 50, cy = 50, outer = 46) {
+    const count = Math.max(1, Math.min(MAX_DISC_MINUTES, Math.round(Number(minutes) || 0)));
+    const round = (value) => Math.round(value * 100) / 100;
+    return Array.from({ length: count }, (_, index) => {
+      const angle = (index / count) * Math.PI * 2 - Math.PI / 2;
+      const major = index % 5 === 0;
+      const inner = index === 0 ? outer - 5.5 : major ? outer - 4 : outer - 2;
+      return {
+        x1: round(cx + Math.cos(angle) * outer), y1: round(cy + Math.sin(angle) * outer),
+        x2: round(cx + Math.cos(angle) * inner), y2: round(cy + Math.sin(angle) * inner),
+        major,
+      };
+    });
   }
 
   // 从 12 点方向顺时针画出的扇形路径；满一圈时画成整圆，为 0 时不画。
@@ -308,7 +324,8 @@
     untilText,
     focusMinutes,
     focusMinutesFromLegacy,
-    discFraction,
+    elapsedFraction,
+    discTicks,
     wedgePath,
     remainingText,
     focusToday,
