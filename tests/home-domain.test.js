@@ -27,6 +27,19 @@ test('focus minutes stay on the four choices and migrate the old timer', () => {
   assert.equal(Home.focusMinutesFromLegacy(null), 25);
 });
 
+test('the time disc is a 60-minute face drawn clockwise from 12 o\'clock', () => {
+  assert.deepEqual(Home.discFraction(25 * 60), { fraction: 25 / 60, overflow: 0 });
+  assert.deepEqual(Home.discFraction(65 * 60), { fraction: 1, overflow: 5 / 60 });
+  assert.deepEqual(Home.discFraction(-3), { fraction: 0, overflow: 0 });
+  assert.equal(Home.wedgePath(50, 50, 40, 0), '');
+  assert.equal(Home.wedgePath(50, 50, 40, 0.25), 'M50 50L50 10A40 40 0 0 1 90 50Z');
+  assert.equal(Home.wedgePath(50, 50, 40, 0.75), 'M50 50L50 10A40 40 0 1 1 10 50Z');
+  assert.match(Home.wedgePath(50, 50, 40, 1), /^M50 10A40 40 0 1 1 50 90A40 40 0 1 1 50 10Z$/);
+  assert.equal(Home.remainingText(14 * 60 + 32), '还剩 15 分钟');
+  assert.equal(Home.remainingText(20), '还剩 1 分钟');
+  assert.equal(Home.remainingText(190, 'break'), '休息还剩 4 分钟');
+});
+
 test('today focus counts full sessions as tomatoes and early stops as minutes only', () => {
   const log = [
     { start: at(8), end: at(8, 25), minutes: 25 },

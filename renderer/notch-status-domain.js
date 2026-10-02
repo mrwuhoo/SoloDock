@@ -29,38 +29,46 @@
   }
 
   /**
-   * @returns {null | { kind, icon, text, detail, tone, progress, target }}
+   * @returns {null | { kind, icon, text, detail, tone, progress, bandTone?, target }}
+   *   progress 是下沿底边光带的专注进度（没有专注时为 null），bandTone 是光带颜色；
    *   target 是点击后要去的地方：home / recordings / notices（通知中心）。
    */
   function pickNotchStatus(input = {}, now = Date.now()) {
+    // 专注 / 休息进行中：下沿底边的光带一直显示进度，即使文字被更要紧的状态占用。
+    const pomodoro = input.pomodoro;
+    const band = pomodoro && pomodoro.started ? {
+      progress: Math.max(0, Math.min(1, 1 - Math.max(0, Number(pomodoro.remaining) || 0) / Math.max(1, Number(pomodoro.session) || 1))),
+      bandTone: pomodoro.mode === 'break' ? 'calm' : 'focus',
+    } : null;
+    const withBand = (status) => (band ? { ...status, progress: band.progress, bandTone: band.bandTone } : status);
+
     const needsYou = input.needsYou;
     if (needsYou && needsYou.title) {
-      return { kind: 'needs-you', icon: 'alert', text: needsYou.title, detail: '', tone: 'needs', progress: null, target: 'notices' };
+      return withBand({ kind: 'needs-you', icon: 'alert', text: needsYou.title, detail: '', tone: 'needs', progress: null, target: 'notices' });
     }
 
     const recording = input.recording;
     if (recording && ['recording', 'paused', 'saving'].includes(recording.status)) {
       const text = recording.status === 'saving' ? '正在保存录音' : recording.status === 'paused' ? '录音已暂停' : '录音中';
-      return {
+      return withBand({
         kind: 'recording', icon: 'dot', text, detail: recording.status === 'saving' ? '' : duration((Number(recording.durationMs) || 0) / 1000),
         tone: 'recording', progress: null, target: 'recordings',
-      };
+      });
     }
 
-    const pomodoro = input.pomodoro;
-    if (pomodoro && pomodoro.started) {
+    if (band) {
       const isBreak = pomodoro.mode === 'break';
-      const session = Math.max(1, Number(pomodoro.session) || 1);
       const remaining = Math.max(0, Number(pomodoro.remaining) || 0);
-      return {
+      // 进行中只写几点结束，不跳秒；暂停时写冻结的剩余时间。
+      return withBand({
         kind: isBreak ? 'break' : 'focus',
         icon: isBreak ? 'leaf' : 'timer',
         text: pomodoro.running ? (isBreak ? '休息中' : '专注中') : (isBreak ? '休息已暂停' : '专注已暂停'),
-        detail: duration(remaining),
+        detail: pomodoro.running ? `${clock(now + remaining * 1000)} 结束` : duration(remaining),
         tone: isBreak ? 'calm' : 'focus',
-        progress: 1 - remaining / session,
+        progress: null,
         target: 'home',
-      };
+      });
     }
 
     const low = (Array.isArray(input.quota) ? input.quota : [])

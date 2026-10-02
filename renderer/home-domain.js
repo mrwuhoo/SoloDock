@@ -76,6 +76,33 @@
     return focusMinutes(parts[parts.length - 1] ? NaN : minutes);
   }
 
+  // ---------------- 时间圆盘（仿实体 Time Timer：一圈是 60 分钟） ----------------
+  const DISC_SECONDS = 60 * 60;
+
+  // 扇形占一圈的比例；超过 60 分钟的部分另记（+5 分钟可能让一段专注超过一小时）。
+  function discFraction(seconds) {
+    const safe = Math.max(0, Number(seconds) || 0);
+    return { fraction: Math.min(1, safe / DISC_SECONDS), overflow: Math.max(0, Math.min(1, (safe - DISC_SECONDS) / DISC_SECONDS)) };
+  }
+
+  // 从 12 点方向顺时针画出的扇形路径；满一圈时画成整圆，为 0 时不画。
+  function wedgePath(cx, cy, r, fraction) {
+    const f = Math.max(0, Math.min(1, Number(fraction) || 0));
+    const round = (value) => Math.round(value * 100) / 100;
+    if (f <= 0.0005) return '';
+    if (f >= 0.9995) return `M${round(cx)} ${round(cy - r)}A${r} ${r} 0 1 1 ${round(cx)} ${round(cy + r)}A${r} ${r} 0 1 1 ${round(cx)} ${round(cy - r)}Z`;
+    const angle = f * Math.PI * 2 - Math.PI / 2;
+    const x = cx + Math.cos(angle) * r;
+    const y = cy + Math.sin(angle) * r;
+    return `M${round(cx)} ${round(cy)}L${round(cx)} ${round(cy - r)}A${r} ${r} 0 ${f > 0.5 ? 1 : 0} 1 ${round(x)} ${round(y)}Z`;
+  }
+
+  // 悬停圆盘时浮出的一句：不跳秒，只说还剩几分钟。
+  function remainingText(seconds, mode = 'focus') {
+    const minutes = Math.max(1, Math.ceil((Number(seconds) || 0) / 60));
+    return mode === 'break' ? `休息还剩 ${minutes} 分钟` : `还剩 ${minutes} 分钟`;
+  }
+
   // 今天的专注：完整走完的算一个番茄；提前结束的只计分钟。
   function focusToday(log, dayStart, dayEnd = Infinity) {
     let tomatoes = 0;
@@ -281,6 +308,9 @@
     untilText,
     focusMinutes,
     focusMinutesFromLegacy,
+    discFraction,
+    wedgePath,
+    remainingText,
     focusToday,
     currentTask,
     dueLine,

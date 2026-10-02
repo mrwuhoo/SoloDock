@@ -32,14 +32,14 @@ app.on('web-contents-created', (_event, contents) => {
     if (!contents.getURL().endsWith('/renderer/index.html')) return;
     // Recovery imports workspace.json asynchronously and then reloads the page.
     // Poll across that reload instead of assuming it finishes within a fixed delay.
-    const expected = {home:true,workspace:true,focus:'45:00',recordings:1};
+    const expected = {home:true,workspace:true,focus:'专注 45 分钟',recordings:1};
     const deadline = Date.now() + 20000;
     let state = null;
     while (Date.now() < deadline) {
       await new Promise((resolve) => setTimeout(resolve, 250));
       if (contents.isDestroyed()) break;
       try {
-        state = await contents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,focus:document.getElementById('now-duration-readout')?.textContent ?? '',recordings:document.querySelectorAll('.recording-item').length})`);
+        state = await contents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,focus:document.getElementById('now-disc')?.getAttribute('aria-label') ?? '',recordings:document.querySelectorAll('.recording-item').length})`);
       } catch (error) { continue; }
       if (JSON.stringify(state) === JSON.stringify(expected)) break;
     }

@@ -17,9 +17,9 @@ async function main() {
       document.querySelector('#now-duration [data-minutes="45"]').click();
     `);
     await window.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-    const state = await window.webContents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,focus:document.getElementById('now-duration-readout').textContent,recordings:document.querySelectorAll('.recording-item').length})`);
+    const state = await window.webContents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,focus:document.getElementById('now-disc').getAttribute('aria-label'),recordings:document.querySelectorAll('.recording-item').length})`);
     assert.deepEqual(errors, [], 'Retained profile must initialize without renderer errors');
-    assert.deepEqual(state, {home:true,workspace:true,focus:'45:00',recordings:1});
+    assert.deepEqual(state, {home:true,workspace:true,focus:'专注 45 分钟',recordings:1});
     console.log('Retained workspace renderer checks passed');
   } finally { window.destroy(); }
 }

@@ -36,6 +36,7 @@ app.whenReady().then(async () => {
       text: document.getElementById('notch-status-text').textContent,
       detail: document.getElementById('notch-status-detail').textContent,
       progress: view.dataset.progress,
+      band: view.dataset.band || '',
       tone: app.dataset.notchTone || '',
       width: Math.round(notch.width),
       height: Math.round(notch.height),
@@ -47,19 +48,21 @@ app.whenReady().then(async () => {
   const idle = await read();
   assert.deepEqual([idle.shown, idle.width, idle.height, idle.statusCalls], [false, 200, 37, []], 'idle: the notch stays exactly the notch');
 
-  // Focus: the lip grows 24pt downward, width unchanged, with a progress line.
+  // Focus: the lip grows 24pt downward, width unchanged; it says when focus ends, and a light band shows progress.
   await win.webContents.executeJavaScript(`window.NotchPomodoro.start(1500, 'focus')`);
   const focus = await read();
-  assert.deepEqual([focus.shown, focus.kind, focus.icon, focus.text, focus.detail, focus.progress], [true, 'focus', 'timer', '专注中', '25:00', 'true']);
+  assert.deepEqual([focus.shown, focus.kind, focus.icon, focus.text, focus.progress, focus.band], [true, 'focus', 'timer', '专注中', 'true', 'focus']);
+  assert.match(focus.detail, /^\d\d:\d\d 结束$/, 'the end time, not a ticking countdown');
   assert.deepEqual([focus.width, focus.height], [200, 61], 'only grows downward');
   assert.deepEqual(focus.statusCalls, [true], 'the native window grows first');
-  assert.match(focus.label, /专注中 25:00/);
+  assert.match(focus.label, /专注中 \d\d:\d\d 结束/);
   await shot('notch-focus');
 
   // "Claude needs you" outranks focus and turns the notch amber.
   await win.webContents.executeJavaScript(`window.__handlers.onNeedsYou.forEach((callback) => callback({ title: 'Claude 需要你确认', agent: 'claude' }))`);
   const needs = await read();
   assert.deepEqual([needs.kind, needs.text, needs.tone, needs.icon], ['needs-you', 'Claude 需要你确认', 'needs', 'alert']);
+  assert.deepEqual([needs.progress, needs.band], ['true', 'focus'], 'the focus band stays while the text says something more urgent');
   await shot('notch-needs-you');
   await win.webContents.executeJavaScript(`window.__handlers.onNeedsYou.forEach((callback) => callback(null))`);
   assert.equal((await read()).kind, 'focus');

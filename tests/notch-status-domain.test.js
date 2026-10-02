@@ -28,12 +28,21 @@ test('one status at a time, by priority', () => {
   assert.deepEqual(order, ['needs-you', 'recording', 'focus', 'quota', 'event', 'later']);
 });
 
+test('the focus band stays on the lip when a more urgent status takes the text', () => {
+  const pomodoro = { started: true, running: true, mode: 'focus', remaining: 1112, session: 1500 };
+  const needs = pickNotchStatus({ needsYou: { title: 'Claude 需要你确认' }, pomodoro }, now);
+  assert.deepEqual([needs.kind, Math.round(needs.progress * 100), needs.bandTone], ['needs-you', 26, 'focus']);
+  const recording = pickNotchStatus({ recording: { status: 'recording', durationMs: 1000 }, pomodoro: { ...pomodoro, mode: 'break', remaining: 150, session: 300 } }, now);
+  assert.deepEqual([recording.kind, recording.progress, recording.bandTone], ['recording', 0.5, 'calm']);
+  assert.equal(pickNotchStatus({ needsYou: { title: 'Claude 需要你确认' } }, now).progress, null, 'no band without a focus session');
+});
+
 test('each status reads well in 200 points', () => {
   assert.deepEqual(pickNotchStatus({ recording: { status: 'recording', durationMs: 192_000 } }, now), {
     kind: 'recording', icon: 'dot', text: '录音中', detail: '03:12', tone: 'recording', progress: null, target: 'recordings',
   });
   const focus = pickNotchStatus({ pomodoro: { started: true, running: true, mode: 'focus', remaining: 1112, session: 1500 } }, now);
-  assert.deepEqual([focus.text, focus.detail, Math.round(focus.progress * 100)], ['专注中', '18:32', 26]);
+  assert.deepEqual([focus.text, focus.detail, Math.round(focus.progress * 100), focus.bandTone], ['专注中', '14:44 结束', 26, 'focus'], 'running focus says when it ends, not a ticking countdown');
   const paused = pickNotchStatus({ pomodoro: { started: true, running: false, mode: 'break', remaining: 190, session: 300 } }, now);
   assert.deepEqual([paused.kind, paused.text, paused.detail, paused.icon], ['break', '休息已暂停', '03:10', 'leaf']);
   const quota = pickNotchStatus({ quota: [{ name: 'Claude', remaining: 18.4 }, { name: 'Codex', remaining: 9 }, { name: 'Grok', remaining: 80 }] }, now);

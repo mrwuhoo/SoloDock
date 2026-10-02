@@ -31,12 +31,12 @@ async function main() {
   try {
     await window.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
     const state = await window.webContents.executeJavaScript(`({
-      focus: document.getElementById('now-duration-readout').textContent,
+      focus: document.getElementById('now-disc').getAttribute('aria-label'),
       recordings: document.querySelectorAll('.recording-item').length,
       hydrated: sessionStorage.getItem('notch-workspace-hydrated'),
     })`);
     await new Promise((resolve) => setTimeout(resolve, 600));
-    assert.deepEqual(state, { focus: '45:00', recordings: 1, hydrated: '1' });
+    assert.deepEqual(state, { focus: '专注 45 分钟', recordings: 1, hydrated: '1' });
     assert.equal(loads, 1, 'hydration must not trigger a recovery reload');
     assert.equal(syncReads, 1, 'the preload reads the workspace exactly once per session');
 
@@ -44,8 +44,8 @@ async function main() {
     await window.webContents.executeJavaScript(`document.querySelector('#now-duration [data-minutes="60"]').click()`);
     await window.webContents.reload();
     await new Promise((resolve) => window.webContents.once('did-finish-load', resolve));
-    const afterReload = await window.webContents.executeJavaScript(`document.getElementById('now-duration-readout').textContent`);
-    assert.equal(afterReload, '60:00');
+    const afterReload = await window.webContents.executeJavaScript(`document.getElementById('now-disc').getAttribute('aria-label')`);
+    assert.equal(afterReload, '专注 60 分钟');
     assert.equal(syncReads, 1);
     console.log('Workspace hydration checks passed');
   } finally { window.destroy(); }

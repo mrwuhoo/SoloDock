@@ -80,7 +80,8 @@ app.whenReady().then(async () => {
       chip: text('now-task-chip'),
       title: text('now-task-title'),
       due: text('now-task-due'),
-      readout: text('now-duration-readout'),
+      disc: $('now-disc').getAttribute('aria-label'),
+      wedge: $('now-disc').querySelector('.now-disc-wedge').getAttribute('d').length > 10,
       checked: [...document.querySelectorAll('#now-duration [aria-checked="true"]')].map((button) => button.dataset.minutes),
       next: [...document.querySelectorAll('#now-next-list li')].map((row) => [...row.children].slice(1).map((node) => node.textContent)),
       key: text('now-capture-key'),
@@ -115,7 +116,8 @@ app.whenReady().then(async () => {
   assert.equal(idle.chip, '课程');
   assert.equal(idle.title, '录制第 3 节课：Vibe coding 实战');
   assert.equal(idle.due, '今天 18:00 截止 · 还剩 3 小时 40 分');
-  assert.equal(idle.readout, '25:00');
+  assert.equal(idle.disc, '专注 25 分钟');
+  assert.equal(idle.wedge, true, 'the disc shows the chosen length as a wedge');
   assert.deepEqual(idle.checked, ['25']);
   assert.deepEqual(idle.next, [['16:00', '客户电话 · 报价确认', '日程 · 1 小时 40 分后'], ['20:30', '周复盘', '日程 · 6 小时 10 分后']]);
   assert.equal(idle.key, '⌥⇧N');
@@ -144,7 +146,9 @@ app.whenReady().then(async () => {
   // Duration choice and 换一件事.
   const choose = await run(`
     document.querySelector('#now-duration [data-minutes="45"]').click();
-    const readout45 = text('now-duration-readout');
+    await settle(400);
+    const readout45 = $('now-disc').getAttribute('aria-label');
+    const wedge45 = $('now-disc').querySelector('.now-disc-wedge').getAttribute('d');
     const stored = localStorage.getItem('notch-focus-minutes-v1');
     document.querySelector('#now-duration [data-minutes="25"]').click();
     $('now-switch').click();
@@ -160,9 +164,10 @@ app.whenReady().then(async () => {
     $('now-switch').click();
     picker.querySelector('[data-id="t1"]').click();
     await settle();
-    return { readout45, stored, items, inside, switched, back: text('now-task-title') };
+    return { readout45, wedge45, stored, items, inside, switched, back: text('now-task-title') };
   `);
-  assert.equal(choose.readout45, '45:00');
+  assert.equal(choose.readout45, '专注 45 分钟');
+  assert.equal(choose.wedge45, 'M50 50L50 12A38 38 0 1 1 12 50Z', '45 minutes is three quarters of the 60-minute face');
   assert.equal(choose.stored, '45');
   assert.deepEqual(choose.items, [['录制第 3 节课：Vibe coding 实战', '18:00', 'true'], ['交付封面终稿', '21:00', 'false'], ['写本周 Newsletter', '明天', 'false']]);
   assert.equal(choose.inside, true, 'the picker stays inside the card');
@@ -181,7 +186,8 @@ app.whenReady().then(async () => {
       meta: text('now-meta'),
       title: text('now-running-title'),
       chip: text('now-running-chip'),
-      remaining: text('now-remaining'),
+      remaining: text('now-peek'),
+      discLabel: $('now-disc-big').getAttribute('aria-label'),
       tomatoes: text('now-tomatoes'),
       bars: $('now-tomatoes').querySelectorAll('i').length,
       held: $('now-held').hidden ? '' : text('now-held-text'),
@@ -210,6 +216,7 @@ app.whenReady().then(async () => {
     title: '录制第 3 节课：Vibe coding 实战',
     chip: '课程',
     remaining: focus.running.remaining,
+    discLabel: focus.running.discLabel,
     tomatoes: '今天已完成 3 个',
     bars: 4,
     held: '收起了 2 条 AI 完成通知，专注结束后一起告诉你',
@@ -220,7 +227,8 @@ app.whenReady().then(async () => {
     reported: true,
   });
   assert.match(focus.running.meta, /^第 4 个番茄 · 14:4\d 结束$/);
-  assert.match(focus.running.remaining, /^2[45]:\d\d$/);
+  assert.equal(focus.running.remaining, '还剩 25 分钟');
+  assert.match(focus.running.discLabel, /^还剩 25 分钟，14:4\d 结束$/);
   assert.deepEqual({ ...focus.paused, meta: undefined }, { state: 'paused', label: '已暂停', button: '继续', meta: undefined, reported: false });
   assert.equal(focus.paused.meta, '第 4 个番茄 · 已暂停');
   assert.equal(focus.extended, 30 * 60, '+5 分钟 lengthens the session');

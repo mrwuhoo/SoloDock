@@ -47,6 +47,7 @@
     view.dataset.icon = status.icon;
     view.dataset.tone = status.tone;
     view.dataset.progress = status.progress === null ? 'false' : 'true';
+    view.dataset.band = status.bandTone || status.tone;
     app.dataset.notchTone = status.tone;
     els.text.textContent = status.text;
     els.detail.textContent = status.detail;
