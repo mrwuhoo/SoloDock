@@ -80,10 +80,12 @@ app.whenReady().then(async () => {
       chip: text('now-task-chip'),
       title: text('now-task-title'),
       due: text('now-task-due'),
-      disc: $('now-disc').getAttribute('aria-label'),
-      wedge: $('now-disc').querySelector('.now-disc-wedge').getAttribute('d'),
-      ticks: $('now-disc').querySelectorAll('.now-disc-ticks line').length,
-      checked: [...document.querySelectorAll('#now-duration [aria-checked="true"]')].map((button) => button.dataset.minutes),
+      dial: $('now-dial').getAttribute('aria-valuetext'),
+      dialNow: $('now-dial').getAttribute('aria-valuenow'),
+      readout: $('now-dial').querySelector('.now-dial-read').textContent,
+      arc: $('now-dial').querySelector('.now-dial-arc:not(.lap)').getAttribute('d'),
+      lap: $('now-dial').querySelector('.now-dial-arc.lap').getAttribute('d'),
+      ticks: $('now-dial').querySelectorAll('.now-dial-ticks line').length,
       next: [...document.querySelectorAll('#now-next-list li')].map((row) => [...row.children].slice(1).map((node) => node.textContent)),
       key: text('now-capture-key'),
       runningHidden: $('now-running').hidden,
@@ -105,7 +107,7 @@ app.whenReady().then(async () => {
       },
       tiles: [...document.querySelectorAll('#home-bento [data-home-module]:not([hidden])')].map((tile) => {
         const box = rect(tile);
-        const inner = [...tile.querySelectorAll('.now-idle, .now-running, .energy-body')].filter((block) => !block.hidden).map((block) => block.scrollHeight - block.clientHeight);
+        const inner = [...tile.querySelectorAll('#now-idle, #now-running, .energy-body')].filter((block) => !block.hidden).map((block) => block.scrollHeight - block.clientHeight);
         return { id: tile.dataset.homeModule, inside: box.left >= bento.left - 1 && box.right <= bento.right + 1 && box.top >= bento.top - 1 && box.bottom <= bento.bottom + 1, overflow: Math.max(tile.scrollHeight - tile.clientHeight, ...inner) };
       }),
       settings: [...document.querySelectorAll('[data-settings-home-module]')].map((input) => [input.dataset.settingsHomeModule, input.checked]),
@@ -117,10 +119,12 @@ app.whenReady().then(async () => {
   assert.equal(idle.chip, '课程');
   assert.equal(idle.title, '录制第 3 节课：Vibe coding 实战');
   assert.equal(idle.due, '今天 18:00 截止 · 还剩 3 小时 40 分');
-  assert.equal(idle.disc, '专注 25 分钟');
-  assert.equal(idle.wedge, '', 'the dial is pure white before focus starts');
-  assert.equal(idle.ticks, 25, 'one tick per minute shows the chosen length');
-  assert.deepEqual(idle.checked, ['25']);
+  assert.equal(idle.dial, '专注 25 分钟');
+  assert.equal(idle.dialNow, '25');
+  assert.equal(idle.readout, '25分钟', 'the length is always readable in the middle of the dial');
+  assert.match(idle.arc, /^M50 \d/, 'the ring is pulled out to 25 minutes before focus starts');
+  assert.equal(idle.lap, '', 'no second lap under an hour');
+  assert.equal(idle.ticks, 60, 'one turn of the dial is an hour');
   assert.deepEqual(idle.next, [['16:00', '客户电话 · 报价确认', '日程 · 1 小时 40 分后'], ['20:30', '周复盘', '日程 · 6 小时 10 分后']]);
   assert.equal(idle.key, '⌥⇧N');
   assert.equal(idle.runningHidden, true);
@@ -145,14 +149,35 @@ app.whenReady().then(async () => {
   assert.ok(idle.tiles.every((tile) => tile.inside && tile.overflow <= 1), JSON.stringify(idle.tiles));
   assert.deepEqual(idle.settings, [['now', true], ['energy', true], ['usage', true], ['mirror', true]]);
 
-  // Duration choice and 换一件事.
+  // Pulling the ring (keyboard / wheel / pointer) and 换一件事.
   const choose = await run(`
-    document.querySelector('#now-duration [data-minutes="45"]').click();
+    const dial = $('now-dial');
+    const key = (name) => dial.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }));
+    for (let index = 0; index < 4; index += 1) key('PageUp');
+    key('ArrowUp');
     await settle(400);
-    const readout45 = $('now-disc').getAttribute('aria-label');
-    const ticks45 = $('now-disc').querySelectorAll('.now-disc-ticks line').length;
+    const readout46 = dial.getAttribute('aria-valuetext');
     const stored = localStorage.getItem('notch-focus-minutes-v1');
-    document.querySelector('#now-duration [data-minutes="25"]').click();
+    key('End');
+    await settle(400);
+    const end = { text: dial.getAttribute('aria-valuetext'), lap: dial.querySelector('.now-dial-arc.lap').getAttribute('d') };
+    dial.dispatchEvent(new WheelEvent('wheel', { deltaY: 40, bubbles: true, cancelable: true }));
+    await settle(400);
+    const wheel = dial.getAttribute('aria-valuetext');
+    // Pointer: back to the first lap, then press the right edge of the face (3 o'clock) and let go -> 15 minutes.
+    key('Home');
+    await settle(400);
+    const face = dial.getBoundingClientRect();
+    const at = (x, y) => ({ bubbles: true, cancelable: true, pointerId: 7, button: 0, clientX: face.left + face.width * (x + 6) / 112, clientY: face.top + face.height * (y + 6) / 112 });
+    dial.dispatchEvent(new PointerEvent('pointerdown', at(90, 50)));
+    dial.dispatchEvent(new PointerEvent('pointerup', at(90, 50)));
+    await settle(500);
+    const pointer = dial.getAttribute('aria-valuetext');
+    key('Home');
+    for (let index = 0; index < 5; index += 1) key('PageUp');
+    key('ArrowDown');
+    await settle(400);
+    const back = dial.getAttribute('aria-valuetext');
     $('now-switch').click();
     await settle();
     const picker = $('now-picker');
@@ -166,11 +191,15 @@ app.whenReady().then(async () => {
     $('now-switch').click();
     picker.querySelector('[data-id="t1"]').click();
     await settle();
-    return { readout45, ticks45, stored, items, inside, switched, back: text('now-task-title') };
+    return { readout46, stored, end, wheel, pointer, back25: back, items, inside, switched, back: text('now-task-title') };
   `);
-  assert.equal(choose.readout45, '专注 45 分钟');
-  assert.equal(choose.ticks45, 45);
-  assert.equal(choose.stored, '45');
+  assert.equal(choose.readout46, '专注 46 分钟', 'PageUp is 5 minutes, ArrowUp is 1');
+  assert.equal(choose.stored, '46');
+  assert.equal(choose.end.text, '专注 120 分钟');
+  assert.match(choose.end.lap, /^M50 \d/, 'past an hour the ring goes round a second lap');
+  assert.equal(choose.wheel, '专注 119 分钟');
+  assert.equal(choose.pointer, '专注 15 分钟', 'tapping the face jumps the ring there');
+  assert.equal(choose.back25, '专注 25 分钟');
   assert.deepEqual(choose.items, [['录制第 3 节课：Vibe coding 实战', '18:00', 'true'], ['交付封面终稿', '21:00', 'false'], ['写本周 Newsletter', '明天', 'false']]);
   assert.equal(choose.inside, true, 'the picker stays inside the card');
   assert.deepEqual(choose.switched, { title: '交付封面终稿', chip: '客户', doing: 't2', pickerHidden: true });
@@ -188,9 +217,9 @@ app.whenReady().then(async () => {
       meta: text('now-meta'),
       title: text('now-running-title'),
       chip: text('now-running-chip'),
-      remaining: text('now-peek'),
-      discLabel: $('now-disc-big').getAttribute('aria-label'),
-      bigTicks: $('now-disc-big').querySelectorAll('.now-disc-ticks line').length,
+      remaining: $('now-dial').querySelector('.now-dial-read').textContent,
+      discLabel: $('now-dial').getAttribute('aria-valuetext'),
+      tone: $('now-dial').dataset.tone,
       tomatoes: text('now-tomatoes'),
       bars: $('now-tomatoes').querySelectorAll('i').length,
       held: $('now-held').hidden ? '' : text('now-held-text'),
@@ -202,14 +231,17 @@ app.whenReady().then(async () => {
     };
     $('now-pause').click();
     await settle();
-    const paused = { state: $('home-now').dataset.state, label: text('now-label'), button: text('now-pause'), meta: text('now-meta'), reported: window.__focus.at(-1).running };
+    const paused = { state: $('home-now').dataset.state, label: text('now-label'), button: text('now-pause'), meta: text('now-meta'), reported: window.__focus.at(-1).running, tone: $('now-dial').dataset.tone };
+    $('now-dial').dispatchEvent(new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true, cancelable: true }));
+    await settle(400);
+    const redialed = { left: window.NotchPomodoro.state().remaining, text: $('now-dial').getAttribute('aria-valuetext') };
     $('now-pause').click();
     $('now-extend').click();
     await settle();
     const extended = window.NotchPomodoro.state().session;
     $('now-finish').click();
     await settle();
-    return { running, paused, extended, after: { state: $('home-now').dataset.state, log: JSON.parse(localStorage.getItem('notch-focus-log-v1')).length, held: $('now-held').hidden } };
+    return { running, paused, redialed, extended, after: { state: $('home-now').dataset.state, log: JSON.parse(localStorage.getItem('notch-focus-log-v1')).length, held: $('now-held').hidden } };
   `);
   await shot('home-focus');
   assert.deepEqual({ ...focus.running, meta: undefined }, {
@@ -220,7 +252,7 @@ app.whenReady().then(async () => {
     chip: '课程',
     remaining: focus.running.remaining,
     discLabel: focus.running.discLabel,
-    bigTicks: 25,
+    tone: 'focus',
     tomatoes: '今天已完成 3 个',
     bars: 4,
     held: '收起了 2 条 AI 完成通知，专注结束后一起告诉你',
@@ -231,23 +263,24 @@ app.whenReady().then(async () => {
     reported: true,
   });
   assert.match(focus.running.meta, /^第 4 个番茄 · 14:4\d 结束$/);
-  assert.equal(focus.running.remaining, '还剩 25 分钟');
+  assert.equal(focus.running.remaining, '25分钟后结束', 'the dial shows the minutes left, same place as before starting');
   assert.match(focus.running.discLabel, /^还剩 25 分钟，14:4\d 结束$/);
-  assert.deepEqual({ ...focus.paused, meta: undefined }, { state: 'paused', label: '已暂停', button: '继续', meta: undefined, reported: false });
+  assert.deepEqual({ ...focus.paused, meta: undefined }, { state: 'paused', label: '已暂停', button: '继续', meta: undefined, reported: false, tone: 'paused' });
   assert.equal(focus.paused.meta, '第 4 个番茄 · 已暂停');
-  assert.equal(focus.extended, 30 * 60, '+5 分钟 lengthens the session');
+  assert.deepEqual(focus.redialed, { left: 20 * 60, text: '已暂停，还剩 20 分钟' }, 'the ring can be pulled back mid-session');
+  assert.ok(Math.abs(focus.extended - 25 * 60) <= 1, '+5 分钟 lengthens what is left');
   assert.deepEqual(focus.after, { state: 'idle', log: 3, held: true }, 'ending within a minute does not log a session');
 
   // A session that runs to the end becomes a tomato; the reminder window hears about it.
   const complete = await run(`
     window.NotchPomodoro.start(4, 'focus', { task: window.NotchHomeNow.task() });
     await settle(2200);
-    const midway = $('now-disc-big').querySelector('.now-disc-wedge').getAttribute('d');
+    const midway = $('now-dial').querySelector('.now-dial-arc:not(.lap)').getAttribute('d');
     await settle(2600);
     const log = JSON.parse(localStorage.getItem('notch-focus-log-v1'));
     return { midway, state: $('home-now').dataset.state, last: log.at(-1).complete, count: log.length, meta: text('now-meta'), notified: window.__calls.filter((call) => call[0] === 'pomodoro').map((call) => call[1].mode) };
   `);
-  assert.match(complete.midway, /^M50 50L50 12A38 38 0 [01] 1 /, 'halfway through, part of the dial has turned blue');
+  assert.match(complete.midway, /^M50 \d/, 'halfway through, a sliver of ring is left');
   assert.deepEqual({ ...complete, midway: undefined }, { midway: undefined, state: 'idle', last: true, count: 4, meta: '今天第 5 个番茄', notified: ['focus'] });
 
   // 休息 5 分钟 from the energy card restarts the break timer and shows the break layout.

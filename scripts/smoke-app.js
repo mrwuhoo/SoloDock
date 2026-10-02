@@ -129,7 +129,7 @@ async function main() {
     await until(() => evaluate('!window.NotchWorkspace.isRecordingActive() && window.smokeTracks.every(t => t.readyState === "ended")'), 'microphone released');
     await until(() => evaluate('JSON.parse(localStorage.getItem("notch-recordings") || "[]").some(r => r.audioPath)'), 'recording persisted');
     assert.ok(fs.readdirSync(path.join(profile, 'recordings')).some((file) => fs.statSync(path.join(profile, 'recordings', file)).size > 0));
-    await evaluate('document.getElementById("tab-button-home").click(); document.querySelector(\'#now-duration [data-minutes="45"]\').click()');
+    await evaluate('document.getElementById("tab-button-home").click(); window.NotchPomodoro.setMinutes(45)');
     await until(() => evaluate('localStorage.getItem("notch-focus-minutes-v1") === "45"'), 'focus length persisted');
     await evaluate('window.notchAPI.saveWorkspaceData(Object.fromEntries(Object.keys(localStorage).map(k => [k, localStorage.getItem(k)])))');
   }

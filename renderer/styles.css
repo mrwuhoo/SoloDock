@@ -1333,13 +1333,9 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
 .now-meta b { color: var(--sd-text-1); font-weight: var(--sd-fw-semibold); font-variant-numeric: tabular-nums; }
 
 /* ---- 现在 · 空闲：这件事 + 开始专注 + 接下来 ---- */
-.now-idle,
-.now-running { min-height: 0; }
-/* 这件事、专注、接下来三段上下均分多出来的高度，而不是全堆在「记一笔」上面。 */
-.now-idle { flex: 1; display: flex; flex-direction: column; justify-content: space-between; gap: var(--sd-space-3); }
-.now-idle[hidden],
-.now-running[hidden] { display: none; }
-.now-task { display: flex; flex-direction: column; min-width: 0; flex: none; }
+/* 表盘右侧：空闲时是这件事 + 开始，专注中是这件事 + 暂停 / +5 / 结束；表盘本身不动。 */
+.now-side { flex: 0 1 auto; min-width: 0; max-width: 250px; display: flex; flex-direction: column; gap: var(--sd-space-3); }
+.now-side[hidden] { display: none; }
 .now-chip {
   flex: none;
   display: inline-flex;
@@ -1381,70 +1377,58 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
 .now-due b[data-tone='today'],
 .now-due b[data-tone='overdue'] { color: var(--sd-warning); }
 
-/* 圆环与右侧控件作为一组在框里水平居中。 */
+/* 表盘与右侧作为一组在框里水平居中；这一块吃掉卡片多出来的高度。 */
 .now-focus {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start; /* 表盘固定在左边：空闲、专注、休息切换时不挪位置 */
   gap: var(--sd-space-6);
-  flex: none;
-  padding: var(--sd-space-3) 18px;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: var(--sd-space-3) var(--sd-space-6);
   border-radius: var(--sd-radius-control);
   background: var(--sd-surface-hover);
   box-shadow: inset 0 0 0 1px var(--sd-hairline);
 }
-/* 时间圆盘：一圈就是这一轮的时长，开始时纯白，走过的时间从 12 点顺时针慢慢染蓝；每分钟一格刻度。
-   暂停变灰、休息是薄荷色（扇形颜色由 home.js 换渐变）。不显示数字，悬停才浮出还剩几分钟。 */
-.now-disc { position: relative; flex: none; width: 144px; height: 144px; }
-.now-disc.big { width: 190px; height: 190px; }
-.now-disc-svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.now-disc-face { fill: #ffffff; stroke: rgba(23, 50, 80, 0.1); stroke-width: 0.8; }
-.now-disc-shine { fill: none; stroke: var(--sd-hairline); stroke-width: 0.8; }
-.now-disc-ticks line { stroke-linecap: round; }
-.now-disc-ticks .minor { stroke: rgba(23, 50, 80, 0.14); stroke-width: 0.6; }
-.now-disc-ticks .major { stroke: rgba(23, 50, 80, 0.32); stroke-width: 0.9; }
-.now-disc-knob { fill: var(--sd-surface-selected); stroke: rgba(23, 50, 80, 0.12); stroke-width: 0.8; }
-.now-disc-peek {
+/* 拉环表盘（参考锤子时钟）：一圈 60 分钟，蓝色弧是剩下的时间，拉环停在弧的末端；
+   拖拉环或点表盘定时长，整分钟吸附，松手回弹；计时中拉环慢慢退回 12 点。暂停变灰，休息是薄荷色。 */
+.now-dial { position: relative; flex: none; width: 176px; height: 176px; border-radius: 50%; cursor: grab; touch-action: none; user-select: none; }
+.now-dial.is-dragging { cursor: grabbing; }
+.now-dial:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--sd-accent-soft); }
+.now-dial-svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.now-dial-face { fill: var(--sd-surface-hover); stroke: var(--sd-hairline); stroke-width: 1; }
+.now-dial-ticks line { stroke-linecap: round; }
+.now-dial-ticks .minor { stroke: var(--sd-divider); stroke-width: 0.6; }
+.now-dial-ticks .major { stroke: var(--sd-text-4); stroke-width: 0.9; }
+.now-dial-track { fill: none; stroke: var(--sd-accent-tint); stroke-width: 7; }
+.now-dial-arc { fill: none; stroke: url(#now-dial-tint); stroke-width: 7; stroke-linecap: round; }
+.now-dial-arc.lap { stroke: var(--sd-accent-strong); }
+.now-dial-stop-a { stop-color: color-mix(in srgb, var(--sd-accent) 55%, var(--sd-surface-selected)); }
+.now-dial-stop-b { stop-color: var(--sd-accent-strong); }
+.now-dial[data-tone='paused'] .now-dial-arc { stroke: var(--sd-text-4); }
+.now-dial[data-tone='break'] .now-dial-arc { stroke: var(--sd-success); }
+.now-dial-well { fill: var(--sd-surface-inset); stroke: var(--sd-hairline); stroke-width: 1; }
+.now-dial-tab { cursor: grab; }
+.now-dial-tab-knob { fill: var(--sd-surface-selected); stroke: var(--sd-accent); stroke-width: 1; }
+.now-dial-tab-ring { fill: none; stroke: var(--sd-accent); stroke-width: 1.6; }
+.now-dial[data-tone='paused'] .now-dial-tab-ring { stroke: var(--sd-text-4); }
+.now-dial[data-tone='break'] .now-dial-tab-ring { stroke: var(--sd-success); }
+.now-dial.is-dragging .now-dial-tab-knob { stroke-width: 1.6; }
+.now-dial[data-tone='paused'] .now-dial-tab-knob { stroke: var(--sd-text-4); }
+.now-dial[data-tone='break'] .now-dial-tab-knob { stroke: var(--sd-success); }
+.now-dial.is-empty .now-dial-tab { opacity: 0; }
+.now-dial-read {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  padding: 6px 12px;
-  border-radius: var(--sd-radius-pill);
-  background: var(--sd-surface-selected);
-  box-shadow: var(--sd-shadow-float);
-  color: var(--sd-text-1);
-  font-size: var(--sd-fs-secondary);
-  font-weight: var(--sd-fw-medium);
-  white-space: nowrap;
-  opacity: 0;
-  transform: translate(-50%, -50%) scale(0.96);
-  transition: opacity var(--sd-duration-fast) var(--sd-ease-out), transform var(--sd-duration-fast) var(--sd-ease-out);
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
   pointer-events: none;
 }
-.now-disc:hover .now-disc-peek { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-.now-focus-side { flex: 0 1 auto; min-width: 0; max-width: 236px; display: flex; flex-direction: column; gap: var(--sd-space-3); }
-.now-seg {
-  display: inline-flex;
-  align-self: flex-start;
-  gap: 2px;
-  padding: 3px;
-  border-radius: var(--sd-radius-pill);
-  background: var(--sd-accent-tint);
-}
-.now-seg button {
-  height: 26px;
-  padding: 0 12px;
-  border: 0;
-  border-radius: var(--sd-radius-pill);
-  background: none;
-  color: var(--sd-text-2);
-  font: var(--sd-fw-medium) var(--sd-fs-secondary) var(--sd-font);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  cursor: pointer;
-}
-.now-seg button:hover { color: var(--sd-text-1); }
-.now-seg button[aria-checked='true'] { background: var(--sd-surface-selected); color: var(--sd-text-1); box-shadow: 0 1px 3px rgba(23, 50, 80, 0.14); }
+.now-dial-read b { color: var(--sd-text-1); font-size: var(--sd-fs-numeral); font-weight: var(--sd-fw-semibold); line-height: 1; font-variant-numeric: tabular-nums; }
+.now-dial-read small { color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
 .now-actions { display: flex; align-items: center; gap: var(--sd-space-2); flex-wrap: wrap; }
 .now-button {
   display: inline-flex;
@@ -1475,8 +1459,7 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
 .now-button.ghost:hover { background: var(--sd-accent-tint); color: var(--sd-text-1); }
 .now-button.danger,
 .now-button.danger:hover { color: var(--sd-danger); }
-.now-button:focus-visible,
-.now-seg button:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
+.now-button:focus-visible { outline: 2px solid var(--sd-accent); outline-offset: 2px; }
 .now-hint { margin: 0; color: var(--sd-text-3); font-size: var(--sd-fs-caption); line-height: 1.5; }
 
 .now-next { display: flex; flex-direction: column; min-height: 0; flex: none; }
@@ -1537,10 +1520,8 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
 .home-now[data-state='paused'] .now-label::before { background: var(--sd-text-4); box-shadow: 0 0 0 4px var(--sd-accent-tint); }
 .home-now[data-state='break'] .now-label { color: var(--sd-success); }
 .home-now[data-state='break'] .now-label::before { background: var(--sd-success); box-shadow: 0 0 0 4px var(--sd-success-soft); }
-.now-running { flex: 1; display: flex; align-items: center; justify-content: center; gap: 30px; padding: 4px 4px 0; }
-.now-running-side { flex: 0 1 auto; min-width: 0; max-width: 260px; display: flex; flex-direction: column; gap: 10px; }
-.now-running .now-task-meta { flex-wrap: wrap; row-gap: 6px; }
-.now-running .now-title { margin: 0; display: -webkit-box; white-space: normal; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.now-side .now-task-meta { flex-wrap: wrap; row-gap: 6px; }
+.now-side .now-title { margin: 0; display: -webkit-box; white-space: normal; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .now-tomatoes { display: flex; align-items: center; gap: var(--sd-space-2); color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
 .now-tomatoes[hidden] { display: none; }
 .now-tomatoes i { flex: none; width: 22px; height: 6px; border-radius: var(--sd-radius-pill); background: var(--sd-divider); }
