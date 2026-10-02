@@ -101,7 +101,8 @@ app.whenReady().then(async () => {
   assert.equal(result.nextDisabled, true, 'no future months');
   assert.equal(result.todayDisabled, true);
   assert.equal(result.tabVisible, true);
-  if (result.day3) {
+  // Day 3 only has data once it has happened (on the 1st and 2nd of a month it is still ahead).
+  if (result.day3 && info.todayDate >= 3) {
     assert.match(result.day3.title, /月3日 周[日一二三四五六]$/);
     assert.deepEqual(result.day3.metrics.map((metric) => metric[0]), ['工作时长', '专注', '最长连续', '收工时间']);
     assert.equal(result.day3.metrics[0][1], '10 小时 30 分');
