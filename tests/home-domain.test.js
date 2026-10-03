@@ -38,8 +38,8 @@ test('the pull-ring dial: one turn is an hour, the arc starts at 12 o\'clock', (
   assert.match(Home.dialArc(45, 40), /^M50 10A40 40 0 1 1 10 50$/);
   assert.match(Home.dialArc(90, 40), /^M50 10A40 40 0 1 1 50 90A40 40 0 1 1 50 10$/, 'a full lap is a full circle');
   const ticks = Home.dialTicks();
-  assert.equal(ticks.length, 60);
-  assert.equal(ticks.filter((tick) => tick.major).length, 12);
+  assert.equal(ticks.length, 24, 'sparse ticks, one every 2.5 minutes');
+  assert.equal(ticks.filter((tick) => tick.major).length, 4, '0 / 15 / 30 / 45');
   assert.equal(Math.round(Home.dialMinutesAt(50, 0, 50, 50)), 0);
   assert.equal(Math.round(Home.dialMinutesAt(100, 50, 50, 50)), 15);
   assert.equal(Math.round(Home.dialMinutesAt(0, 50, 50, 50)), 45);

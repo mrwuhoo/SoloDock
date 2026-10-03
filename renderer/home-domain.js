@@ -103,12 +103,13 @@
     return `${top}A${r} ${r} 0 ${m > DIAL_MINUTES / 2 ? 1 : 0} 1 ${end.x} ${end.y}`;
   }
 
-  // 一圈 60 格刻度，每 5 分钟一格长刻度。
+  // 一圈 24 格稀疏刻度（每 2.5 分钟一格），0 / 15 / 30 / 45 是长刻度。
   function dialTicks(cx = 50, cy = 50, outer = 47) {
-    return Array.from({ length: DIAL_MINUTES }, (_, index) => {
-      const major = index % 5 === 0;
+    return Array.from({ length: 24 }, (_, slot) => {
+      const index = slot * 2.5;
+      const major = slot % 6 === 0;
       const a = dialPoint(index, outer, cx, cy);
-      const b = dialPoint(index, major ? outer - 4 : outer - 2, cx, cy);
+      const b = dialPoint(index, major ? outer - 3.5 : outer - 2.2, cx, cy);
       return { x1: a.x, y1: a.y, x2: b.x, y2: b.y, major };
     });
   }

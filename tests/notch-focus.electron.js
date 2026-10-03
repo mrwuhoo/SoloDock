@@ -784,8 +784,8 @@ async function main() {
         const whileHidden = window.NotchPomodoro.state().remaining;
         window.NotchHome.setModuleVisible('now', true);
         await new Promise((resolve) => setTimeout(resolve, 20));
-        const shown = document.querySelector('#now-dial .now-dial-read').textContent;
-        const expected = Math.ceil(window.NotchPomodoro.state().remaining / 60) + '分钟后结束';
+        const shown = document.querySelector('#now-dial .now-dial-read b').textContent;
+        const expected = String(Math.ceil(window.NotchPomodoro.state().remaining / 60));
         window.NotchPomodoro.finish();
         return { before, whileHidden, shown, expected, running: document.getElementById('home-now').dataset.state };
       })()

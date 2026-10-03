@@ -118,7 +118,7 @@
   // 参考锤子时钟的拉环计时器：一圈 60 分钟，从 12 点顺时针拖拉环定时长，整分钟吸附，拖过头有阻尼、松手回弹。
   // 蓝色弧是剩下的时间：计时中拉环沿表盘慢慢退回 12 点；超过 60 分钟的部分叠在第二圈。计时中也能再拨。
   const SVG_NS = 'http://www.w3.org/2000/svg';
-  const ARC_R = 40;
+  const ARC_R = 37;
   const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   function svgNode(tag, attrs, parent) {
@@ -135,7 +135,9 @@
     const gradient = svgNode('linearGradient', { id: 'now-dial-tint', x1: 0, y1: 0, x2: 1, y2: 1 }, defs);
     svgNode('stop', { offset: 0, class: 'now-dial-stop-a' }, gradient);
     svgNode('stop', { offset: 1, class: 'now-dial-stop-b' }, gradient);
-    svgNode('circle', { cx: 50, cy: 50, r: 49, class: 'now-dial-face' }, root);
+    // 比例参考温控旋钮：外圈稀疏刻度与 0/15/30/45，浅色底盘上一道粗弧，
+    // 弧端是比弧更粗的白色旋钮，中间凸起的白色圆盘写分钟数。
+    svgNode('circle', { cx: 50, cy: 50, r: 42, class: 'now-dial-bed' }, root);
     const ticks = svgNode('g', { class: 'now-dial-ticks' }, root);
     for (const tick of Home.dialTicks(50, 50, 47.5)) {
       svgNode('line', { x1: tick.x1, y1: tick.y1, x2: tick.x2, y2: tick.y2, class: tick.major ? 'major' : 'minor' }, ticks);
@@ -143,23 +145,35 @@
     svgNode('circle', { cx: 50, cy: 50, r: ARC_R, class: 'now-dial-track' }, root);
     const arc = svgNode('path', { class: 'now-dial-arc', d: '' }, root);
     const lap = svgNode('path', { class: 'now-dial-arc lap', d: '' }, root);
-    svgNode('circle', { cx: 50, cy: 50, r: 32, class: 'now-dial-well' }, root);
+    svgNode('circle', { cx: 50, cy: 50, r: 28.5, class: 'now-dial-disc' }, root);
     const tab = svgNode('g', { class: 'now-dial-tab' }, root);
-    svgNode('circle', { r: 7.5, class: 'now-dial-tab-knob' }, tab);
-    svgNode('circle', { r: 3, class: 'now-dial-tab-ring' }, tab);
+    svgNode('circle', { r: 8, class: 'now-dial-tab-knob' }, tab);
+    for (const [value, where] of [[0, 'top'], [15, 'right'], [30, 'bottom'], [45, 'left']]) {
+      const mark = document.createElement('span');
+      mark.className = 'now-dial-mark';
+      mark.dataset.at = where;
+      mark.setAttribute('aria-hidden', 'true');
+      mark.textContent = String(value);
+      host.append(mark);
+    }
     const read = document.createElement('div');
     read.className = 'now-dial-read';
     read.setAttribute('aria-hidden', 'true');
+    const line = document.createElement('span');
     const number = document.createElement('b');
     const unit = document.createElement('small');
-    read.append(number, unit);
+    unit.textContent = '分钟';
+    line.append(number, unit);
+    const caption = document.createElement('em');
+    read.append(line, caption);
     host.prepend(root);
     host.append(read);
-    return { host, arc, lap, tab, number, unit, shown: Home.DEFAULT_FOCUS_MINUTES, drag: null, anim: 0, landed: 0 };
+    return { host, arc, lap, tab, number, caption, shown: Home.DEFAULT_FOCUS_MINUTES, drag: null, anim: 0, landed: 0 };
   })();
 
   // minutes 可以带小数：计时中拉环每秒退一点。readout 是表盘中间的整数。
-  function paintDial(minutes, readout, unitText, tone) {
+  // caption 是数字下面那行小字：空闲写「专注时长」，计时中写几点结束。
+  function paintDial(minutes, readout, caption, tone) {
     const m = Math.max(0, Math.min(Home.MAX_FOCUS_MINUTES, Number(minutes) || 0));
     const first = Math.min(Home.DIAL_MINUTES, m);
     const second = Math.max(0, m - Home.DIAL_MINUTES);
@@ -169,7 +183,7 @@
     const tabAt = Home.dialPoint(at, ARC_R);
     dial.tab.setAttribute('transform', `translate(${tabAt.x} ${tabAt.y})`);
     dial.number.textContent = String(readout);
-    dial.unit.textContent = unitText;
+    dial.caption.textContent = caption;
     dial.host.dataset.tone = tone;
     dial.host.classList.toggle('is-empty', m <= 0.01);
   }
@@ -190,7 +204,7 @@
     const { state, phase } = dialPhase();
     const minutes = Home.dialSettle(value);
     const tone = phase === 'idle' ? 'focus' : phase === 'paused' ? 'paused' : phase === 'break' ? 'break' : 'focus';
-    paintDial(value, minutes, phase === 'idle' ? '分钟' : state.mode === 'break' ? '分钟后休息结束' : '分钟后结束', tone);
+    paintDial(value, minutes, phase === 'idle' ? '专注时长' : state.mode === 'break' ? '休息还剩' : '还剩', tone);
     dial.host.setAttribute('aria-valuenow', String(minutes));
   }
 
@@ -322,7 +336,7 @@
       el.due.textContent = '挑一件事，或者直接开始专注';
     }
     el.switcher.textContent = task ? '换一件事' : '选一件事';
-    if (!dial.drag && !dial.host.classList.contains('is-dragging')) paintDial(minutes, minutes, '分钟', 'focus');
+    if (!dial.drag && !dial.host.classList.contains('is-dragging')) paintDial(minutes, minutes, '专注时长', 'focus');
     el.dial.setAttribute('aria-label', '专注时长');
     el.dial.setAttribute('aria-valuenow', String(minutes));
     el.dial.setAttribute('aria-valuetext', `专注 ${minutes} 分钟`);
@@ -401,7 +415,8 @@
     const tone = state.mode === 'break' ? 'break' : state.running ? 'focus' : 'paused';
     const left = Home.remainingText(state.remaining, state.mode);
     if (!dial.drag && !dial.host.classList.contains('is-dragging')) {
-      paintDial(state.remaining / 60, Home.remainingMinutes(state.remaining), state.mode === 'break' ? '分钟后休息结束' : '分钟后结束', tone);
+      const ends = state.running ? `${Home.clock(state.endsAt)} 结束` : '已暂停';
+      paintDial(state.remaining / 60, Home.remainingMinutes(state.remaining), state.mode === 'break' && state.running ? `休息 · ${ends}` : ends, tone);
     }
     el.dial.setAttribute('aria-label', state.mode === 'break' ? '休息剩余时间' : '专注剩余时间');
     el.dial.setAttribute('aria-valuenow', String(Math.max(1, Home.remainingMinutes(state.remaining))));

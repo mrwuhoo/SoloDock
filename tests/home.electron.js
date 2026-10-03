@@ -121,10 +121,10 @@ app.whenReady().then(async () => {
   assert.equal(idle.due, '今天 18:00 截止 · 还剩 3 小时 40 分');
   assert.equal(idle.dial, '专注 25 分钟');
   assert.equal(idle.dialNow, '25');
-  assert.equal(idle.readout, '25分钟', 'the length is always readable in the middle of the dial');
+  assert.equal(idle.readout, '25分钟专注时长', 'the length is always readable in the middle of the dial');
   assert.match(idle.arc, /^M50 \d/, 'the ring is pulled out to 25 minutes before focus starts');
   assert.equal(idle.lap, '', 'no second lap under an hour');
-  assert.equal(idle.ticks, 60, 'one turn of the dial is an hour');
+  assert.equal(idle.ticks, 24, 'one turn of the dial is an hour, sparse ticks');
   assert.deepEqual(idle.next, [['16:00', '客户电话 · 报价确认', '日程 · 1 小时 40 分后'], ['20:30', '周复盘', '日程 · 6 小时 10 分后']]);
   assert.equal(idle.key, '⌥⇧N');
   assert.equal(idle.runningHidden, true);
@@ -263,7 +263,7 @@ app.whenReady().then(async () => {
     reported: true,
   });
   assert.match(focus.running.meta, /^第 4 个番茄 · 14:4\d 结束$/);
-  assert.equal(focus.running.remaining, '25分钟后结束', 'the dial shows the minutes left, same place as before starting');
+  assert.match(focus.running.remaining, /^25分钟14:4\d 结束$/, 'the dial shows the minutes left and when it ends, same place as before starting');
   assert.match(focus.running.discLabel, /^还剩 25 分钟，14:4\d 结束$/);
   assert.deepEqual({ ...focus.paused, meta: undefined }, { state: 'paused', label: '已暂停', button: '继续', meta: undefined, reported: false, tone: 'paused' });
   assert.equal(focus.paused.meta, '第 4 个番茄 · 已暂停');

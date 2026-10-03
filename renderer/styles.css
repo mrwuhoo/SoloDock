@@ -1382,41 +1382,55 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   display: flex;
   align-items: center;
   justify-content: flex-start; /* 表盘固定在左边：空闲、专注、休息切换时不挪位置 */
-  gap: var(--sd-space-6);
+  gap: var(--sd-space-5);
   flex: 1 1 auto;
   min-height: 0;
-  padding: var(--sd-space-3) var(--sd-space-6);
+  padding: var(--sd-space-3) var(--sd-space-5);
   border-radius: var(--sd-radius-control);
   background: var(--sd-surface-hover);
   box-shadow: inset 0 0 0 1px var(--sd-hairline);
 }
 /* 拉环表盘（参考锤子时钟）：一圈 60 分钟，蓝色弧是剩下的时间，拉环停在弧的末端；
    拖拉环或点表盘定时长，整分钟吸附，松手回弹；计时中拉环慢慢退回 12 点。暂停变灰，休息是薄荷色。 */
-.now-dial { position: relative; flex: none; width: 176px; height: 176px; border-radius: 50%; cursor: grab; touch-action: none; user-select: none; }
+.now-dial { position: relative; flex: none; width: 188px; height: 188px; border-radius: 50%; cursor: grab; touch-action: none; user-select: none; }
 .now-dial.is-dragging { cursor: grabbing; }
 .now-dial:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--sd-accent-soft); }
 .now-dial-svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.now-dial-face { fill: var(--sd-surface-hover); stroke: var(--sd-hairline); stroke-width: 1; }
+.now-dial-bed { fill: var(--sd-accent-tint); }
 .now-dial-ticks line { stroke-linecap: round; }
-.now-dial-ticks .minor { stroke: var(--sd-divider); stroke-width: 0.6; }
-.now-dial-ticks .major { stroke: var(--sd-text-4); stroke-width: 0.9; }
-.now-dial-track { fill: none; stroke: var(--sd-accent-tint); stroke-width: 7; }
-.now-dial-arc { fill: none; stroke: url(#now-dial-tint); stroke-width: 7; stroke-linecap: round; }
+.now-dial-ticks .minor { stroke: var(--sd-text-4); stroke-width: 0.6; opacity: 0.55; }
+.now-dial-ticks .major { stroke: var(--sd-text-3); stroke-width: 0.8; }
+.now-dial-track { fill: none; stroke: var(--sd-accent-soft); stroke-width: 8; }
+.now-dial-arc { fill: none; stroke: url(#now-dial-tint); stroke-width: 8; stroke-linecap: round; }
 .now-dial-arc.lap { stroke: var(--sd-accent-strong); }
 .now-dial-stop-a { stop-color: color-mix(in srgb, var(--sd-accent) 55%, var(--sd-surface-selected)); }
 .now-dial-stop-b { stop-color: var(--sd-accent-strong); }
 .now-dial[data-tone='paused'] .now-dial-arc { stroke: var(--sd-text-4); }
 .now-dial[data-tone='break'] .now-dial-arc { stroke: var(--sd-success); }
-.now-dial-well { fill: var(--sd-surface-inset); stroke: var(--sd-hairline); stroke-width: 1; }
+/* 中间凸起的圆盘与弧端旋钮：只用很淡的冰蓝投影表现「凸起」，不是浮层阴影。 */
+.now-dial-disc {
+  fill: var(--sd-surface-selected);
+  filter: drop-shadow(0 2px 4px color-mix(in srgb, var(--sd-accent-strong) 16%, transparent));
+}
 .now-dial-tab { cursor: grab; }
-.now-dial-tab-knob { fill: var(--sd-surface-selected); stroke: var(--sd-accent); stroke-width: 1; }
-.now-dial-tab-ring { fill: none; stroke: var(--sd-accent); stroke-width: 1.6; }
-.now-dial[data-tone='paused'] .now-dial-tab-ring { stroke: var(--sd-text-4); }
-.now-dial[data-tone='break'] .now-dial-tab-ring { stroke: var(--sd-success); }
-.now-dial.is-dragging .now-dial-tab-knob { stroke-width: 1.6; }
-.now-dial[data-tone='paused'] .now-dial-tab-knob { stroke: var(--sd-text-4); }
-.now-dial[data-tone='break'] .now-dial-tab-knob { stroke: var(--sd-success); }
+.now-dial-tab-knob {
+  fill: var(--sd-surface-selected);
+  filter: drop-shadow(0 1.5px 2.5px color-mix(in srgb, var(--sd-accent-strong) 30%, transparent));
+}
+.now-dial.is-dragging .now-dial-tab-knob { filter: drop-shadow(0 2px 4px color-mix(in srgb, var(--sd-accent-strong) 40%, transparent)); }
 .now-dial.is-empty .now-dial-tab { opacity: 0; }
+.now-dial-mark {
+  position: absolute;
+  color: var(--sd-text-4);
+  font-size: var(--sd-fs-caption);
+  line-height: 1;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+.now-dial-mark[data-at='top'] { left: 50%; top: 2.5%; }
+.now-dial-mark[data-at='right'] { left: 97.5%; top: 50%; }
+.now-dial-mark[data-at='bottom'] { left: 50%; top: 97.5%; }
+.now-dial-mark[data-at='left'] { left: 2.5%; top: 50%; }
 .now-dial-read {
   position: absolute;
   inset: 0;
@@ -1424,11 +1438,13 @@ img.links-favicon { background: #fff; box-shadow: inset 0 0 0 1px var(--sd-divid
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
+  gap: var(--sd-space-1);
   pointer-events: none;
 }
-.now-dial-read b { color: var(--sd-text-1); font-size: var(--sd-fs-numeral); font-weight: var(--sd-fw-semibold); line-height: 1; font-variant-numeric: tabular-nums; }
-.now-dial-read small { color: var(--sd-text-3); font-size: var(--sd-fs-caption); }
+.now-dial-read span { display: flex; align-items: baseline; gap: 2px; }
+.now-dial-read b { color: var(--sd-text-1); font-size: var(--sd-fs-numeral); font-weight: var(--sd-fw-regular); line-height: 1; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.now-dial-read small { color: var(--sd-text-2); font-size: var(--sd-fs-secondary); }
+.now-dial-read em { color: var(--sd-text-3); font-size: var(--sd-fs-caption); font-style: normal; }
 .now-actions { display: flex; align-items: center; gap: var(--sd-space-2); flex-wrap: wrap; }
 .now-button {
   display: inline-flex;
