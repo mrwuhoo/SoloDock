@@ -39,7 +39,7 @@ app.on('web-contents-created', (_event, contents) => {
       await new Promise((resolve) => setTimeout(resolve, 250));
       if (contents.isDestroyed()) break;
       try {
-        state = await contents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,focus:document.getElementById('now-disc')?.getAttribute('aria-label') ?? '',recordings:document.querySelectorAll('.recording-item').length})`);
+        state = await contents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,focus:document.getElementById('now-dial')?.getAttribute('aria-valuetext') ?? '',recordings:document.querySelectorAll('.recording-item').length})`);
       } catch (error) { continue; }
       if (JSON.stringify(state) === JSON.stringify(expected)) break;
     }

@@ -14,10 +14,10 @@ async function main() {
     await window.webContents.executeJavaScript(`
       localStorage.clear();
       localStorage.setItem('notch-recordings', JSON.stringify([{id:'retained-recording',createdAt:1788709776699,durationMs:1558,transcript:'',audioPath:'recordings/retained.webm',mimeType:'audio/webm',title:'Saved recording',category:'未分类'}]));
-      document.querySelector('#now-duration [data-minutes="45"]').click();
+      window.NotchPomodoro.setMinutes(45);
     `);
     await window.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
-    const state = await window.webContents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,focus:document.getElementById('now-disc').getAttribute('aria-label'),recordings:document.querySelectorAll('.recording-item').length})`);
+    const state = await window.webContents.executeJavaScript(`({home:!!window.NotchHome,workspace:!!window.NotchWorkspace,focus:document.getElementById('now-dial').getAttribute('aria-valuetext'),recordings:document.querySelectorAll('.recording-item').length})`);
     assert.deepEqual(errors, [], 'Retained profile must initialize without renderer errors');
     assert.deepEqual(state, {home:true,workspace:true,focus:'专注 45 分钟',recordings:1});
     console.log('Retained workspace renderer checks passed');

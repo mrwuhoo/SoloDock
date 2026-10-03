@@ -24,13 +24,10 @@
     chip: get('now-task-chip'),
     title: get('now-task-title'),
     due: get('now-task-due'),
-    disc: get('now-disc'),
-    duration: get('now-duration'),
+    dial: get('now-dial'),
     start: get('now-start'),
     switcher: get('now-switch'),
     next: get('now-next-list'),
-    bigDisc: get('now-disc-big'),
-    peek: get('now-peek'),
     runChip: get('now-running-chip'),
     runTitle: get('now-running-title'),
     runDue: get('now-running-due'),
@@ -117,12 +114,12 @@
     if (line.rest) target.append(` · ${line.rest}`);
   }
 
-  // ---------------- 时间圆盘 ----------------
-  // 一圈就是这一轮的时长：开始时表盘纯白，走过的时间从 12 点顺时针慢慢染蓝，走完整圈正好结束。
-  // 每分钟一格刻度，所以没开始时也看得出这一轮有多长。
+  // ---------------- 拉环表盘 ----------------
+  // 参考锤子时钟的拉环计时器：一圈 60 分钟，从 12 点顺时针拖拉环定时长，整分钟吸附，拖过头有阻尼、松手回弹。
+  // 蓝色弧是剩下的时间：计时中拉环沿表盘慢慢退回 12 点；超过 60 分钟的部分叠在第二圈。计时中也能再拨。
   const SVG_NS = 'http://www.w3.org/2000/svg';
-  const WEDGE_R = 38;
-  let discSeq = 0;
+  const ARC_R = 37;
+  const reduceMotion = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
   function svgNode(tag, attrs, parent) {
     const node = document.createElementNS(SVG_NS, tag);
@@ -131,46 +128,194 @@
     return node;
   }
 
-  function buildDisc(host) {
-    if (!host) return null;
-    const id = `now-disc-${++discSeq}`;
-    const root = svgNode('svg', { viewBox: '0 0 100 100', class: 'now-disc-svg', 'aria-hidden': 'true' });
+  const dial = (() => {
+    const host = el.dial;
+    const root = svgNode('svg', { viewBox: '-6 -6 112 112', class: 'now-dial-svg', 'aria-hidden': 'true' });
     const defs = svgNode('defs', {}, root);
-    for (const [tone, from, to] of [['focus', '#86bdf6', '#2f6fca'], ['paused', '#bdcadb', '#8fa2ba'], ['break', '#a6e3cb', '#3da67f']]) {
-      const gradient = svgNode('linearGradient', { id: `${id}-${tone}`, x1: 0, y1: 0, x2: 1, y2: 1 }, defs);
-      svgNode('stop', { offset: 0, 'stop-color': from }, gradient);
-      svgNode('stop', { offset: 1, 'stop-color': to }, gradient);
+    const gradient = svgNode('linearGradient', { id: 'now-dial-tint', x1: 0, y1: 0, x2: 1, y2: 1 }, defs);
+    svgNode('stop', { offset: 0, class: 'now-dial-stop-a' }, gradient);
+    svgNode('stop', { offset: 1, class: 'now-dial-stop-b' }, gradient);
+    // 比例参考温控旋钮：外圈稀疏刻度与 0/15/30/45，浅色底盘上一道粗弧，
+    // 弧端是比弧更粗的白色旋钮，中间凸起的白色圆盘写分钟数。
+    svgNode('circle', { cx: 50, cy: 50, r: 42, class: 'now-dial-bed' }, root);
+    const ticks = svgNode('g', { class: 'now-dial-ticks' }, root);
+    for (const tick of Home.dialTicks(50, 50, 47.5)) {
+      svgNode('line', { x1: tick.x1, y1: tick.y1, x2: tick.x2, y2: tick.y2, class: tick.major ? 'major' : 'minor' }, ticks);
     }
-    svgNode('circle', { cx: 50, cy: 50, r: 48.5, class: 'now-disc-face' }, root);
-    svgNode('circle', { cx: 50, cy: 50, r: 47.4, class: 'now-disc-shine' }, root);
-    const wedge = svgNode('path', { class: 'now-disc-wedge', fill: `url(#${id}-focus)`, d: '' }, root);
-    const ticks = svgNode('g', { class: 'now-disc-ticks' }, root);
-    svgNode('circle', { cx: 50, cy: 50, r: 6.5, class: 'now-disc-knob' }, root);
+    svgNode('circle', { cx: 50, cy: 50, r: ARC_R, class: 'now-dial-track' }, root);
+    const arc = svgNode('path', { class: 'now-dial-arc', d: '' }, root);
+    const lap = svgNode('path', { class: 'now-dial-arc lap', d: '' }, root);
+    svgNode('circle', { cx: 50, cy: 50, r: 28.5, class: 'now-dial-disc' }, root);
+    const tab = svgNode('g', { class: 'now-dial-tab' }, root);
+    svgNode('circle', { r: 8, class: 'now-dial-tab-knob' }, tab);
+    for (const [value, where] of [[0, 'top'], [15, 'right'], [30, 'bottom'], [45, 'left']]) {
+      const mark = document.createElement('span');
+      mark.className = 'now-dial-mark';
+      mark.dataset.at = where;
+      mark.setAttribute('aria-hidden', 'true');
+      mark.textContent = String(value);
+      host.append(mark);
+    }
+    const read = document.createElement('div');
+    read.className = 'now-dial-read';
+    read.setAttribute('aria-hidden', 'true');
+    const line = document.createElement('span');
+    const number = document.createElement('b');
+    const unit = document.createElement('small');
+    unit.textContent = '分钟';
+    line.append(number, unit);
+    const caption = document.createElement('em');
+    read.append(line, caption);
     host.prepend(root);
-    return { id, wedge, ticks, minutes: 0, tone: 'focus' };
+    host.append(read);
+    return { host, arc, lap, tab, number, caption, shown: Home.DEFAULT_FOCUS_MINUTES, drag: null, anim: 0, landed: 0 };
+  })();
+
+  // minutes 可以带小数：计时中拉环每秒退一点。readout 是表盘中间的整数。
+  // caption 是数字下面那行小字：空闲写「专注时长」，计时中写几点结束。
+  function paintDial(minutes, readout, caption, tone) {
+    const m = Math.max(0, Math.min(Home.MAX_FOCUS_MINUTES, Number(minutes) || 0));
+    const first = Math.min(Home.DIAL_MINUTES, m);
+    const second = Math.max(0, m - Home.DIAL_MINUTES);
+    dial.arc.setAttribute('d', Home.dialArc(first, ARC_R));
+    dial.lap.setAttribute('d', Home.dialArc(second, ARC_R));
+    const at = second > 0 ? second : first;
+    const tabAt = Home.dialPoint(at, ARC_R);
+    dial.tab.setAttribute('transform', `translate(${tabAt.x} ${tabAt.y})`);
+    dial.number.textContent = String(readout);
+    dial.caption.textContent = caption;
+    dial.host.dataset.tone = tone;
+    dial.host.classList.toggle('is-empty', m <= 0.01);
   }
 
-  function setTicks(disc, minutes) {
-    if (!disc || disc.minutes === minutes) return;
-    disc.minutes = minutes;
-    disc.ticks.replaceChildren();
-    for (const tick of Home.discTicks(minutes)) {
-      svgNode('line', { x1: tick.x1, y1: tick.y1, x2: tick.x2, y2: tick.y2, class: tick.major ? 'major' : 'minor' }, disc.ticks);
+  function dialPhase() {
+    const state = pomodoro()?.state?.() || { started: false };
+    return { state, phase: phaseOf(state) };
+  }
+
+  // 空闲时拨的是这一轮的时长；计时中拨的是「还剩多少」。
+  function dialValue() {
+    const { state, phase } = dialPhase();
+    if (phase === 'idle') return pomodoro()?.minutes?.() || Home.DEFAULT_FOCUS_MINUTES;
+    return Math.max(1, Home.remainingMinutes(state.remaining));
+  }
+
+  function paintDragging(value) {
+    const { state, phase } = dialPhase();
+    const minutes = Home.dialSettle(value);
+    const tone = phase === 'idle' ? 'focus' : phase === 'paused' ? 'paused' : phase === 'break' ? 'break' : 'focus';
+    paintDial(value, minutes, phase === 'idle' ? '专注时长' : state.mode === 'break' ? '休息还剩' : '还剩', tone);
+    dial.host.setAttribute('aria-valuenow', String(minutes));
+  }
+
+  function commitDial(minutes) {
+    const timer = pomodoro();
+    if (!timer) return;
+    const { phase } = dialPhase();
+    if (phase === 'idle') timer.setMinutes(minutes);
+    else timer.setRemaining(minutes * 60);
+  }
+
+  // 松手：带一点惯性停到最近的整分钟，越界的部分弹回（减弱动态效果时直接落位）。
+  function settleDial(from, to) {
+    cancelAnimationFrame(dial.anim);
+    clearTimeout(dial.landed);
+    commitDial(to);
+    const land = () => {
+      cancelAnimationFrame(dial.anim);
+      clearTimeout(dial.landed);
+      dial.host.classList.remove('is-dragging');
+      renderNow();
+    };
+    if (reduceMotion() || Math.abs(from - to) < 0.01) {
+      land();
+      return;
     }
+    const startedAt = performance.now();
+    const duration = 280;
+    const spring = (t) => 1 - Math.pow(1 - t, 3) + Math.sin(t * Math.PI) * 0.08;
+    const step = (now) => {
+      const t = Math.min(1, (now - startedAt) / duration);
+      paintDragging(from + (to - from) * spring(t));
+      if (t < 1) dial.anim = requestAnimationFrame(step);
+      else land();
+    };
+    dial.host.classList.add('is-dragging');
+    dial.anim = requestAnimationFrame(step);
+    // 窗口在后台时不会有动画帧，到点直接落位，表盘不会卡在半路。
+    dial.landed = setTimeout(land, duration + 120);
   }
 
-  // fraction 是已经走过的比例：0 纯白，1 整圈染蓝（暂停时灰，休息时薄荷色）。
-  function paintDisc(disc, fraction, tone) {
-    if (!disc) return;
-    if (disc.tone !== tone) {
-      disc.wedge.setAttribute('fill', `url(#${disc.id}-${tone})`);
-      disc.tone = tone;
-    }
-    disc.wedge.setAttribute('d', Home.wedgePath(50, 50, WEDGE_R, fraction));
+  function dialPointer(event) {
+    const box = dial.host.getBoundingClientRect();
+    const scale = 112 / box.width;
+    const x = (event.clientX - box.left) * scale - 6;
+    const y = (event.clientY - box.top) * scale - 6;
+    return { x, y, distance: Math.hypot(x - 50, y - 50), minutes: Home.dialMinutesAt(x, y, 50, 50) };
   }
 
-  const idleDisc = buildDisc(el.disc);
-  const runningDisc = buildDisc(el.bigDisc);
+  dial.host.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    const point = dialPointer(event);
+    if (point.distance < 26) return; // 中间的数字不是拨盘
+    event.preventDefault();
+    cancelAnimationFrame(dial.anim);
+    clearTimeout(dial.landed);
+    const current = dialValue();
+    const onTab = event.target.closest?.('.now-dial-tab');
+    // 点在表盘别处：拉环直接跳过去（停在当前这一圈）。
+    const lapBase = current > Home.DIAL_MINUTES ? Home.DIAL_MINUTES : 0;
+    const start = onTab ? current : Math.max(0.5, lapBase + point.minutes);
+    dial.drag = { raw: start, last: point.minutes, shown: start, at: performance.now(), speed: 0, pointer: event.pointerId };
+    try { dial.host.setPointerCapture(event.pointerId); } catch {}
+    dial.host.classList.add('is-dragging');
+    dial.host.focus({ preventScroll: true, focusVisible: false });
+    paintDragging(Home.dialResist(start));
+  });
+  dial.host.addEventListener('pointermove', (event) => {
+    const drag = dial.drag;
+    if (!drag || event.pointerId !== drag.pointer) return;
+    const point = dialPointer(event);
+    const now = performance.now();
+    const step = Home.dialStep(drag.last, point.minutes);
+    drag.last = point.minutes;
+    drag.raw += step;
+    // 阻尼：表盘跟手但略慢半拍；拖过 1–120 的范围只跟三成。
+    const target = Home.dialResist(drag.raw);
+    drag.speed = drag.speed * 0.6 + (step / Math.max(8, now - drag.at)) * 0.4;
+    drag.at = now;
+    drag.shown += (target - drag.shown) * 0.6;
+    paintDragging(drag.shown);
+  });
+  const endDrag = (event) => {
+    const drag = dial.drag;
+    if (!drag || event.pointerId !== drag.pointer) return;
+    dial.drag = null;
+    // 快速一甩才带惯性（最多 5 分钟）；停稳了再松手就落在手指下的那一格。
+    const still = performance.now() - drag.at > 90;
+    const fling = still || Math.abs(drag.speed) < 0.03 ? 0 : Math.max(-5, Math.min(5, drag.speed * 60));
+    settleDial(drag.shown, Home.dialSettle(Home.dialResist(drag.raw) + fling));
+  };
+  dial.host.addEventListener('pointerup', endDrag);
+  dial.host.addEventListener('pointercancel', endDrag);
+  dial.host.addEventListener('keydown', (event) => {
+    const steps = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 5, PageDown: -5 };
+    const current = dialValue();
+    let next = null;
+    if (event.key in steps) next = current + steps[event.key];
+    else if (event.key === 'Home') next = Home.MIN_FOCUS_MINUTES;
+    else if (event.key === 'End') next = Home.MAX_FOCUS_MINUTES;
+    if (next === null) return;
+    event.preventDefault();
+    event.stopPropagation();
+    settleDial(current, Home.dialSettle(next));
+  });
+  dial.host.addEventListener('wheel', (event) => {
+    if (!event.deltaY) return;
+    event.preventDefault();
+    const current = dialValue();
+    settleDial(current, Home.dialSettle(current + (event.deltaY < 0 ? 1 : -1)));
+  }, { passive: false });
 
   function renderIdle(now) {
     const task = currentTask(now);
@@ -191,14 +336,10 @@
       el.due.textContent = '挑一件事，或者直接开始专注';
     }
     el.switcher.textContent = task ? '换一件事' : '选一件事';
-    setTicks(idleDisc, minutes);
-    paintDisc(idleDisc, 0, 'focus');
-    el.disc.setAttribute('aria-label', `专注 ${minutes} 分钟`);
-    el.duration.querySelectorAll('[data-minutes]').forEach((button) => {
-      const on = Number(button.dataset.minutes) === minutes;
-      button.setAttribute('aria-checked', String(on));
-      button.tabIndex = on ? 0 : -1;
-    });
+    if (!dial.drag && !dial.host.classList.contains('is-dragging')) paintDial(minutes, minutes, '专注时长', 'focus');
+    el.dial.setAttribute('aria-label', '专注时长');
+    el.dial.setAttribute('aria-valuenow', String(minutes));
+    el.dial.setAttribute('aria-valuetext', `专注 ${minutes} 分钟`);
     renderNext(now, task);
   }
 
@@ -268,15 +409,18 @@
     tick(state);
   }
 
-  // 每秒只更新圆盘扇形、悬停提示与当前这个番茄的进度（完成数在切换状态时已经算好）。
+  // 每秒只更新表盘（拉环退回一点、中间的剩余分钟）与当前这个番茄的进度（完成数在切换状态时已经算好）。
   function tick(state, tomatoes = lastTomatoes) {
     const fraction = state.remaining / Math.max(1, state.session);
     const tone = state.mode === 'break' ? 'break' : state.running ? 'focus' : 'paused';
-    setTicks(runningDisc, Math.round(state.session / 60));
-    paintDisc(runningDisc, Home.elapsedFraction(state.remaining, state.session), tone);
     const left = Home.remainingText(state.remaining, state.mode);
-    el.peek.textContent = left;
-    el.bigDisc.setAttribute('aria-label', state.running ? `${left}，${Home.clock(state.endsAt)} 结束` : `已暂停，${left}`);
+    if (!dial.drag && !dial.host.classList.contains('is-dragging')) {
+      const ends = state.running ? `${Home.clock(state.endsAt)} 结束` : '已暂停';
+      paintDial(state.remaining / 60, Home.remainingMinutes(state.remaining), state.mode === 'break' && state.running ? `休息 · ${ends}` : ends, tone);
+    }
+    el.dial.setAttribute('aria-label', state.mode === 'break' ? '休息剩余时间' : '专注剩余时间');
+    el.dial.setAttribute('aria-valuenow', String(Math.max(1, Home.remainingMinutes(state.remaining))));
+    el.dial.setAttribute('aria-valuetext', state.running ? `${left}，${Home.clock(state.endsAt)} 结束` : `已暂停，${left}`);
     if (state.mode !== 'break') renderTomatoes(tomatoes, 1 - fraction);
   }
 
@@ -407,22 +551,6 @@
   }, true);
 
   // ---------------- 专注控制 ----------------
-  el.duration.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-minutes]');
-    if (!button) return;
-    pomodoro()?.setMinutes(Number(button.dataset.minutes));
-    renderNow();
-  });
-  el.duration.addEventListener('keydown', (event) => {
-    if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return;
-    event.preventDefault();
-    const choices = Home.FOCUS_CHOICES;
-    const current = choices.indexOf(pomodoro()?.minutes?.());
-    const next = choices[Math.max(0, Math.min(choices.length - 1, current + (event.key === 'ArrowRight' ? 1 : -1)))];
-    pomodoro()?.setMinutes(next);
-    renderNow();
-    el.duration.querySelector(`[data-minutes="${next}"]`)?.focus();
-  });
   el.start.addEventListener('click', () => {
     const timer = pomodoro();
     if (!timer) return;
