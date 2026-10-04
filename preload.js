@@ -146,6 +146,13 @@ contextBridge.exposeInMainWorld('notchAPI', {
     ipcRenderer.invoke('task-notification:activate', eventId),
   taskNotificationHover: (paused) =>
     ipcRenderer.send('task-notification:hover', paused === true),
+  // 休息陪伴（大猫）窗口
+  onBreakCatShow: (cb) => subscribe('break-cat:show', (event, payload) => cb(payload)),
+  onBreakCatUpdate: (cb) => subscribe('break-cat:update', (event, payload) => cb(payload)),
+  onBreakCatHide: (cb) => subscribe('break-cat:hide', () => cb()),
+  breakCatInteractive: (interactive) => ipcRenderer.send('break-cat:interactive', interactive === true),
+  breakCatDismiss: () => ipcRenderer.send('break-cat:dismiss'),
+  breakCatLeft: () => ipcRenderer.send('break-cat:left'),
 });
 
 // 在页面脚本运行前把数据文件夹里的工作区写入 LocalStorage（只补缺失的键），

@@ -1,0 +1,242 @@
+/*
+ * 休息陪伴 · 全屏透明窗口里的大猫与倒计时。
+ * 猫本身是带透明通道的视频；倒计时是和提醒卡片同一套冰蓝玻璃（见 tokens.css）。
+ * 位置由 break-cat.js 按屏幕大小算好写进 --cat-* 变量。
+ */
+:root {
+  color-scheme: light;
+  --cat-left: 0px;
+  --cat-top: 0px;
+  --cat-width: 0px;
+  --cat-height: 0px;
+  --pill-x: 50vw;
+  --pill-top: 70vh;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+  color: var(--sd-text-1);
+  font-family: var(--sd-font);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.break-cat {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* ---------------- 猫 ---------------- */
+.break-cat-stage {
+  position: absolute;
+  left: var(--cat-left);
+  top: var(--cat-top);
+  width: var(--cat-width);
+  height: var(--cat-height);
+  transform-origin: 50% 85%;
+  opacity: 0;
+  /* 特别宽的屏上画面右沿够不到屏幕边，让刚走进来的猫从这条边上淡出来，而不是被切一刀 */
+  -webkit-mask-image: linear-gradient(to left, transparent 0, #000 2.5%);
+  mask-image: linear-gradient(to left, transparent 0, #000 2.5%);
+  transition: opacity 320ms var(--sd-ease-out);
+}
+
+.break-cat.is-visible .break-cat-stage {
+  opacity: 1;
+}
+
+.break-cat.is-leaving .break-cat-stage {
+  opacity: 0;
+  transform: translateY(28px) scale(0.97);
+  transition:
+    opacity 560ms ease,
+    transform 640ms var(--sd-ease-out);
+}
+
+.break-cat-stage.is-patted {
+  animation: break-cat-pat 520ms var(--sd-ease-out);
+}
+
+@keyframes break-cat-pat {
+  0% { transform: none; }
+  30% { transform: scale(1.025, 0.97); }
+  65% { transform: scale(0.99, 1.015); }
+  100% { transform: none; }
+}
+
+.break-cat-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.break-cat-video[data-active='false'] {
+  visibility: hidden;
+}
+
+/* 睡着以后肚子轻轻起伏 */
+.break-cat.is-sleeping .break-cat-video[data-active='true'] {
+  transform-origin: 51% 90%;
+  animation: break-cat-breathe 3600ms ease-in-out infinite;
+}
+
+@keyframes break-cat-breathe {
+  0%, 100% { transform: none; }
+  50% { transform: scale(1.005, 1.012); }
+}
+
+.break-cat.is-hovering-cat {
+  cursor: pointer;
+}
+
+.break-cat-heart {
+  position: absolute;
+  z-index: 3;
+  width: 22px;
+  height: 22px;
+  margin: -11px 0 0 -11px;
+  color: #f08aa0;
+  pointer-events: none;
+  animation: break-cat-heart 1100ms var(--sd-ease-out) forwards;
+}
+
+.break-cat-heart svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  fill: currentColor;
+}
+
+@keyframes break-cat-heart {
+  0% { opacity: 0; transform: translateY(0) scale(0.6); }
+  25% { opacity: 1; transform: translateY(-14px) scale(1); }
+  100% { opacity: 0; transform: translateY(-56px) scale(1); }
+}
+
+/* ---------------- 倒计时 ---------------- */
+.break-cat-pill {
+  position: absolute;
+  top: var(--pill-top);
+  left: var(--pill-x);
+  display: grid;
+  grid-template-columns: auto auto;
+  grid-template-areas:
+    'label leave'
+    'time leave'
+    'hint hint';
+  align-items: center;
+  column-gap: var(--sd-space-5);
+  row-gap: 2px;
+  min-width: 200px;
+  padding: 12px 14px 12px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-radius: var(--sd-radius-card);
+  background:
+    radial-gradient(120% 140% at 0% 0%, rgba(255, 255, 255, 0.8), transparent 55%),
+    linear-gradient(160deg, rgb(249, 252, 255), rgb(231, 240, 252));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.95),
+    var(--sd-shadow-float);
+  opacity: 0;
+  transform: translate(-50%, 10px) scale(0.96);
+  pointer-events: none;
+  transition:
+    opacity 240ms var(--sd-ease-out),
+    transform 360ms var(--sd-ease-spring);
+}
+
+.break-cat.is-pill-visible .break-cat-pill {
+  opacity: 1;
+  transform: translate(-50%, 0);
+  pointer-events: auto;
+}
+
+.break-cat.is-leaving .break-cat-pill {
+  opacity: 0;
+  transform: translate(-50%, 8px) scale(0.98);
+  pointer-events: none;
+}
+
+.break-cat-label {
+  grid-area: label;
+  color: var(--sd-success);
+  font-size: var(--sd-fs-caption);
+  font-weight: var(--sd-fw-semibold);
+}
+
+.break-cat-time {
+  grid-area: time;
+  color: var(--sd-text-1);
+  font-size: var(--sd-fs-title);
+  font-weight: var(--sd-fw-medium);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+
+.break-cat-hint {
+  grid-area: hint;
+  margin-top: 4px;
+  color: var(--sd-text-3);
+  font-size: var(--sd-fs-caption);
+}
+
+.break-cat-leave {
+  grid-area: leave;
+  justify-self: end;
+  padding: 6px 12px;
+  border: 1px solid var(--sd-divider);
+  border-radius: var(--sd-radius-control);
+  background: var(--sd-surface-selected);
+  color: var(--sd-text-2);
+  font: inherit;
+  font-size: var(--sd-fs-secondary);
+  cursor: pointer;
+}
+
+.break-cat-leave:hover {
+  color: var(--sd-text-1);
+}
+
+.break-cat-leave:focus-visible {
+  outline: 2px solid var(--sd-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .break-cat-stage,
+  .break-cat.is-leaving .break-cat-stage {
+    transition: opacity 200ms ease;
+    transform: none;
+  }
+
+  .break-cat-pill,
+  .break-cat.is-pill-visible .break-cat-pill,
+  .break-cat.is-leaving .break-cat-pill {
+    transition: opacity 200ms ease;
+    transform: translate(-50%, 0);
+  }
+
+  .break-cat-stage.is-patted,
+  .break-cat.is-sleeping .break-cat-video[data-active='true'],
+  .break-cat-heart {
+    animation: none;
+  }
+}

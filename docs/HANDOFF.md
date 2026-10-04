@@ -91,6 +91,7 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 | Claude 一键接入 | 0ab68b5 | 见 6.7 |
 | 移出 DMG、修正路径 | 7672e70 | 见 6.8 |
 | 首页改版 + 番茄钟新界面 | 见 `git log` | 见 6.9 |
+| 休息陪伴（大猫） | 见 `git log` | 见 6.10 |
 | 更早：时间页、生活页、通知中心、刘海下沿状态、统一提醒卡片、密钥锁、相框、今天时间线等 | f9cc782 及之前 | 详见 `AGENTS.md` 和 `CHANGELOG.md` 的「未发布」 |
 
 ## 6. 本轮新增细节（`AGENTS.md` 还没写）
@@ -155,6 +156,14 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 - 番茄钟计时（`renderer/focus-timer.js`，对外 `window.NotchPomodoro`）：按结束时刻计时；15 / 25 / 45 / 60 分钟存 `notch-focus-minutes-v1`（旧的 `[分, 秒]` 只沿用正好是四档之一的）；暂停、+5 分钟（总长不超过 2 小时）、提前结束（专注满 1 分钟记下时长，专注记录多一个 `complete: false`，不算番茄）。专注中收起的 AI 通知数由主进程 `focus:held` 推送。
 - 「精力」：主进程 `energy:status` 给距离上次休息（`bodyTracker.state().activeSince`）、久坐提醒分钟数、收工时间与 `worklogEnabled`；「休息 5 分钟」调 `body:break` 再开始 5 分钟休息。纯函数在 `renderer/home-domain.js`。**用户要求：只陈述事实，不和平时比较、不显示平均、不打分**；暖色只用来提醒该歇了或某天超过 10 小时。
 - 矮屏（内容区不足 540）靠 `@container` 收起说明文字与第二条「接下来」。
+
+### 6.10 休息陪伴（2026-10-04，按用户给的 Cat Gatekeeper 参考与他生成的视频）
+
+- 番茄钟进入「休息」时（专注完成卡片、久坐提醒、首页的「休息 5 分钟」都是 `NotchPomodoro.start(300, 'break')`），主进程在 `focus:state` 里调 `syncBreakCompanion()`；规则是 `reminder-rules.js` 的 `createBreakCompanion`：休息开始出现，结束 / 暂停 / 提前结束离开，+5 分钟只更新倒计时，「让它走」只管这一次休息。开关是 `app-settings.json` 的 `body.cat.enabled`（默认开），在「设置 → 身体与作息」。
+- 窗口：铺满当前屏幕的透明窗口（`renderer/break-cat.*`），`focusable: false`，`setAlwaysOnTop(true, 'status')`（在刘海与提醒卡片之下）；默认点击穿透，渲染层按视频当前帧的透明度判断指针在不在猫身上，在猫或倒计时上才发 `break-cat:interactive`。猫走了窗口就销毁。
+- 素材：`renderer/assets/break-cat/arrive.webm`（走进来、伸懒腰、打哈欠、打滚、睡下，约 14 秒，只播一次）与 `sleep.webm`（最后 1 秒来回播的睡觉循环，再加 CSS 呼吸）。VP9 带透明通道，来源见 `ASSET_LICENSES.md`。视频是灰色英短，不是提示词里的橘猫。换视频（比如重新生成橘猫）只要一条命令：`python3 scripts/break-cat/make-break-cat.py <视频.mp4>`（要 ffmpeg 和 numpy / scipy / pillow / rembg），再把它最后打印的 `SLEEP_BOX` 填进 `renderer/break-cat.js`。要求机位不动、浅色干净背景、猫从右边走进来、最后睡下。
+- 摆位：视频上沿贴菜单栏下沿，画面右沿碰到屏幕右沿（猫从屏幕外走进来），睡下的猫居中、约占屏宽七成，倒计时在它下方；矮屏缩小。减少动态效果时直接显示睡着的静止画面。
+- 还没在真机上看过：多屏、全屏应用之上、外接屏的位置与性能（两路 720p VP9 软解）。
 
 ## 7. Claude 订阅额度（2026-09-29 已实现）
 

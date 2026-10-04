@@ -70,7 +70,7 @@ const {
   disconnectClaudeSettings,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
-const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES, createQuotaWatch, quotaWindows } = require('./reminder-rules');
+const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createBreakCompanion, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES, createQuotaWatch, quotaWindows } = require('./reminder-rules');
 const { createNoticeStore } = require('./notice-store');
 const { createWorklogStore } = require('./worklog-store');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
@@ -621,6 +621,150 @@ ipcMain.on('focus:state', (event, payload) => {
   } else {
     flushHeldFocusNotifications();
   }
+  syncBreakCompanion();
+});
+
+// ============ 休息陪伴：休息时一只大猫走进屏幕陪你 ============
+// 番茄钟进入「休息」时出现（专注完成卡片、久坐提醒和首页的「休息 5 分钟」都走这里），
+// 休息结束、暂停、提前结束或点「让它走」就离开。全屏透明窗口，只有猫和倒计时能点，
+// 其余地方点击穿透；不抢焦点、不挡后面的窗口，提醒卡片和刘海都在它上面。
+const BREAK_CAT_LEAVE_MS = 1200; // 离场动画的兜底时长；渲染层播完会先报告
+const breakCompanion = createBreakCompanion();
+let breakCatWindow = null;
+let breakCatReady = false;
+let breakCatPending = null;
+let breakCatLeaveTimer = null;
+let breakCatEndTimer = null;
+
+function syncBreakCompanion(now = Date.now()) {
+  const step = breakCompanion.update(focusHold.focus(), bodyTracker.settings().cat.enabled, now);
+  if (step && step.type === 'show') showBreakCat(step.endsAt);
+  else if (step && step.type === 'update') sendBreakCat('break-cat:update', { endsAt: step.endsAt });
+  else if (step && step.type === 'hide') hideBreakCat();
+  // 渲染层没来得及报告休息结束时，到点也让猫离开。
+  if (breakCatEndTimer) clearTimeout(breakCatEndTimer);
+  breakCatEndTimer = null;
+  if (breakCompanion.visible()) {
+    breakCatEndTimer = setTimeout(() => syncBreakCompanion(), Math.max(0, breakCompanion.endsAt() - now) + 1500);
+    breakCatEndTimer.unref?.();
+  }
+}
+
+function createBreakCatWindow() {
+  if (breakCatWindow && !breakCatWindow.isDestroyed()) return breakCatWindow;
+  breakCatReady = false;
+  const win = new BrowserWindow({
+    ...getTargetDisplay().bounds,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    focusable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    hiddenInMissionControl: true,
+    fullscreenable: false,
+    minimizable: false,
+    maximizable: false,
+    roundedCorners: false,
+    enableLargerThanScreen: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
+    },
+  });
+  breakCatWindow = win;
+  installLocalWebContentsGuards(win.webContents);
+  // 菜单栏之上、刘海与提醒卡片之下。
+  win.setAlwaysOnTop(true, 'status');
+  if (process.platform === 'darwin') win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.loadFile(path.join(__dirname, 'renderer', 'break-cat.html'));
+  win.webContents.once('did-finish-load', () => {
+    if (breakCatWindow !== win || win.isDestroyed()) return;
+    breakCatReady = true;
+    flushBreakCat();
+  });
+  win.webContents.on('render-process-gone', () => {
+    if (!win.isDestroyed()) win.destroy();
+  });
+  win.on('closed', () => {
+    if (breakCatWindow !== win) return;
+    breakCatWindow = null;
+    breakCatReady = false;
+  });
+  return win;
+}
+
+function showBreakCat(endsAt) {
+  if (isQuitting) return;
+  if (breakCatLeaveTimer) clearTimeout(breakCatLeaveTimer);
+  breakCatLeaveTimer = null;
+  const display = getTargetDisplay();
+  // 程序坞在底部时，倒计时要放在它上面。
+  const dock = Math.max(0, display.bounds.y + display.bounds.height - (display.workArea.y + display.workArea.height));
+  breakCatPending = { endsAt, menuBar: getMenuBarHeight(display), bottom: dock };
+  const win = createBreakCatWindow();
+  win.setBounds(display.bounds);
+  if (breakCatReady) flushBreakCat();
+}
+
+function flushBreakCat() {
+  const win = breakCatWindow;
+  if (!breakCatPending || !win || win.isDestroyed()) return;
+  const payload = breakCatPending;
+  breakCatPending = null;
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.showInactive();
+  win.webContents.send('break-cat:show', payload);
+}
+
+function sendBreakCat(channel, payload) {
+  if (breakCatWindow && !breakCatWindow.isDestroyed() && breakCatReady) breakCatWindow.webContents.send(channel, payload);
+}
+
+function hideBreakCat() {
+  breakCatPending = null;
+  if (!breakCatWindow || breakCatWindow.isDestroyed()) return;
+  breakCatWindow.setIgnoreMouseEvents(true, { forward: true });
+  sendBreakCat('break-cat:hide');
+  if (breakCatLeaveTimer) clearTimeout(breakCatLeaveTimer);
+  breakCatLeaveTimer = setTimeout(destroyBreakCatWindow, BREAK_CAT_LEAVE_MS);
+}
+
+// 猫走了就关掉窗口：视频解码和全屏透明层都不常驻。
+function destroyBreakCatWindow() {
+  if (breakCatLeaveTimer) clearTimeout(breakCatLeaveTimer);
+  breakCatLeaveTimer = null;
+  if (breakCompanion.visible()) return;
+  const win = breakCatWindow;
+  breakCatWindow = null;
+  breakCatReady = false;
+  if (win && !win.isDestroyed()) win.destroy();
+}
+
+const fromBreakCat = (event) => Boolean(breakCatWindow && !breakCatWindow.isDestroyed() && event.sender === breakCatWindow.webContents);
+
+// 指针在猫或倒计时上时接收点击，离开后恢复穿透。
+ipcMain.on('break-cat:interactive', (event, interactive) => {
+  if (!fromBreakCat(event) || !breakCompanion.visible()) return;
+  breakCatWindow.setIgnoreMouseEvents(interactive !== true, { forward: true });
+});
+
+// 「让它走」：只让猫离开，休息照常计时。
+ipcMain.on('break-cat:dismiss', (event) => {
+  if (!fromBreakCat(event)) return;
+  if (breakCompanion.dismiss()) hideBreakCat();
+});
+
+ipcMain.on('break-cat:left', (event) => {
+  if (fromBreakCat(event)) destroyBreakCatWindow();
 });
 
 // ============ 通知中心 ============
@@ -882,9 +1026,11 @@ ipcMain.handle('settings:set-body', (event, patch) => {
     eye: { ...current.eye, ...(source.eye || {}) },
     offwork: { ...current.offwork, ...(source.offwork || {}) },
     worklog: { ...current.worklog, ...(source.worklog || {}) },
+    cat: { ...current.cat, ...(source.cat || {}) },
   });
   if (!writeJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE), { ...stored, body: next })) return { ok: false };
   bodyTracker.setSettings(next);
+  syncBreakCompanion();
   worklogEnabled = next.worklog.enabled;
   if (!worklogEnabled) getWorklogStore().pause();
   return { ok: true, body: next };
@@ -4456,6 +4602,8 @@ app.on('will-quit', () => {
   if (noticeStore) noticeStore.flush();
   if (worklogStore) worklogStore.flush();
   if (focusFlushTimer) clearTimeout(focusFlushTimer);
+  if (breakCatEndTimer) clearTimeout(breakCatEndTimer);
+  if (breakCatLeaveTimer) clearTimeout(breakCatLeaveTimer);
   stopHoverSpaceShortcut();
   clearTaskNotificationTimers();
   stopTaskNotificationServer();
