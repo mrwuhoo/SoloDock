@@ -27,6 +27,11 @@ app.whenReady().then(async () => {
     const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
     const until = async (check, ms = 5000) => { const end = Date.now() + ms; while (!check() && Date.now() < end) await wait(30); return check(); };
     const box = (id) => { const r = $(id).getBoundingClientRect(); return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }; };
+    // The countdown slides up into place a moment after the cat arrives: wait until it comes to rest before measuring.
+    const pillSettled = () => until(() => {
+      const m = new DOMMatrix(getComputedStyle($('break-cat-pill')).transform);
+      return $('break-cat').classList.contains('is-pill-visible') && m.a === 1 && m.f === 0;
+    }, 4000);
     ${code}
   })()`);
 
@@ -36,12 +41,14 @@ app.whenReady().then(async () => {
   const shown = await run(`
     window.NotchBreakCat.show({ endsAt: Date.now() + 5 * 60 * 1000, menuBar: ${SCREEN.menuBar} });
     await wait(1500);
+    const time = $('break-cat-time').textContent;
+    await pillSettled();
     const arrive = $('break-cat-arrive');
     const sleep = $('break-cat-sleep');
     await until(() => arrive.readyState >= 1 && sleep.readyState >= 1);
     return {
       hidden: $('break-cat').hidden,
-      time: $('break-cat-time').textContent,
+      time,
       active: [arrive.dataset.active, sleep.dataset.active],
       pillVisible: $('break-cat').classList.contains('is-pill-visible'),
       stage: box('break-cat-stage'),
@@ -164,7 +171,7 @@ app.whenReady().then(async () => {
   // With the Dock at the bottom, the countdown sits above it.
   const docked = await run(`
     window.NotchBreakCat.show({ endsAt: Date.now() + 60 * 1000, menuBar: ${SCREEN.menuBar}, bottom: 70 });
-    await wait(50);
+    await pillSettled();
     return { pill: box('break-cat-pill'), height: window.innerHeight };
   `);
   assert.ok(docked.pill.bottom <= docked.height - 70 - 20, `countdown bottom ${docked.pill.bottom} above a 70px Dock in ${docked.height}`);
