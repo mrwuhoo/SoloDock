@@ -737,3 +737,47 @@ test('moving the app repairs the SoloDock entries in Claude Code settings and ad
   assert.deepEqual(repairClaudeSettings(untouched, at('/Applications')), untouched);
   assert.deepEqual(repairClaudeSettings({}, at('/Applications')), {});
 });
+
+test('one-click Codex hookup adds a single top-level notify line and never replaces the user\'s own', () => {
+  const { connectCodexConfig, repairCodexConfig } = require('../main-services');
+  const at = (root) => ['/usr/bin/env', 'ELECTRON_RUN_AS_NODE=1', `${root}/SoloDock.app/Contents/MacOS/SoloDock`, `${root}/SoloDock.app/Contents/Resources/app/scripts/codex-notify.js`];
+  const command = at('/Applications');
+  const line = `notify = ${JSON.stringify(command)}`;
+
+  // No file yet: just the comment and the line.
+  assert.deepEqual(connectCodexConfig('', command), { ok: true, text: `# SoloDock：Codex 完成任务时从刘海提醒你\n${line}\n` });
+
+  // An existing config keeps every line; the notify key goes above the first table, where TOML needs it.
+  const own = 'model = "gpt-5"\n\n[projects."/Users/me/app"]\ntrust_level = "trusted"\n';
+  const connected = connectCodexConfig(own, command);
+  assert.equal(connected.ok, true);
+  assert.ok(connected.text.endsWith(`\n${own}`));
+  const lines = connected.text.split('\n');
+  assert.ok(lines.indexOf(line) < lines.findIndex((item) => item.startsWith('[')));
+  // Connecting twice changes nothing.
+  assert.equal(connectCodexConfig(connected.text, command).text, connected.text);
+
+  // The user already has their own notifier: leave the file alone.
+  const theirs = 'notify = ["terminal-notifier", "-message", "done"]\nmodel = "gpt-5"\n';
+  assert.deepEqual(connectCodexConfig(theirs, command), { ok: false, error: 'notify_exists' });
+  // A notify inside a table is not the top-level key Codex reads.
+  assert.equal(connectCodexConfig('[tui]\nnotify = true\n', command).ok, true);
+
+  // Moving the app updates only SoloDock's line; never-connected configs stay as they are.
+  const moved = repairCodexConfig(connectCodexConfig(own, at('/Volumes/SoloDock')).text, command);
+  assert.equal(moved, connected.text);
+  assert.equal(repairCodexConfig(own, command), own);
+  assert.equal(repairCodexConfig(theirs, command), theirs);
+});
+
+test('a refused System Events call tells which privacy pane to open', () => {
+  const { windowPermissionPane } = require('../main-services');
+  assert.equal(windowPermissionPane('Command failed: /usr/bin/osascript\nexecution error: Not authorized to send Apple events to System Events. (-1743)'), 'automation');
+  assert.equal(windowPermissionPane('execution error: 未获得授权将Apple事件发送给System Events。 (-1743)'), 'automation');
+  assert.equal(windowPermissionPane('execution error: System Events got an error: osascript is not allowed assistive access. (-1719)'), 'accessibility');
+  assert.equal(windowPermissionPane('execution error: System Events遇到一个错误：“osascript”不允许辅助访问。 (-25211)'), 'accessibility');
+  // Other failures (the window closed, a timeout) are not permission problems.
+  assert.equal(windowPermissionPane("execution error: System Events got an error: Can't get window 1 of process \"Terminal\". Invalid index. (-1719)"), null);
+  assert.equal(windowPermissionPane(''), null);
+  assert.equal(windowPermissionPane(undefined), null);
+});

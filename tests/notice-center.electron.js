@@ -51,6 +51,14 @@ app.whenReady().then(async () => {
     center.querySelector('[data-id="n1"] [data-action="open"]').click();
     await settle();
     out.openMissing = [window.__calls.at(-1), $('status-toast-message').textContent];
+    // Without Screen Recording the window list has no titles: say which permission is missing and open its pane.
+    window.__openResult = { ok: false, error: 'permission', pane: 'screen-recording' };
+    center.querySelector('[data-id="n1"] [data-action="open"]').click();
+    await settle();
+    out.openPermission = [$('status-toast-message').textContent, $('status-toast-action').hidden, $('status-toast-action').textContent];
+    $('status-toast-action').click();
+    out.openPermission.push(window.__calls.at(-1));
+    window.__openResult = null;
     // Completing a todo from the center.
     center.querySelector('[data-id="t1"] [data-action="todo-done"]').click();
     await settle();
@@ -86,7 +94,8 @@ app.whenReady().then(async () => {
   assert.equal(result.aligned, true, 'the popover hangs under the bell');
   assert.equal(result.meta, '1 件需要你处理');
   assert.deepEqual(result.openMissing, [['act', 'n1', 'open'], '没找到对应的窗口，可能已经关掉了']);
-  assert.deepEqual(result.todoDone, [[['n1', 'open'], ['t1', 'todo-done']], '已处理']);
+  assert.deepEqual(result.openPermission, ['跳回窗口要先在系统设置里打开「屏幕录制」', false, '打开设置', ['privacy', 'screen-recording']]);
+  assert.deepEqual(result.todoDone, [[['n1', 'open'], ['n1', 'open'], ['t1', 'todo-done']], '已处理']);
   assert.deepEqual(result.afterDismiss, ['今天', '更早']);
   assert.equal(result.stillExpanded, true);
   assert.equal(result.closedOutside, true);

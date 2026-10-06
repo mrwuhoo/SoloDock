@@ -92,6 +92,7 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 | 移出 DMG、修正路径 | 7672e70 | 见 6.8 |
 | 首页改版 + 番茄钟新界面 | 见 `git log` | 见 6.9 |
 | 休息陪伴（大猫） | 见 `git log` | 见 6.10 |
+| 新电脑首次安装体验 | 见 `git log` | 见 6.11 |
 | 更早：时间页、生活页、通知中心、刘海下沿状态、统一提醒卡片、密钥锁、相框、今天时间线等 | f9cc782 及之前 | 详见 `AGENTS.md` 和 `CHANGELOG.md` 的「未发布」 |
 
 ## 6. 本轮新增细节（`AGENTS.md` 还没写）
@@ -164,6 +165,16 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 - 素材：`renderer/assets/break-cat/arrive.webm`（走进来、伸懒腰、打哈欠、打滚、睡下，约 14 秒，只播一次）与 `sleep.webm`（最后 1 秒来回播的睡觉循环，再加 CSS 呼吸）。VP9 带透明通道，来源见 `ASSET_LICENSES.md`。视频是灰色英短，不是提示词里的橘猫。换视频（比如重新生成橘猫）只要一条命令：`python3 scripts/break-cat/make-break-cat.py <视频.mp4>`（要 ffmpeg 和 numpy / scipy / pillow / rembg），再把它最后打印的 `SLEEP_BOX` 填进 `renderer/break-cat.js`。要求机位不动、浅色干净背景、猫从右边走进来、最后睡下。
 - 摆位：视频上沿贴菜单栏下沿，画面右沿碰到屏幕右沿（猫从屏幕外走进来），睡下的猫居中、约占屏宽七成，倒计时在它下方；矮屏缩小。减少动态效果时直接显示睡着的静止画面。
 - 还没在真机上看过：多屏、全屏应用之上、外接屏的位置与性能（两路 720p VP9 软解）。
+
+### 6.11 新电脑首次安装体验（2026-10-06）
+
+按「一台全新的 Mac 第一次装」逐条查过权限与步骤，完整清单在项目文件 `first-run-check/新电脑首次安装检查.md`。结论：启动时不索要任何系统权限；最大的门槛是包没有 Developer ID 公证，新 Mac 上双击会被拦，要去「系统设置 → 隐私与安全性」点「仍要打开」（要不要办开发者账号，等用户决定，见第 10 节）。这次改了四处：
+
+- 首次打开自动展开一次面板（`revealOnboardingOnce`，在移到「应用程序」的询问之后），直接出首次引导；引导第 1 步在开机自启已开启时说明系统那条「添加了后台项目」的提示。
+- 开机自启只在 App 位于「应用程序」时才登记（`ensureFirstRunAutoLaunch` 先看 `appLocationStable()`），移过去重新打开后再登记。
+- Codex 一键接入（`codex:connect`，纯函数 `connectCodexConfig` / `repairCodexConfig` 在 `main-services.js`）：只在 `~/.codex/config.toml` 第一个 `[段落]` 之前加 SoloDock 那一行 `notify`，写前留 `config.toml.before-solodock`；已有别的 `notify` 返回 `notify_exists`，引导改为复制接入设置。App 换位置后启动时自动改路径。
+- 「跳回窗口」缺权限：`focusTaskWindow` 认出缺屏幕录制（窗口有、标题全空）、自动化（osascript -1743）或辅助功能（assistive / -25211），提醒卡片接着弹一张「打开设置」卡片（`source: 'info'`，不进通知中心），通知中心给带「打开设置」的提示。
+- 还没在真机上看过：系统「添加了后台项目」通知的实际文案；缺自动化 / 辅助功能时 osascript 报错的实际文字是否命中上面的规则。
 
 ## 7. Claude 订阅额度（2026-09-29 已实现）
 
@@ -244,11 +255,12 @@ Resets Oct 6 at 4pm (America/Los_Angeles)
 2. **体验包**：`0.2.0-beta.5`（6.9 的首页改版 + 时间圆盘与刘海光带）已于 2026-10-01 打好，`dist.noindex/SoloDock-0.2.0-beta.5-arm64.dmg`，SHA-256 `86b327de677909c192e5e4d14c260ec3d7a3e12437a5c53794304607a786889f`，用户正在体验（之前的 beta.4 只有首页改版）。时间页顶部的「比上月」「日均」用户说暂时不动。
 3. **正式发布 v0.2**：推送分支和标签、改版本号、更新 README 和官网下载链接、Windows 检查。都要用户确认，并遵守 `AGENTS.md` 的「GitHub 推送与发布联动」。
 4. 第 7 节里 `hasCompletedOnboarding` 由谁补。
+5. **要不要办 Apple 开发者账号（99 美元 / 年）做 Developer ID 签名与公证**（2026-10-06 记下）：不办的话，新 Mac 上第一次打开会被系统拦下，要去「系统设置 → 隐私与安全性」点「仍要打开」并输密码；每个新体验包还会让辅助功能等授权和钥匙串重新确认。办了之后打开只剩一次「来自互联网，确定打开吗」。
 
 ## 11. 红线（在 `AGENTS.md` 的 NEVER 清单之外补充）
 
 - 不读取、不复制任何登录凭据（Claude、Codex、claude.ai）；AI 代理也不经手用户的 API Key，需要时由用户自己填写。
-- `~/.claude/settings.json` 只能在用户点击「一键接入 / 断开」时由 SoloDock 修改，而且只动自己的那一项。
+- `~/.claude/settings.json` 和 `~/.codex/config.toml` 只能在用户点击「接入提醒 / 断开」时由 SoloDock 修改（App 换位置后的自动改路径除外），而且只动自己的那一项。
 - 密码只能走 `writeSecretToClipboard`；密钥库只能在 `vaultAccessAllowed()` 之内读写；渲染层的列表永远拿不到明文。
 - 数据结构变更必须带迁移和回滚，旧数据永远不丢。
 - 生活数据与工作数据完全分开，不进首页、时间统计和通知中心的工作分组。

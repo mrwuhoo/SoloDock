@@ -18,7 +18,7 @@ run(process.execPath, ['--test', ...fs.readdirSync(path.join(root, 'tests')).fil
 env.TODO_TEST_LOG = path.join(root, 'dist.noindex', 'windows-smoke', 'renderer-test.log');
 fs.mkdirSync(path.dirname(env.TODO_TEST_LOG), { recursive: true });
 fs.writeFileSync(env.TODO_TEST_LOG, '');
-for (const file of ['notch-focus', 'codex-usage', 'reset-news', 'retained-workspace', 'workspace-hydration', 'prompts', 'ai-usage', 'today-strip', 'photo-frame', 'frame-store', 'vault', 'credentials', 'notification', 'break-cat', 'body-settings', 'notch-status', 'notice-center', 'time-page', 'life-page', 'command-palette', 'capture', 'todo-page', 'notes-page', 'links-page', 'recordings-page', 'settings-page', 'onboarding', 'usage-detail', 'home', 'startup']) {
+for (const file of ['notch-focus', 'codex-usage', 'reset-news', 'retained-workspace', 'workspace-hydration', 'prompts', 'ai-usage', 'today-strip', 'photo-frame', 'frame-store', 'vault', 'credentials', 'notification', 'break-cat', 'body-settings', 'notch-status', 'notice-center', 'time-page', 'life-page', 'command-palette', 'capture', 'todo-page', 'notes-page', 'links-page', 'recordings-page', 'settings-page', 'onboarding', 'usage-detail', 'home', 'startup', 'first-run']) {
   const testProfile = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-renderer-test-'));
   env.TODO_TEST_USER_DATA = testProfile;
   run(require('electron'), [`tests/${file}.electron.js`]);

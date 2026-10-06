@@ -68,6 +68,9 @@ const {
   connectClaudeSettings,
   repairClaudeSettings,
   disconnectClaudeSettings,
+  connectCodexConfig,
+  repairCodexConfig,
+  windowPermissionPane,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
 const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createBreakCompanion, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES, createQuotaWatch, quotaWindows } = require('./reminder-rules');
@@ -782,19 +785,44 @@ function getNoticeStore() {
 }
 
 // 按项目名找到对应的终端 / IDE 窗口并切到前台（提醒卡片与通知中心共用）。
-async function focusWindowForNotice(notice) {
-  if (!notice || !notice.project) return false;
+// 缺权限时系统大多不提示、只是静默失败，所以要认出缺的是哪一项（pane 是 PRIVACY_SETTINGS_PANES 的键）。
+async function focusTaskWindow(task) {
+  if (!task || !task.project) return { ok: false, error: 'window_not_found' };
   const result = await scanCurrentWindows();
+  if (result.error === 'screen_recording_permission_required') return { ok: false, error: 'permission', pane: 'screen-recording' };
   const target = (result.items || [])
-    .map((item) => ({ item, score: taskWindowMatchScore(notice, item) }))
+    .map((item) => ({ item, score: taskWindowMatchScore(task, item) }))
     .filter((candidate) => candidate.score > 0)
     .sort((a, b) => b.score - a.score)[0]?.item;
-  if (!target) return false;
+  if (!target) return { ok: false, error: 'window_not_found' };
   try {
-    return (await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true';
+    if ((await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true') return { ok: true };
   } catch (error) {
-    return false;
+    const pane = windowPermissionPane(error && error.message);
+    if (pane) return { ok: false, error: 'permission', pane };
   }
+  return { ok: false, error: 'window_not_found' };
+}
+
+const PERMISSION_NAMES = { 'screen-recording': '屏幕录制', accessibility: '辅助功能', automation: '自动化' };
+
+// 在提醒卡片上点「跳回窗口」却缺权限：接着弹一张卡片说清缺哪一项，给「打开设置」。不进通知中心。
+function showWindowPermissionHint(pane) {
+  const name = PERMISSION_NAMES[pane];
+  if (!name) return;
+  enqueueTaskNotification({
+    eventId: `permission-${pane}-${Date.now()}`,
+    taskId: `permission-${pane}`,
+    source: 'info',
+    project: '',
+    title: `跳回窗口要先打开「${name}」`,
+    detail: pane === 'automation' ? '系统设置 → 隐私与安全性 → 自动化 → SoloDock，打开「系统事件」' : `系统设置 → 隐私与安全性 → ${name}，打开 SoloDock`,
+    actions: [{ id: 'open-privacy', label: '打开设置', primary: true }, { id: 'dismiss', label: '知道了' }],
+    visibleMs: 0,
+    pane,
+    record: false,
+    completedAt: Date.now(),
+  });
 }
 
 ipcMain.handle('notices:list', () => ({ items: getNoticeStore().list(), summary: getNoticeStore().summary() }));
@@ -808,12 +836,12 @@ ipcMain.handle('notices:act', async (event, payload) => {
   if (!notice) return { ok: false, error: 'not_found' };
   const action = String(payload && payload.action || '');
   if (action === 'open') {
-    const focused = await focusWindowForNotice(notice);
-    if (focused) {
+    const result = await focusTaskWindow(notice);
+    if (result.ok) {
       store.markHandled(notice.id);
       if (notice.source === 'needs-you') clearNeedsYou(notice.agent || null);
     }
-    return { ok: focused, error: focused ? undefined : 'window_not_found' };
+    return result;
   }
   if (action === 'todo-done') {
     sendReminderAction('todo-done', notice);
@@ -870,6 +898,9 @@ async function handleTaskNotificationAction(eventId, actionId) {
       break;
     case 'open-usage':
       openRendererPanel('app:open-usage', { provider: notification.taskId || '' });
+      break;
+    case 'open-privacy':
+      openPrivacyPane(notification.pane);
       break;
     case 'quota-mute':
       quotaWatch.mute(notification.taskId, notification.resetsAt || now + 7 * 86400000);
@@ -1634,11 +1665,54 @@ ipcMain.handle('ai:integration-setup', (event, tool) => {
     return { ok: true, file: '~/.claude/settings.json', snippet: `"hooks": ${JSON.stringify({ Stop: hook, Notification: hook }, null, 2)}` };
   }
   if (tool === 'codex') {
-    const script = path.join(__dirname, 'scripts', 'codex-notify.js');
-    return { ok: true, file: '~/.codex/config.toml', snippet: `notify = ${JSON.stringify(['/usr/bin/env', 'ELECTRON_RUN_AS_NODE=1', process.execPath, script])}` };
+    return { ok: true, file: '~/.codex/config.toml', snippet: `notify = ${JSON.stringify(codexNotifyCommand())}` };
   }
   return { ok: false, error: 'invalid' };
 });
+
+function codexNotifyCommand() {
+  return ['/usr/bin/env', 'ELECTRON_RUN_AS_NODE=1', process.execPath, path.join(__dirname, 'scripts', 'codex-notify.js')];
+}
+
+// 一键接入 Codex：只在用户点按钮时写 ~/.codex/config.toml，只加 SoloDock 那一行。
+// 第一次写之前在旁边留一份 config.toml.before-solodock；已有别的 notify 时一律不写。
+async function updateCodexConfig(mutate) {
+  const directory = process.env.CODEX_HOME || path.join(app.getPath('home'), '.codex');
+  const file = path.join(directory, 'config.toml');
+  let raw = null;
+  let mode = 0o600;
+  try {
+    raw = await fs.promises.readFile(file, 'utf8');
+    mode = (await fs.promises.stat(file)).mode & 0o777;
+  } catch (error) {
+    if (error.code !== 'ENOENT') return { ok: false, error: 'read_failed' };
+  }
+  const result = mutate(raw || '');
+  if (!result.ok) return result;
+  if (result.text === (raw || '')) return { ok: true, changed: false };
+  try {
+    await fs.promises.mkdir(directory, { recursive: true });
+    const backup = `${file}.before-solodock`;
+    if (raw !== null && !fs.existsSync(backup)) await fs.promises.writeFile(backup, raw, { mode: 0o600 });
+    const temporary = `${file}.solodock-${process.pid}.tmp`;
+    await fs.promises.writeFile(temporary, result.text, { mode });
+    await fs.promises.rename(temporary, file);
+  } catch (error) {
+    return { ok: false, error: 'write_failed' };
+  }
+  return { ok: true, changed: true };
+}
+
+ipcMain.handle('codex:connect', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'unavailable' };
+  if (!appLocationStable()) return { ok: false, error: 'not_installed' };
+  return updateCodexConfig((text) => connectCodexConfig(text, codexNotifyCommand()));
+});
+
+async function repairCodexLink() {
+  if (!appLocationStable()) return;
+  await updateCodexConfig((text) => ({ ok: true, text: repairCodexConfig(text, codexNotifyCommand()) })).catch(() => {});
+}
 
 // 一键接入 / 断开 Claude Code：只在用户点按钮时写 ~/.claude/settings.json。
 // 第一次写之前在旁边留一份 settings.json.before-solodock；文件不是合法 JSON 时一律不写。
@@ -1712,9 +1786,10 @@ ipcMain.handle('app:move-to-applications', (event) => {
   return { ok: moveToApplications() };
 });
 
+// 返回是否已经移过去（移过去后系统会从新位置重新打开 SoloDock）。
 async function offerMoveToApplications() {
   // 只对用户的正式数据文件夹询问；测试与开发实例（指定了 --user-data-dir）不弹，免得把测试包移进「应用程序」。
-  if (appLocationStable() || app.commandLine.hasSwitch('user-data-dir')) return;
+  if (appLocationStable() || app.commandLine.hasSwitch('user-data-dir')) return false;
   updateTransientSystemInteraction(1);
   let response = 1;
   try {
@@ -1730,9 +1805,19 @@ async function offerMoveToApplications() {
   } finally {
     updateTransientSystemInteraction(-1);
   }
-  if (response === 0 && !moveToApplications()) {
-    dialog.showMessageBox({ type: 'warning', message: '没能移过去', detail: '请把安装盘里的 SoloDock 手动拖进「应用程序」文件夹。', buttons: ['好'] }).catch(() => {});
-  }
+  if (response !== 0) return false;
+  if (moveToApplications()) return true;
+  dialog.showMessageBox({ type: 'warning', message: '没能移过去', detail: '请把安装盘里的 SoloDock 手动拖进「应用程序」文件夹。', buttons: ['好'] }).catch(() => {});
+  return false;
+}
+
+// 新装用户第一次打开：没有 Dock 图标，折叠态又和刘海一样大，看起来像没打开。
+// 让面板自动展开一次，首次引导随之出现（引导看完或跳过后 onboardingPending 就清掉了）。
+let onboardingRevealed = false;
+function revealOnboardingOnce() {
+  if (onboardingRevealed || isQuitting || !readAppSettings().onboardingPending) return;
+  onboardingRevealed = true;
+  openRendererPanel('app:expand');
 }
 ipcMain.handle('claude:disconnect', (event) => {
   if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'unavailable' };
@@ -2772,14 +2857,17 @@ const PRIVACY_SETTINGS_PANES = process.platform === 'win32' ? {
   accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
   'screen-recording': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
   microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+  automation: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation',
 };
 
-ipcMain.handle('shell:open-privacy-settings', (event, pane) => {
-  const target = PRIVACY_SETTINGS_PANES[String(pane || '')];
+function openPrivacyPane(pane) {
+  const target = Object.prototype.hasOwnProperty.call(PRIVACY_SETTINGS_PANES, String(pane || '')) ? PRIVACY_SETTINGS_PANES[pane] : '';
   if (!target) return false;
   shell.openExternal(target);
   return true;
-});
+}
+
+ipcMain.handle('shell:open-privacy-settings', (event, pane) => openPrivacyPane(pane));
 
 // ============ 启动时的权限自检 ============
 // DMG 装的是全新二进制，TCC 授权不会从开发版继承，而这几项缺失时的表现都是「静默失效」：
@@ -3162,22 +3250,14 @@ function taskWindowMatchScore(notification, target) {
 async function activateActiveTaskNotification(eventId = null) {
   const notification = activeTaskNotification;
   if (!notification || (eventId && notification.eventId !== eventId) || notification.source === 'todo') return false;
-  const result = await scanCurrentWindows();
-  const target = (result.items || [])
-    .map((item) => ({ item, score: taskWindowMatchScore(notification, item) }))
-    .filter((candidate) => candidate.score > 0)
-    .sort((a, b) => b.score - a.score)[0]?.item;
-  if (!target) return false;
-  try {
-    const focused = (await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true';
-    if (focused) {
-      getNoticeStore().markHandled(notification.eventId);
-      beginTaskNotificationDismiss();
-    }
-    return focused;
-  } catch (error) {
-    return false;
+  const result = await focusTaskWindow(notification);
+  if (result.ok) {
+    getNoticeStore().markHandled(notification.eventId);
+    beginTaskNotificationDismiss();
+  } else if (result.error === 'permission') {
+    showWindowPermissionHint(result.pane);
   }
+  return result.ok;
 }
 
 ipcMain.handle('task-notification:activate', async (event, eventId) => {
@@ -4500,6 +4580,9 @@ function ensureFirstRunAutoLaunch() {
   // 首次运行时默认开启开机自启；之后尊重用户在托盘菜单的选择。
   // 只对打包后的应用：源码运行与测试每次用新的数据文件夹，不能把开发用的 Electron 加进登录项。
   if (process.platform !== 'darwin' || !app.isPackaged) return;
+  // 在安装盘里或被系统临时转移的位置运行时先不登记：登记进去的是这个临时路径，推出安装盘就失效了。
+  // 移到「应用程序」后会从新位置重新打开，那时再登记。
+  if (!appLocationStable()) return;
   const marker = path.join(app.getPath('userData'), '.first-run-done');
   if (fs.existsSync(marker)) return;
   try {
@@ -4548,7 +4631,12 @@ app.whenReady().then(() => {
   applyAppSettings();
   scheduleReminderResume();
   void repairClaudeLink();
-  setTimeout(() => { if (!isQuitting) void offerMoveToApplications(); }, 1200);
+  void repairCodexLink();
+  // 新装用户：先问要不要移到「应用程序」，再让面板从刘海里展开一次、直接出首次引导。
+  setTimeout(async () => {
+    if (isQuitting) return;
+    if (!await offerMoveToApplications().catch(() => false)) revealOnboardingOnce();
+  }, 1200);
   startTaskNotificationServer();
   // 锁屏或休眠时锁上密钥，并清掉仍在剪贴板上的密码。
   for (const eventName of ['lock-screen', 'suspend']) {
