@@ -28,6 +28,7 @@ from scipy import ndimage as ndi
 LW = np.array([0.299, 0.587, 0.114], np.float32)
 K3 = np.ones((3, 3), bool)
 K5 = np.ones((5, 5), bool)
+BAND = 10  # 猫身外按毛边处理的宽度（像素）
 G = {}  # 子进程共享（fork）的帧、轮廓与背景
 
 
@@ -126,24 +127,37 @@ def frame_rgba(i):
         sizes = ndi.sum(np.ones_like(s), lab, range(1, count + 1))
         solid &= np.isin(lab, np.nonzero(sizes >= 400)[0] + 1)
 
-    # 2) 毛边：靠近猫身（或轮廓认出的模糊毛）的地方，透明度看它比旁边的猫毛暗多少
-    wt = solid.astype(np.float32)
-    ws = ndi.gaussian_filter(wt, 4)
-    s_loc = ndi.gaussian_filter(s * wt, 4) / np.maximum(ws, 1e-4)
-    s_loc = np.where(ws > 1e-3, np.maximum(s_loc, 0.2), 0.5)
+    # 2) 毛边：猫身外一圈（BAND 像素）按「已知背景抠像」算透明度——像素颜色在背景色和旁边猫毛颜色之间
+    #    落在哪儿，透明度就是多少。这样蓬松的毛尖能保留下来，也不会把边上的暗色当成影子描出一圈黑边。
+    solid = ndi.binary_erosion(solid, iterations=1)  # 最外一圈常是猫毛和背景的混色，重新算
     dist = ndi.distance_transform_edt(~solid)
-    fade = np.maximum(np.clip(1 - (dist - 1) / 4, 0, 1), np.clip((ml - 0.1) / 0.2, 0, 1) * (dist < 24))
-    a_cat = np.where(solid, 1.0, np.clip(s / s_loc, 0, 1) * fade).astype(np.float32)
-    # 3) 边缘颜色：从猫身里面往外渗，不带背景的浅色
-    inner = ndi.binary_erosion(solid, iterations=1)
-    wi = inner.astype(np.float32)
-    wc = ndi.gaussian_filter(wi, 3)
-    bleed = np.stack([ndi.gaussian_filter(f[..., k] * wi, 3) for k in range(3)], -1) / np.maximum(wc, 1e-4)[..., None]
-    far = np.stack([ndi.gaussian_filter(f[..., k] * wi, 12) for k in range(3)], -1) / np.maximum(ndi.gaussian_filter(wi, 12), 1e-4)[..., None]
-    c = np.where(inner[..., None], f, np.where((wc > 0.02)[..., None], bleed, far))
-    # 4) 地上的影子：猫附近背景变暗的部分，存成半透明的黑
+    wi = solid.astype(np.float32)
+    w3 = ndi.gaussian_filter(wi, 3)
+    bleed = lambda sig, wc: np.stack([ndi.gaussian_filter(f[..., k] * wi, sig) for k in range(3)], -1) / np.maximum(wc, 1e-4)[..., None]
+    fg = np.where((w3 > 0.02)[..., None], bleed(3, w3), bleed(10, ndi.gaussian_filter(wi, 10)))  # 旁边猫毛的颜色
+    s_bg = np.clip(1 - (f @ LW) / np.maximum(lumB, 1), 0, 1)
+    # 地上的影子：在毛边外侧量出来再带进毛边里，抠像就把它当「影子里的地面」，不会误认成毛
+    ring = ((dist > BAND) & (dist <= BAND + 8)).astype(np.float32)
+    wr = ndi.gaussian_filter(ring, 6)
+    sh_in = np.where(wr > 1e-3, np.clip(ndi.gaussian_filter(s_bg * ring, 6) / np.maximum(wr, 1e-4), 0, 0.6), 0)
+    Bs = np.where((dist <= BAND)[..., None], B * (1 - sh_in[..., None]), B)
+    d = Bs - fg
+    a = np.clip(((Bs - f) * d).sum(-1) / np.maximum((d * d).sum(-1), 30.0), 0, 1)
+    a = np.clip((a - 0.05) / 0.95, 0, 1) * np.clip((BAND - dist) / 3, 0, 1)
+    # 贴地的地方（肚皮、爪子底下）分不清毛和影子：退回 1 像素羽化的干净边，剩下交给影子层
+    w_fur = np.clip(1 - (sh_in - 0.04) / 0.08, 0, 1)
+    a_cat = np.where(solid, 1.0, w_fur * a + (1 - w_fur) * np.clip(1.5 - dist, 0, 1)).astype(np.float32)
+    a_cat = np.where(ndi.maximum_filter(a_cat, size=3) < 0.12, 0, a_cat)  # 去掉零星噪点
+    # 3) 地上的影子：猫的透明度解释不了的那部分变暗，存成半透明的黑
     prox = ndi.uniform_filter(ndi.maximum_filter(ml, size=121), size=41)
-    a_sh = np.clip(s - 0.015, 0, 0.55) * np.clip(prox * 1.5, 0, 1)
+    pred = a_cat[..., None] * fg + (1 - a_cat[..., None]) * B
+    s_res = np.clip(1 - (f @ LW) / np.maximum(pred @ LW, 1), 0, 1)
+    s_sh = np.where(dist <= BAND, np.maximum(s_res, sh_in * (1 - w_fur)), s_bg)
+    a_sh = ndi.gaussian_filter(np.clip(s_sh - 0.015, 0, 0.55) * np.clip(prox * 1.5, 0, 1), 1.0)
+    # 4) 边缘颜色：够实的毛用解出来的真实颜色，越透明越靠旁边猫毛的颜色，不带背景的浅色
+    solved = np.clip((f - (1 - a_cat[..., None]) * Bs) / np.maximum(a_cat, 1e-3)[..., None], 0, 255)
+    k = np.clip((a_cat - 0.35) / 0.5, 0, 1)[..., None]
+    c = np.where(ndi.binary_erosion(solid, iterations=2)[..., None], f, k * solved + (1 - k) * fg)
     A = a_cat + (1 - a_cat) * a_sh
     rgb = np.where(A[..., None] > 1e-3, a_cat[..., None] * c / np.maximum(A, 1e-3)[..., None], 0)
     out = np.empty((h, w, 4), np.uint8)
