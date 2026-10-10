@@ -795,7 +795,58 @@ function disconnectClaudeSettings(settings) {
   return next;
 }
 
+// ============ 一键接入 Codex ============
+// Codex 完成一轮任务时会运行 ~/.codex/config.toml 顶层 notify 里的命令。下面只动 SoloDock 自己那一行：
+// 没有 notify 时加在文件最前面（TOML 的顶层键必须写在任何 [段落] 之前）；用户已有别的 notify 时不覆盖。
+const CODEX_NOTIFY_SCRIPT = 'codex-notify.js';
+const CODEX_NOTIFY_COMMENT = '# SoloDock：Codex 完成任务时从刘海提醒你';
+
+function codexNotifyLineIndex(lines) {
+  const firstTable = lines.findIndex((line) => /^\s*\[/.test(line));
+  const end = firstTable === -1 ? lines.length : firstTable;
+  for (let index = 0; index < end; index += 1) {
+    if (/^\s*notify\s*=/.test(lines[index])) return index;
+  }
+  return -1;
+}
+
+// SoloDock 写的是单行数组；被改成多行的就不去动它。
+function isSoloDockNotifyLine(line) {
+  return line.includes(CODEX_NOTIFY_SCRIPT) && /\]\s*(#.*)?$/.test(line);
+}
+
+function connectCodexConfig(text, command) {
+  const source = String(text || '');
+  const lines = source.split('\n');
+  const line = `notify = ${JSON.stringify(command)}`;
+  const index = codexNotifyLineIndex(lines);
+  if (index === -1) return { ok: true, text: `${CODEX_NOTIFY_COMMENT}\n${line}\n${source.trim() ? `\n${source}` : ''}` };
+  if (!isSoloDockNotifyLine(lines[index])) return { ok: false, error: 'notify_exists' };
+  lines[index] = line;
+  return { ok: true, text: lines.join('\n') };
+}
+
+// App 换了位置后，把已经登记的那一行改到新路径；没接入过就原样返回。
+function repairCodexConfig(text, command) {
+  const source = String(text || '');
+  const lines = source.split('\n');
+  const index = codexNotifyLineIndex(lines);
+  return index > -1 && isSoloDockNotifyLine(lines[index]) ? connectCodexConfig(source, command).text : source;
+}
+
+// 「跳回窗口」用 osascript 驱动「系统事件」。被拒时的报错里认出缺哪项权限（键与 main.js 的 PRIVACY_SETTINGS_PANES 一致）：
+// -1743 是没有「自动化」授权；assistive / 辅助（-25211，较新系统是 -1719）是没有「辅助功能」。
+function windowPermissionPane(message) {
+  const text = String(message || '');
+  if (/-1743|not authorized to send apple events/i.test(text)) return 'automation';
+  if (/-25211|assistive|辅助/i.test(text)) return 'accessibility';
+  return null;
+}
+
 module.exports = {
+  windowPermissionPane,
+  connectCodexConfig,
+  repairCodexConfig,
   shellQuote,
   chainedStatusCommand,
   claudeSettingsStatus,
