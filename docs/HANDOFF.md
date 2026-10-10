@@ -160,7 +160,8 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 
 ### 6.10 休息陪伴（2026-10-04，按用户给的 Cat Gatekeeper 参考与他生成的视频）
 
-- 番茄钟进入「休息」时（专注完成卡片、久坐提醒、首页的「休息 5 分钟」都是 `NotchPomodoro.start(300, 'break')`），主进程在 `focus:state` 里调 `syncBreakCompanion()`；规则是 `reminder-rules.js` 的 `createBreakCompanion`：休息开始出现，结束 / 暂停 / 提前结束离开，+5 分钟只更新倒计时，「让它走」只管这一次休息。开关是 `app-settings.json` 的 `body.cat.enabled`（默认开），在「设置 → 身体与作息」。
+- 番茄钟进入「休息」时（都是 `NotchPomodoro.start(300, 'break')`），主进程在 `focus:state` 里调 `syncBreakCompanion()`；规则是 `reminder-rules.js` 的 `createBreakCompanion`：休息开始出现，结束 / 暂停 / 提前结束离开，+5 分钟只更新倒计时，「让它走」只管这一次休息。开关是 `app-settings.json` 的 `body.cat.enabled`（默认开），在「设置 → 身体与作息」。
+- **到点自动休息（2026-10-10 用户选定「两处都自动」）**：用户试用 beta.7 四天，3 次久坐提醒、2 次专注完成卡片都没点「休息 5 分钟」，卡片 12–15 秒后自己收起，猫一次也没来。现在开着大猫、提醒没暂停时，番茄钟专注结束（`pomodoro:notify`）和久坐提醒（`sampleBodyActivity`）由主进程 `startAutoBreak` 直接发 `reminder:action` 的 `break-5` 开始休息；卡片按钮换成 `autoBreakPresentation`：专注结束「再专注 5 分钟 / 知道了」，久坐「10 分钟后 / 今天不再提醒」（这两个会发 `break-end` 结束这次休息）。到点自己开始的休息（`breakCatAuto`），「让它走」也发 `break-end`；自己点的休息「让它走」仍只送走猫。关掉大猫后一切照旧，要点「休息 5 分钟」才休息。测试：`tests/auto-break.electron.js`（真实主进程）。
 - 窗口：铺满当前屏幕的透明窗口（`renderer/break-cat.*`），`focusable: false`，`setAlwaysOnTop(true, 'status')`（在刘海与提醒卡片之下）；默认点击穿透，渲染层按视频当前帧的透明度判断指针在不在猫身上，在猫或倒计时上才发 `break-cat:interactive`。猫走了窗口就销毁。
 - 素材：`renderer/assets/break-cat/arrive.webm`（走进来、伸懒腰、打哈欠、打滚、睡下，约 14 秒，只播一次）与 `sleep.webm`（最后 1 秒来回播的睡觉循环，再加 CSS 呼吸）。VP9 带透明通道，来源见 `ASSET_LICENSES.md`。视频是灰色英短，不是提示词里的橘猫。换视频（比如重新生成橘猫）只要一条命令：`python3 scripts/break-cat/make-break-cat.py <视频.mp4>`（要 ffmpeg 和 numpy / scipy / pillow / rembg），再把它最后打印的 `SLEEP_BOX` 填进 `renderer/break-cat.js`。要求机位不动、浅色干净背景、猫从右边走进来、最后睡下。
 - 摆位：视频上沿贴菜单栏下沿，画面右沿碰到屏幕右沿（猫从屏幕外走进来），睡下的猫居中、约占屏宽七成，倒计时在它下方；矮屏缩小。减少动态效果时直接显示睡着的静止画面。

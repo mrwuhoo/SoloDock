@@ -84,6 +84,16 @@ test('break companion: 让它走 lasts for this break only, and the setting turn
   assert.equal(cat.update({ ...resting, endsAt: now + 900_000 }, false, now + 5000), null);
 });
 
+test('with the cat on, a finished focus and a sitting reminder start the break themselves: the card only offers not resting', () => {
+  const ids = (source) => rules.autoBreakPresentation(source).actions.map((item) => item.id);
+  assert.deepEqual(ids('pomodoro'), ['focus-5', 'dismiss']);
+  assert.deepEqual(ids('sit'), ['body-snooze-10', 'body-mute-today']);
+  assert.equal(rules.autoBreakPresentation('pomodoro').actions.find((item) => item.primary).id, 'dismiss');
+  for (const source of ['pomodoro-break', 'eye', 'offwork', 'todo', 'codex', 'needs-you']) {
+    assert.equal(rules.autoBreakPresentation(source), null, `${source} never starts a break`);
+  }
+});
+
 test('sitting: 50 minutes of continuous use, reset by a 5-minute break, then again 50 minutes later', () => {
   const start = at(9);
   const tracker = rules.createActivityTracker({ offwork: { enabled: false } }, start);

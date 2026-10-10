@@ -43,6 +43,19 @@ function reminderPresentation(source) {
   }
 }
 
+// 到点自动休息：开着「休息时大猫陪你」时，番茄钟专注结束和久坐提醒不再等你点「休息 5 分钟」，
+// 直接开始 5 分钟休息、大猫走进来；卡片上只留不想休息时的选项（它们和「让它走」一样会结束这次休息）。
+function autoBreakPresentation(source) {
+  switch (source) {
+    case 'pomodoro':
+      return { actions: [action('focus-5', '再专注 5 分钟'), action('dismiss', '知道了', true)] };
+    case 'sit':
+      return { actions: [action('body-snooze-10', '10 分钟后'), action('body-mute-today', '今天不再提醒')] };
+    default:
+      return null;
+  }
+}
+
 function isAiSource(source) {
   return AI_SOURCES.has(String(source || ''));
 }
@@ -414,6 +427,7 @@ module.exports = {
   SIT_CHOICES,
   EYE_CHOICES,
   reminderPresentation,
+  autoBreakPresentation,
   isAiSource,
   normalizeBodySettings,
   createActivityTracker,

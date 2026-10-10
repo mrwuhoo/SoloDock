@@ -103,7 +103,8 @@ app.on('web-contents-created', (_event, contents) => {
       assert.equal(body.saved.ok, true);
       assert.deepEqual(body.after, { sit: { enabled: true, minutes: 45 }, eye: { enabled: true, minutes: 20 }, offwork: { enabled: true, time: '22:30' }, worklog: { enabled: true }, cat: { enabled: true } });
 
-      // A pomodoro reminder shows its buttons; "再专注 5 分钟" starts a 5-minute focus in the panel.
+      // A finished focus starts the break by itself (the cat is on by default), so the card only offers
+      // not resting; "再专注 5 分钟" starts a 5-minute focus in the panel.
       const { BrowserWindow: Windows, globalShortcut } = require('electron');
       await contents.executeJavaScript(`window.notchAPI.notifyPomodoro({ minutes: 25, mode: 'focus' })`);
       let reminderWindow = null;
@@ -114,7 +115,7 @@ app.on('web-contents-created', (_event, contents) => {
         if (!reminderWindow) continue;
         reminder = await reminderWindow.webContents.executeJavaScript(`document.getElementById('notification-shell')?.classList.contains('is-visible') ? [...document.querySelectorAll('.notification-action')].map((button) => button.dataset.actionId) : null`).catch(() => null);
       }
-      assert.deepEqual(reminder, ['break-5', 'focus-5', 'dismiss']);
+      assert.deepEqual(reminder, ['focus-5', 'dismiss']);
       const reminderBounds = reminderWindow.getBounds();
       const reminderDisplay = require('electron').screen.getDisplayMatching(reminderBounds);
       assert.deepEqual([reminderBounds.width, reminderBounds.height], [436, 172]);

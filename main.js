@@ -73,7 +73,7 @@ const {
   windowPermissionPane,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
-const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createBreakCompanion, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES, createQuotaWatch, quotaWindows } = require('./reminder-rules');
+const { reminderPresentation, autoBreakPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createBreakCompanion, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES, createQuotaWatch, quotaWindows } = require('./reminder-rules');
 const { createNoticeStore } = require('./notice-store');
 const { createWorklogStore } = require('./worklog-store');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
@@ -628,7 +628,7 @@ ipcMain.on('focus:state', (event, payload) => {
 });
 
 // ============ 休息陪伴：休息时一只大猫走进屏幕陪你 ============
-// 番茄钟进入「休息」时出现（专注完成卡片、久坐提醒和首页的「休息 5 分钟」都走这里），
+// 番茄钟进入「休息」时出现：专注结束和久坐提醒到点时自动开始休息（startAutoBreak），首页的「休息 5 分钟」也走这里，
 // 休息结束、暂停、提前结束或点「让它走」就离开。全屏透明窗口，只有猫和倒计时能点，
 // 其余地方点击穿透；不抢焦点、不挡后面的窗口，提醒卡片和刘海都在它上面。
 const BREAK_CAT_LEAVE_MS = 1200; // 离场动画的兜底时长；渲染层播完会先报告
@@ -638,12 +638,37 @@ let breakCatReady = false;
 let breakCatPending = null;
 let breakCatLeaveTimer = null;
 let breakCatEndTimer = null;
+let autoBreakRequestedAt = 0;
+let breakCatAuto = false; // 这次休息是到点自己开始的（不是你点的「休息 5 分钟」）
+
+// 到点自动休息（规则见 reminder-rules.js 的 autoBreakPresentation）：开着大猫、提醒没暂停时，
+// 直接开始 5 分钟休息，猫随之走进来。返回 true 表示已经开始。
+function startAutoBreak(source, now = Date.now()) {
+  if (!autoBreakPresentation(source)) return false;
+  if (!bodyTracker.settings().cat.enabled || getReminderPause().paused(now)) return false;
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  bodyTracker.startBreak(now);
+  autoBreakRequestedAt = now;
+  sendReminderAction('break-5', { source });
+  return true;
+}
+
+// 不想休息：结束这次自动开始的休息（猫跟着离开）。
+function endAutoBreak() {
+  sendReminderAction('break-end', { source: 'break-cat' });
+}
 
 function syncBreakCompanion(now = Date.now()) {
   const step = breakCompanion.update(focusHold.focus(), bodyTracker.settings().cat.enabled, now);
-  if (step && step.type === 'show') showBreakCat(step.endsAt);
-  else if (step && step.type === 'update') sendBreakCat('break-cat:update', { endsAt: step.endsAt });
-  else if (step && step.type === 'hide') hideBreakCat();
+  if (step && step.type === 'show') {
+    breakCatAuto = now - autoBreakRequestedAt < 10_000;
+    autoBreakRequestedAt = 0;
+    showBreakCat(step.endsAt);
+  } else if (step && step.type === 'update') sendBreakCat('break-cat:update', { endsAt: step.endsAt });
+  else if (step && step.type === 'hide') {
+    breakCatAuto = false;
+    hideBreakCat();
+  }
   // 渲染层没来得及报告休息结束时，到点也让猫离开。
   if (breakCatEndTimer) clearTimeout(breakCatEndTimer);
   breakCatEndTimer = null;
@@ -760,10 +785,13 @@ ipcMain.on('break-cat:interactive', (event, interactive) => {
   breakCatWindow.setIgnoreMouseEvents(interactive !== true, { forward: true });
 });
 
-// 「让它走」：只让猫离开，休息照常计时。
+// 「让它走」：你自己点的休息，只让猫离开、休息照常计时；到点自己开始的休息，就是这次不休息了。
 ipcMain.on('break-cat:dismiss', (event) => {
   if (!fromBreakCat(event)) return;
+  const auto = breakCatAuto;
+  breakCatAuto = false;
   if (breakCompanion.dismiss()) hideBreakCat();
+  if (auto) endAutoBreak();
 });
 
 ipcMain.on('break-cat:left', (event) => {
@@ -883,9 +911,15 @@ async function handleTaskNotificationAction(eventId, actionId) {
       break;
     case 'snooze-10': snoozeNotification(notification, 10); break;
     case 'snooze-30': snoozeNotification(notification, 30); break;
-    case 'body-snooze-10': bodyTracker.snooze('sit', 10, now); break;
+    case 'body-snooze-10':
+      bodyTracker.snooze('sit', 10, now);
+      if (notification.autoBreak) endAutoBreak();
+      break;
     case 'body-snooze-30': bodyTracker.snooze('offwork', 30, now); break;
-    case 'body-mute-today': bodyTracker.muteToday('sit', now); break;
+    case 'body-mute-today':
+      bodyTracker.muteToday('sit', now);
+      if (notification.autoBreak) endAutoBreak();
+      break;
     case 'break-5':
       bodyTracker.startBreak(now);
       sendReminderAction('break-5', notification);
@@ -970,7 +1004,7 @@ function readStoredBodySettings() {
 }
 
 const BODY_COPY = {
-  sit: (settings) => ({ title: '起来活动一下', detail: `已经连续用电脑 ${settings.sit.minutes} 分钟，站起来走走、喝口水` }),
+  sit: (settings, autoBreak) => ({ title: '起来活动一下', detail: autoBreak ? `已经连续用电脑 ${settings.sit.minutes} 分钟，休息 5 分钟，站起来走走` : `已经连续用电脑 ${settings.sit.minutes} 分钟，站起来走走、喝口水` }),
   eye: () => ({ title: '看看远处 20 秒', detail: '眨眨眼，让眼睛歇一会儿' }),
   offwork: (settings) => ({ title: '到收工时间了', detail: `${settings.offwork.time} · 把剩下的挪到明天，早点休息` }),
 };
@@ -1026,12 +1060,14 @@ function sampleBodyActivity() {
   if (worklogEnabled) getWorklogStore().record(idleMs, isFocusing(now), now);
   const settings = bodyTracker.settings();
   for (const kind of bodyTracker.sample(idleMs, now)) {
+    const autoBreak = startAutoBreak(kind, now);
     enqueueTaskNotification({
       eventId: `body-${kind}-${now}`,
       taskId: `body-${kind}-${dayKeyOf(now)}-${now}`,
       source: kind,
       project: '',
-      ...BODY_COPY[kind](settings),
+      ...BODY_COPY[kind](settings, autoBreak),
+      ...(autoBreak ? { ...autoBreakPresentation(kind), autoBreak } : {}),
       completedAt: now,
     });
   }
@@ -1375,13 +1411,15 @@ ipcMain.handle('pomodoro:notify', (event, payload) => {
   const safeMinutes = Math.max(1, Math.min(120, Math.round(Number(source.minutes) || 25)));
   const completedAt = Date.now();
   const isBreak = source.mode === 'break';
+  const autoBreak = !isBreak && startAutoBreak('pomodoro', completedAt);
   const notification = {
     eventId: `pomodoro-${completedAt}`,
     taskId: `pomodoro-${completedAt}`,
     source: isBreak ? 'pomodoro-break' : 'pomodoro',
     project: '番茄钟',
     title: isBreak ? '休息结束' : '专注完成',
-    detail: isBreak ? '准备好就继续专注' : `${safeMinutes} 分钟专注完成，休息一下吧`,
+    detail: isBreak ? '准备好就继续专注' : autoBreak ? `${safeMinutes} 分钟专注完成，休息 5 分钟` : `${safeMinutes} 分钟专注完成，休息一下吧`,
+    ...(autoBreak ? { ...autoBreakPresentation('pomodoro'), autoBreak } : {}),
     completedAt,
   };
   return { ok: true, result: enqueueTaskNotification(notification) };
