@@ -1,5 +1,6 @@
-// 待办页：分类卡（4 类 2×2，5–6 类 3×2）、筛选、搜索、管理分类、截止时间选择器、在做、重复。
-// 数据归这里：`notch-todo-data`（分类 id → 待办数组）、`notch-todo-categories-v1`、`notch-todo-doing-v1`。
+// 待办页：三栏——今日待办 · 本周计划 · 重点项目。前两栏按时间归属（日常待办，加上定了日期的项目步骤），各有自己的添加行；
+// 第三栏列出所有重点项目，点一个才展开它的步骤与「加下一步」。管理项目、截止时间选择器、在做、重复、拖动换栏都在这里。
+// 数据归这里：`notch-todo-data`（分类 id → 待办数组）、`notch-todo-categories-v1`（其中 daily: true 的那个是日常，其余是项目）、`notch-todo-doing-v1`。
 // 第一次升级时把旧数据原样备份到 `notch-todo-data-v1-backup`，P0–P3 的名字同时写回旧键，方便回滚。
 (function bootstrapTodoPage() {
   'use strict';
@@ -7,8 +8,8 @@
   const T = window.NotchTodo;
   const $ = (id) => document.getElementById(id);
   const page = $('task-page');
-  const grid = $('task-grid');
-  if (!T || !page || !grid) return;
+  const board = $('task-board');
+  if (!T || !page || !board) return;
 
   const DATA_KEY = 'notch-todo-data';
   const CATEGORY_KEY = 'notch-todo-categories-v1';
@@ -16,13 +17,14 @@
   const BACKUP_KEY = 'notch-todo-data-v1-backup';
   const DOING_KEY = 'notch-todo-doing-v1';
   const COMPLETE_DELAY_MS = 300;
+  const PROJECT_PREFIX = 'proj:';
   const api = () => window.notchAPI || {};
   const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   const els = {
-    filters: $('task-filters'),
     search: $('task-search'),
     manage: $('task-manage'),
+    projects: $('task-projects'),
     picker: $('task-picker'),
     pickerQuick: $('task-picker-quick'),
     pickerMonth: $('task-picker-month'),
@@ -35,20 +37,19 @@
     pickerUnit: $('task-picker-unit'),
     pickerRemind: $('task-picker-remind'),
     pickerError: $('task-picker-error'),
+    pickerClear: $('task-picker')?.querySelector('[data-pick="clear"]'),
     manager: $('task-manager'),
     managerList: $('task-manager-list'),
     managerCount: $('task-manager-count'),
     managerAdd: $('task-manager-add'),
     managerName: $('task-manager-name'),
-    menu: $('task-menu'),
-    menuSwatches: $('task-menu-swatches'),
+    tagMenu: $('task-tagmenu'),
   };
 
   const ICON = {
     check: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6.5 12.5 3.6 3.6 7.4-8"/></svg>',
     plus: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5.5v13M5.5 12h13"/></svg>',
     cal: '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="5.5" width="15" height="14" rx="3"/><path d="M4.5 10h15M9 3.5v4M15 3.5v4"/></svg>',
-    more: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6.5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="17.5" cy="12" r="1.3"/></svg>',
     repeat: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11a6.5 6.5 0 0 1 11.4-4.3L18.5 9"/><path d="M18.5 4.5V9H14"/><path d="M19 13a6.5 6.5 0 0 1-11.4 4.3L5.5 15"/><path d="M5.5 19.5V15H10"/></svg>',
     target: '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7.5"/><circle cx="12" cy="12" r="3"/></svg>',
     play: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8.5 6.5v11l9-5.5Z"/></svg>',
@@ -57,6 +58,13 @@
     chevron: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9.5 6.5 5.5 5.5-5.5 5.5"/></svg>',
     x: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7.5 7.5 9 9M16.5 7.5l-9 9"/></svg>',
   };
+
+  const PLACEHOLDER = {
+    today: '添加到今天，如「下午3点 回邮件」',
+    week: '加到本周，如「周五 交房租」',
+    project: '加下一步，写「周五前」会排进本周',
+  };
+  const EMPTY = { today: '今天还没有安排', week: '这周没有别的' };
 
   function readJson(key, fallback) {
     try {
@@ -89,8 +97,13 @@
   let { categories, data } = load();
   let doing = readJson(DOING_KEY, null);
 
+  const dailyId = () => T.dailyCategory(categories).id;
+  const projectList = () => T.projects(categories);
+  const isProject = (categoryId) => categoryId !== dailyId();
+  const isDoing = (id) => Boolean(doing && doing.id === id);
   const allEntries = () => categories.flatMap((category) => (data[category.id] || []).map((item) => ({ item, categoryId: category.id })));
   const categoryOf = (id) => categories.find((category) => category.id === id) || null;
+  const bucketOf = (entry, now) => T.bucketOf(entry.item, { now, daily: !isProject(entry.categoryId), doing: isDoing(entry.item.id) });
   function find(id) {
     for (const category of categories) {
       const list = data[category.id] || [];
@@ -118,15 +131,16 @@
     if (options.render !== false) render();
   }
 
+  // 截止时间可以为空：日常待办没有日期就在今日，项目的一步没有日期就只留在项目里。
   function addItem(categoryId, text, deadline, extra = {}) {
-    const category = categoryOf(categoryId) || categories[0];
-    const at = Date.parse(String(deadline || '')) || Number(deadline) || T.defaultDeadline();
+    const category = categoryOf(categoryId) || T.dailyCategory(categories);
+    const at = Date.parse(String(deadline || '')) || Number(deadline) || 0;
     const item = T.normalizeItem({
       id: uid('todo'),
       text,
       createdAt: Date.now(),
-      deadline: new Date(at).toISOString(),
-      repeat: extra.repeat,
+      deadline: at > 0 ? new Date(at).toISOString() : '',
+      repeat: at > 0 ? extra.repeat : undefined,
       remindMin: T.REMIND_OPTIONS.includes(extra.remindMin) ? extra.remindMin : T.DEFAULT_REMIND_MIN,
     });
     if (!item) return '';
@@ -134,6 +148,24 @@
     enteringId = item.id;
     persist();
     return item.id;
+  }
+
+  function setDeadline(id, at) {
+    const entry = find(id);
+    if (!entry) return;
+    const deadline = Number(at) > 0 ? new Date(Number(at)).toISOString() : '';
+    if (deadline !== entry.item.deadline) entry.item.remindedAt = 0;
+    entry.item.deadline = deadline;
+    if (!deadline) delete entry.item.repeat;
+  }
+
+  function moveToCategory(id, categoryId) {
+    const entry = find(id);
+    const target = categoryOf(categoryId);
+    if (!entry || !target || entry.categoryId === target.id) return false;
+    entry.list.splice(entry.index, 1);
+    data[target.id].push(entry.item);
+    return true;
   }
 
   // 完成：原条目进入已完成；重复待办同时生成下一次。返回撤销用的信息。
@@ -182,7 +214,7 @@
       actionLabel: '撤销',
       duration: 5000,
       onAction: () => {
-        const list = data[entry.categoryId] || data[categories[0].id];
+        const list = data[entry.categoryId] || data[dailyId()];
         if (find(removed.id)) return;
         list.splice(Math.min(entry.index, list.length), 0, removed);
         persist();
@@ -213,78 +245,51 @@
   }
 
   // ---------------- 页面状态 ----------------
-  let filter = 'all';
   let query = '';
   let editingId = '';
   let enteringId = '';
-  const expandedDone = new Set();
-  const drafts = new Map(); // 分类 id → { at（手动选的截止）, repeat, remindMin, unparsed }
-  const draftOf = (categoryId) => {
-    if (!drafts.has(categoryId)) drafts.set(categoryId, { at: null, repeat: null, remindMin: T.DEFAULT_REMIND_MIN, unparsed: false });
-    return drafts.get(categoryId);
+  let focusKey = ''; // 渲染完要聚焦的添加行
+  const expandedDone = new Set(); // 'today' | 'proj:<项目 id>'
+  const openProjects = new Set();
+  // 添加行草稿：key 是 'today' / 'week' / 'proj:<项目 id>'。项目栏的添加行每次渲染都重建，所以文字也存这里。
+  const drafts = new Map();
+  const draftOf = (key) => {
+    if (!drafts.has(key)) drafts.set(key, { text: '', at: null, repeat: null, remindMin: T.DEFAULT_REMIND_MIN, unparsed: false });
+    return drafts.get(key);
   };
+  const projectOfKey = (key) => (key.startsWith(PROJECT_PREFIX) ? key.slice(PROJECT_PREFIX.length) : '');
+  const columnEl = (key) => board.querySelector(`.task-col[data-col="${CSS.escape(key)}"]`);
+  const projectEl = (id) => els.projects.querySelector(`.task-proj[data-project="${CSS.escape(id)}"]`);
+  const addRowFor = (key) => board.querySelector(`.task-add[data-add="${CSS.escape(key)}"]`);
 
   // ---------------- 渲染 ----------------
-  function cardFor(categoryId) {
-    return grid.querySelector(`.task-card[data-category="${CSS.escape(categoryId)}"]`);
+  function sortEntries(entries) {
+    const order = new Map(T.sortPending(entries.map((entry) => entry.item)).map((item, index) => [item.id, index]));
+    return [...entries].sort((left, right) => (Number(isDoing(right.item.id)) - Number(isDoing(left.item.id))) || (order.get(left.item.id) - order.get(right.item.id)));
   }
 
-  function buildCard(category, index) {
-    const card = document.createElement('section');
-    card.className = 'task-card tile';
-    card.dataset.category = category.id;
-    card.innerHTML = `
-      <header class="task-head">
-        <i class="task-dot" aria-hidden="true"></i>
-        <b class="task-name" data-action="rename" title="双击改名"></b>
-        <span class="task-count"></span>
-        <span class="task-flex"></span>
-        <button class="task-icon" type="button" data-action="menu" aria-label="分类选项">${ICON.more}</button>
-      </header>
-      <div class="task-body"></div>
-      <form class="task-add" autocomplete="off">
-        <label class="task-field">${ICON.plus}<input class="task-add-input" type="text" maxlength="200" /><span class="task-parse" hidden><span></span><button type="button" data-action="unparse" aria-label="不识别日期">${ICON.x}</button></span></label>
-        <button class="task-date" type="button" data-action="add-date">${ICON.cal}<span></span></button>
-      </form>`;
-    card.querySelector('.task-add-input').placeholder = index === 0 ? '添加待办，如「周五前 交稿」' : '添加待办';
-    return card;
-  }
-
-  function syncCards() {
-    const shape = T.gridShape(categories.length);
-    grid.style.setProperty('--task-columns', String(shape.columns));
-    grid.style.setProperty('--task-rows', String(shape.rows));
-    const keep = new Set(categories.map((category) => category.id));
-    grid.querySelectorAll('.task-card').forEach((card) => { if (!keep.has(card.dataset.category)) card.remove(); });
-    categories.forEach((category, index) => {
-      let card = cardFor(category.id);
-      if (!card) card = buildCard(category, index);
-      if (grid.children[index] !== card) grid.insertBefore(card, grid.children[index] || null);
-      card.dataset.color = category.color;
-      const name = card.querySelector('.task-name');
-      if (name && !name.isContentEditable) name.textContent = category.name;
-      card.querySelector('.task-add-input').setAttribute('aria-label', `添加到「${category.name}」`);
-      card.querySelector('.task-add-input').placeholder = index === 0 ? '添加待办，如「周五前 交稿」' : '添加待办';
-    });
-  }
-
-  function rowHtml(item, now) {
+  function rowHtml(entry, now, inProject) {
+    const { item, categoryId } = entry;
     const done = item.done;
-    const isDoing = !done && doing && doing.id === item.id;
+    const doingRow = !done && isDoing(item.id);
     const label = done
       ? { text: `${T.shortDate(item.completedAt || item.createdAt, now)} 完成`, tone: 'done' }
-      : T.dueLabel(item.deadline, now);
+      : item.deadline ? T.dueLabel(item.deadline, now) : { text: '定时间', tone: 'empty' };
+    const project = !inProject && isProject(categoryId) ? categoryOf(categoryId) : null;
     const li = document.createElement('li');
-    li.className = `task-row${done ? ' done' : ''}${isDoing ? ' doing' : ''}${item.id === enteringId ? ' enter' : ''}`;
+    li.className = `task-row${done ? ' done' : ''}${doingRow ? ' doing' : ''}${item.id === enteringId ? ' enter' : ''}`;
     li.dataset.id = item.id;
+    li.dataset.color = categoryOf(categoryId)?.color || 'cat-4';
+    li.draggable = !done && editingId !== item.id;
     li.innerHTML = `
       <button class="task-check" type="button" data-action="toggle" aria-pressed="${done}">${ICON.check}</button>
       ${editingId === item.id ? '<input class="task-edit" type="text" maxlength="200" />' : '<button class="task-text" type="button" data-action="edit"></button>'}
       ${item.repeat ? `<span class="task-rep">${ICON.repeat}</span>` : ''}
-      ${isDoing ? `<span class="task-chip">${ICON.target}在做</span>` : ''}
+      ${doingRow ? `<span class="task-chip">${ICON.target}在做</span>` : ''}
+      ${project ? '<button class="task-tag" type="button" data-action="tag" title="点一下换项目，或退回日常"><i></i><span></span></button>' : ''}
       <button class="task-time" type="button" data-action="date"></button>
       <span class="task-acts">
-        ${done ? '' : `<button class="task-icon" type="button" data-action="doing">${isDoing ? ICON.stop : ICON.play}</button>`}
+        ${done ? '' : `<button class="task-icon" type="button" data-action="doing">${doingRow ? ICON.stop : ICON.play}</button>`}
         <button class="task-icon" type="button" data-action="delete" aria-label="删除">${ICON.trash}</button>
       </span>`;
     li.querySelector('.task-check').setAttribute('aria-label', done ? `恢复未完成：${item.text}` : `完成：${item.text}`);
@@ -294,144 +299,243 @@
     if (edit) edit.value = item.text;
     const rep = li.querySelector('.task-rep');
     if (rep) rep.title = T.repeatLabel(item.repeat, item.deadline);
+    if (project) li.querySelector('.task-tag span').textContent = project.name;
     const time = li.querySelector('.task-time');
     time.textContent = label.text;
     time.dataset.tone = label.tone;
-    time.title = T.describe(item);
+    time.title = item.deadline ? T.describe(item) : '定一个截止时间';
     if (done) time.disabled = true;
     const doingButton = li.querySelector('[data-action="doing"]');
-    if (doingButton) doingButton.setAttribute('aria-label', isDoing ? '取消在做' : '设为在做');
+    if (doingButton) doingButton.setAttribute('aria-label', doingRow ? '取消在做' : '设为在做');
     return li;
   }
 
-  const EMPTY = { all: '还没有待办', today: '今天没有到期的', overdue: '没有逾期', done: '还没有完成的' };
-
-  function renderBody(category, now) {
-    const card = cardFor(category.id);
-    if (!card) return;
-    const body = card.querySelector('.task-body');
-    const items = data[category.id] || [];
-    const visible = (item) => T.matchesSearch(item, query);
-    const pending = T.sortPending(items.filter((item) => !item.done && T.matches(item, filter === 'done' ? 'all' : filter, now) && visible(item)));
-    const done = T.sortDone(items.filter((item) => item.done && visible(item)));
-    card.querySelector('.task-count').textContent = String(items.filter((item) => !item.done).length);
-    body.replaceChildren();
+  function buildList(entries, now, inProject, className = 'task-list') {
     const list = document.createElement('ul');
-    list.className = 'task-list';
-    const shownPending = filter === 'done' ? [] : pending;
-    shownPending.forEach((item) => list.append(rowHtml(item, now)));
-    const showDoneRows = filter === 'done' || (filter === 'all' && expandedDone.has(category.id));
-    if (shownPending.length) body.append(list);
-    else if (!query && filter === 'all' && done.length) {
-      const allDone = document.createElement('p');
-      allDone.className = 'task-empty';
-      allDone.textContent = '都完成了';
-      body.append(allDone);
-    }
-    if (filter === 'all' && done.length) {
-      const fold = document.createElement('button');
-      fold.type = 'button';
-      fold.className = 'task-fold';
-      fold.dataset.action = 'fold';
-      fold.setAttribute('aria-expanded', String(showDoneRows));
-      fold.innerHTML = `${ICON.chevron}<span></span>`;
-      fold.querySelector('span').textContent = `已完成 ${done.length}`;
-      body.append(fold);
-    }
-    if (showDoneRows && done.length) {
-      const doneList = document.createElement('ul');
-      doneList.className = 'task-list task-done-list';
-      done.forEach((item) => doneList.append(rowHtml(item, now)));
-      body.append(doneList);
-    }
-    if (!shownPending.length && !(filter === 'done' && done.length) && !(filter === 'all' && done.length)) {
-      const empty = document.createElement('p');
-      empty.className = 'task-empty';
-      empty.textContent = query ? '没有找到' : EMPTY[filter];
-      body.append(empty);
-    }
-    refreshAddRow(category.id, now);
+    list.className = className;
+    entries.forEach((entry) => list.append(rowHtml(entry, now, inProject)));
+    return list;
   }
 
-  function renderFilters(now) {
-    const counts = T.counts(data, now);
-    els.filters?.querySelectorAll('[data-filter]').forEach((button) => {
-      button.setAttribute('aria-selected', String(button.dataset.filter === filter));
-      const badge = button.querySelector('b');
-      if (badge) badge.textContent = String(counts[button.dataset.filter]);
+  function buildFold(key, count) {
+    const fold = document.createElement('button');
+    fold.type = 'button';
+    fold.className = 'task-fold';
+    fold.dataset.action = 'fold';
+    fold.dataset.key = key;
+    fold.setAttribute('aria-expanded', String(expandedDone.has(key)));
+    fold.innerHTML = `${ICON.chevron}<span></span>`;
+    fold.querySelector('span').textContent = `已完成 ${count}`;
+    return fold;
+  }
+
+  function buildEmpty(text) {
+    const empty = document.createElement('p');
+    empty.className = 'task-empty';
+    empty.textContent = text;
+    return empty;
+  }
+
+  function buildAddRow(key) {
+    const form = document.createElement('form');
+    form.className = 'task-add';
+    form.dataset.add = key;
+    form.autocomplete = 'off';
+    form.innerHTML = `
+      <label class="task-field">${ICON.plus}<input class="task-add-input" type="text" maxlength="200" /><span class="task-parse" hidden><span></span><button type="button" data-action="unparse" aria-label="不识别日期">${ICON.x}</button></span></label>
+      <button class="task-date" type="button" data-action="add-date" aria-expanded="false">${ICON.cal}<span></span></button>`;
+    const project = projectOfKey(key);
+    const input = form.querySelector('.task-add-input');
+    input.placeholder = project ? PLACEHOLDER.project : PLACEHOLDER[key];
+    input.setAttribute('aria-label', project ? `给「${categoryOf(project)?.name || ''}」加下一步` : `添加到${T.bucketLabel(key)}`);
+    input.value = draftOf(key).text;
+    return form;
+  }
+
+  const visible = (item) => T.matchesSearch(item, query);
+
+  function renderColumn(key, now) {
+    const column = columnEl(key);
+    const body = column.querySelector('.task-body');
+    const entries = sortEntries(allEntries().filter((entry) => !entry.item.done && visible(entry.item) && bucketOf(entry, now) === key));
+    column.querySelector('.task-count').textContent = entries.length ? `${entries.length} 件` : '';
+    body.replaceChildren();
+    if (entries.length) {
+      const list = document.createElement('ul');
+      list.className = 'task-list';
+      let divided = false;
+      entries.forEach((entry) => {
+        if (key === 'week' && !divided && T.beyondThisWeek(entry.item.deadline, now)) {
+          divided = true;
+          const divider = document.createElement('li');
+          divider.className = 'task-divider';
+          divider.textContent = '下周起';
+          list.append(divider);
+        }
+        list.append(rowHtml(entry, now, false));
+      });
+      body.append(list);
+    } else {
+      body.append(buildEmpty(query ? '没有找到' : EMPTY[key]));
+    }
+    if (key === 'today') {
+      const done = allEntries().filter((entry) => entry.item.done && visible(entry.item));
+      const sorted = T.sortDone(done.map((entry) => entry.item)).map((item) => done.find((entry) => entry.item === item));
+      if (sorted.length) {
+        body.append(buildFold('today', sorted.length));
+        if (expandedDone.has('today')) body.append(buildList(sorted, now, false, 'task-list task-done-list'));
+      }
+    }
+    if (!addRowFor(key)) column.append(buildAddRow(key));
+    refreshAddRow(key, now);
+  }
+
+  function renderProjects(now) {
+    const list = projectList();
+    board.querySelector('.task-col[data-col="projects"] .task-count').textContent = list.length ? `${list.length} 个` : '';
+    els.projects.replaceChildren();
+    if (!list.length) {
+      els.projects.append(buildEmpty('还没有重点项目，在「管理项目」里加一个'));
+      return;
+    }
+    list.forEach((project) => {
+      const items = data[project.id] || [];
+      const pending = sortEntries(items.filter((item) => !item.done && visible(item)).map((item) => ({ item, categoryId: project.id })));
+      const done = T.sortDone(items.filter((item) => item.done && visible(item))).map((item) => ({ item, categoryId: project.id }));
+      const open = query ? pending.length + done.length > 0 : openProjects.has(project.id);
+      const card = document.createElement('section');
+      card.className = 'task-proj';
+      card.dataset.project = project.id;
+      card.dataset.color = project.color;
+      card.dataset.open = String(open);
+      card.innerHTML = `<button class="task-proj-head" type="button" data-action="project" aria-expanded="${open}">${ICON.chevron}<i class="task-dot" aria-hidden="true"></i><b class="task-proj-name"></b><span class="task-proj-fact"></span></button>`;
+      card.querySelector('.task-proj-name').textContent = project.name;
+      const left = items.filter((item) => !item.done).length;
+      const finished = items.length - left;
+      card.querySelector('.task-proj-fact').textContent = [left ? `${left} 步` : '没有下一步', finished ? `完成 ${finished}` : ''].filter(Boolean).join(' · ');
+      if (open) {
+        const body = document.createElement('div');
+        body.className = 'task-proj-body';
+        if (pending.length) body.append(buildList(pending, now, true));
+        else if (query) body.append(buildEmpty('没有找到'));
+        const key = `${PROJECT_PREFIX}${project.id}`;
+        if (done.length) {
+          body.append(buildFold(key, done.length));
+          if (expandedDone.has(key)) body.append(buildList(done, now, true, 'task-list task-done-list'));
+        }
+        body.append(buildAddRow(key));
+        card.append(body);
+      }
+      els.projects.append(card);
     });
+    list.forEach((project) => { if (addRowFor(`${PROJECT_PREFIX}${project.id}`)) refreshAddRow(`${PROJECT_PREFIX}${project.id}`, now); });
   }
 
   function render() {
     const now = Date.now();
-    syncCards();
-    categories.forEach((category) => renderBody(category, now));
-    renderFilters(now);
+    renderColumn('today', now);
+    renderColumn('week', now);
+    renderProjects(now);
     enteringId = '';
-    const edit = grid.querySelector('.task-edit');
+    const edit = board.querySelector('.task-edit');
     if (edit && document.activeElement !== edit) {
       edit.focus({ preventScroll: true });
       edit.select();
     }
+    if (focusKey) {
+      addRowFor(focusKey)?.querySelector('.task-add-input')?.focus({ preventScroll: true });
+      focusKey = '';
+    }
     if (!els.manager.hidden) renderManager();
   }
 
-  // 只刷新时间标签与计数，不重建行（每 30 秒、日期变化时）。
+  // 只刷新时间标签与添加行，不重建行（每 30 秒、日期变化时）。
   function refreshLabels() {
     const now = Date.now();
-    grid.querySelectorAll('.task-row:not(.done)').forEach((row) => {
+    board.querySelectorAll('.task-row:not(.done)').forEach((row) => {
       const entry = find(row.dataset.id);
       const time = row.querySelector('.task-time');
-      if (!entry || !time) return;
+      if (!entry || !time || !entry.item.deadline) return;
       const label = T.dueLabel(entry.item.deadline, now);
       time.textContent = label.text;
       time.dataset.tone = label.tone;
     });
-    categories.forEach((category) => refreshAddRow(category.id, now));
-    renderFilters(now);
+    board.querySelectorAll('.task-add').forEach((form) => refreshAddRow(form.dataset.add, now));
   }
 
-  // 添加行：输入里识别到日期时显示解析标签；日期按钮显示这一条会用的截止时间。
-  function draftDeadline(categoryId, now = Date.now()) {
-    const card = cardFor(categoryId);
-    const draft = draftOf(categoryId);
-    const input = card?.querySelector('.task-add-input');
+  function flashZone(zone) {
+    if (!zone) return;
+    zone.classList.remove('flash');
+    void zone.offsetWidth;
+    zone.classList.add('flash');
+    setTimeout(() => zone.classList.remove('flash'), 800);
+  }
+
+  // ---------------- 添加行 ----------------
+  // 今日和项目里默认不定时间；本周默认这周日 23:30。文字里认出日期就按日期走，并提示会落到哪一栏。
+  const defaultFor = (key, now) => (key === 'week' ? T.weekEndDeadline(now) : 0);
+  const bucketOfTime = (at, now) => T.bucketOf({ deadline: new Date(at).toISOString() }, { now });
+
+  function draftDeadline(key, now = Date.now()) {
+    const input = addRowFor(key)?.querySelector('.task-add-input');
+    const draft = draftOf(key);
     const parsed = input && !draft.unparsed ? T.parseAddInput(input.value, now) : { at: null };
     if (parsed.at) return { at: parsed.at, parsed };
     if (draft.at && draft.at > now) return { at: draft.at, parsed };
-    return { at: T.defaultDeadline(now), parsed };
+    return { at: defaultFor(key, now), parsed };
   }
 
-  function refreshAddRow(categoryId, now = Date.now()) {
-    const card = cardFor(categoryId);
-    if (!card) return;
-    const { at, parsed } = draftDeadline(categoryId, now);
-    const chip = card.querySelector('.task-parse');
+  function refreshAddRow(key, now = Date.now()) {
+    const form = addRowFor(key);
+    if (!form) return;
+    const { at, parsed } = draftDeadline(key, now);
+    const draft = draftOf(key);
+    const chip = form.querySelector('.task-parse');
     chip.hidden = !parsed.at;
     if (parsed.at) chip.querySelector('span').textContent = parsed.label;
-    const dateButton = card.querySelector('.task-date');
-    dateButton.querySelector('span').textContent = T.shortDate(at, now);
-    dateButton.dataset.manual = String(Boolean(parsed.at || draftOf(categoryId).at));
-    const draft = draftOf(categoryId);
-    dateButton.title = [T.fullDate(new Date(at).toISOString()), draft.repeat ? T.repeatLabel(draft.repeat, new Date(at).toISOString()) : '', T.remindLabel(draft.remindMin)].filter(Boolean).join(' · ');
+    // 时间决定落点：今日栏写了明天以后的时间会去本周，本周栏写了今天的时间会去今日，项目的下一步定了时间也会排进去。
+    // 落点直接跟在时间后面（「明天 15:00 → 本周」），不另占输入框的宽度。
+    const where = at ? bucketOfTime(at, now) : '';
+    let moves = '';
+    if (key === 'today' && where === 'week') moves = '本周';
+    else if (key === 'week' && where === 'today') moves = '今日';
+    else if (projectOfKey(key) && where) moves = where === 'today' ? '今日' : '本周';
+    const dateButton = form.querySelector('.task-date');
+    dateButton.querySelector('span').textContent = at ? `${T.shortDate(at, now)}${moves ? ` → ${moves}` : ''}` : '定时间';
+    dateButton.dataset.manual = String(Boolean(parsed.at || draft.at));
+    dateButton.dataset.empty = String(!at);
+    dateButton.dataset.moves = String(Boolean(moves));
+    dateButton.title = at
+      ? [
+        T.fullDate(new Date(at).toISOString()),
+        moves ? (projectOfKey(key) ? `也会排进${T.bucketLabel(where)}` : `会放到${T.bucketLabel(where)}`) : '',
+        draft.repeat ? T.repeatLabel(draft.repeat, new Date(at).toISOString()) : '',
+        T.remindLabel(draft.remindMin),
+      ].filter(Boolean).join(' · ')
+      : '不定时间；点一下可以选';
   }
 
-  function submitAdd(categoryId) {
-    const card = cardFor(categoryId);
-    const input = card?.querySelector('.task-add-input');
+  function submitAdd(key) {
+    const input = addRowFor(key)?.querySelector('.task-add-input');
     if (!input || !input.value.trim()) return;
     const now = Date.now();
-    const draft = draftOf(categoryId);
-    const { at, parsed } = draftDeadline(categoryId, now);
+    const draft = draftOf(key);
+    const { at, parsed } = draftDeadline(key, now);
     const text = parsed.at ? parsed.text : input.value.trim();
+    const project = projectOfKey(key);
+    const categoryId = project || dailyId();
+    input.value = '';
+    drafts.delete(key);
+    focusKey = key;
+    if (picker.mode === 'add' && picker.key === key) closePicker();
     const id = addItem(categoryId, text, at, { repeat: draft.repeat, remindMin: draft.remindMin });
     if (!id) return;
-    input.value = '';
-    drafts.delete(categoryId);
-    if (picker.mode === 'add' && picker.categoryId === categoryId) closePicker();
-    refreshAddRow(categoryId);
-    input.focus({ preventScroll: true });
-    requestAnimationFrame(() => grid.querySelector(`.task-row[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' }));
+    const entry = find(id);
+    const landed = bucketOf(entry, now);
+    const home = project ? projectEl(project) : columnEl(key);
+    const target = landed === 'none' ? home : columnEl(landed);
+    if (target !== home) flashZone(target);
+    requestAnimationFrame(() => board.querySelector(`.task-row[data-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'nearest' }));
   }
 
   // ---------------- 勾选、编辑 ----------------
@@ -444,7 +548,7 @@
       return;
     }
     if (row.classList.contains('completing')) return;
-    row.classList.add('completing');
+    board.querySelectorAll(`.task-row[data-id="${CSS.escape(id)}"]`).forEach((node) => node.classList.add('completing'));
     setTimeout(() => {
       const result = completeItem(id);
       if (!result) return;
@@ -462,7 +566,7 @@
   }
 
   function finishEdit(save) {
-    const input = grid.querySelector('.task-edit');
+    const input = board.querySelector('.task-edit');
     const id = editingId;
     editingId = '';
     if (save && input) {
@@ -478,7 +582,7 @@
   }
 
   // ---------------- 截止时间选择器 ----------------
-  const picker = { mode: '', categoryId: '', id: '', anchor: null, year: 0, month: 0, date: null, repeat: null, remindMin: T.DEFAULT_REMIND_MIN };
+  const picker = { mode: '', key: '', id: '', anchor: null, year: 0, month: 0, date: null, repeat: null, remindMin: T.DEFAULT_REMIND_MIN };
 
   function fillPickerOptions() {
     if (els.pickerHour && !els.pickerHour.options.length) {
@@ -496,10 +600,6 @@
     els.pickerMinute.value = String(selected);
   }
 
-  function repeatValue(rule) {
-    return rule ? rule.kind : 'none';
-  }
-
   function fillRepeat() {
     const iso = picker.date.toISOString();
     const options = [
@@ -511,7 +611,7 @@
       ['custom', '自定义…'],
     ];
     els.pickerRepeat.replaceChildren(...options.map(([value, label]) => new Option(label, value)));
-    els.pickerRepeat.value = repeatValue(picker.repeat);
+    els.pickerRepeat.value = picker.repeat ? picker.repeat.kind : 'none';
     els.pickerCustom.hidden = !picker.repeat || picker.repeat.kind !== 'custom';
     if (picker.repeat && picker.repeat.kind === 'custom') {
       els.pickerEvery.value = String(picker.repeat.every);
@@ -575,25 +675,27 @@
     pop.style.visibility = '';
   }
 
-  function openPicker(mode, categoryId, id, anchor) {
+  // mode 'add'：target 是添加行的 key；mode 'edit'：target 是待办 id。没有日期的从今天 23:30 起步。
+  function openPicker(mode, target, anchor) {
     closeMenus();
     fillPickerOptions();
     let at;
     if (mode === 'edit') {
-      const entry = find(id);
+      const entry = find(target);
       if (!entry) return;
-      at = Date.parse(entry.item.deadline) || T.defaultDeadline();
+      at = Date.parse(entry.item.deadline) || T.todayDeadline();
       picker.repeat = entry.item.repeat ? { ...entry.item.repeat } : null;
       picker.remindMin = T.remindLead(entry.item);
     } else {
-      const draft = draftOf(categoryId);
-      at = draftDeadline(categoryId).at;
+      const draft = draftOf(target);
+      at = draftDeadline(target).at || T.todayDeadline();
       picker.repeat = draft.repeat ? { ...draft.repeat } : null;
       picker.remindMin = draft.remindMin;
     }
-    Object.assign(picker, { mode, categoryId, id, anchor, date: new Date(at) });
+    Object.assign(picker, { mode, key: mode === 'add' ? target : '', id: mode === 'edit' ? target : '', anchor, date: new Date(at) });
     picker.year = picker.date.getFullYear();
     picker.month = picker.date.getMonth();
+    if (els.pickerClear) els.pickerClear.textContent = mode === 'edit' ? '不定时间' : '清除';
     renderPicker();
     positionPopover(els.picker, anchor, 'above');
     anchor.setAttribute('aria-expanded', 'true');
@@ -611,12 +713,12 @@
   function pickerChanged() {
     renderPicker();
     if (picker.mode !== 'add' || picker.date.getTime() <= Date.now()) return;
-    const draft = draftOf(picker.categoryId);
+    const draft = draftOf(picker.key);
     draft.at = picker.date.getTime();
     draft.unparsed = true;
     draft.repeat = picker.repeat;
     draft.remindMin = picker.remindMin;
-    refreshAddRow(picker.categoryId);
+    refreshAddRow(picker.key);
   }
 
   function setPickerDay(time) {
@@ -633,9 +735,7 @@
     if (picker.mode === 'edit') {
       const entry = find(picker.id);
       if (entry) {
-        const deadline = picker.date.toISOString();
-        if (deadline !== entry.item.deadline) entry.item.remindedAt = 0;
-        entry.item.deadline = deadline;
+        setDeadline(picker.id, picker.date.getTime());
         if (picker.repeat) entry.item.repeat = T.normalizeRepeat(picker.repeat);
         else delete entry.item.repeat;
         entry.item.remindMin = picker.remindMin;
@@ -644,24 +744,24 @@
     } else {
       pickerChanged();
     }
-    const { anchor, mode } = picker;
+    const { key, mode } = picker;
     closePicker();
-    if (mode === 'add') anchor?.closest('.task-card')?.querySelector('.task-add-input')?.focus({ preventScroll: true });
+    if (mode === 'add') addRowFor(key)?.querySelector('.task-add-input')?.focus({ preventScroll: true });
   }
 
+  // 添加模式的「清除」回到这一栏的默认；编辑模式的「不定时间」去掉截止（日常待办回到今日，项目的一步只留在项目里）。
   function clearPicker() {
     if (picker.mode === 'add') {
-      drafts.delete(picker.categoryId);
-      refreshAddRow(picker.categoryId);
+      Object.assign(draftOf(picker.key), { at: null, repeat: null, remindMin: T.DEFAULT_REMIND_MIN, unparsed: false });
+      refreshAddRow(picker.key);
       closePicker();
       return;
     }
-    picker.date = new Date(T.defaultDeadline());
-    picker.year = picker.date.getFullYear();
-    picker.month = picker.date.getMonth();
-    picker.repeat = null;
-    picker.remindMin = T.DEFAULT_REMIND_MIN;
-    renderPicker();
+    const id = picker.id;
+    closePicker();
+    if (!find(id)) return;
+    setDeadline(id, 0);
+    persist();
   }
 
   els.picker.addEventListener('click', (event) => {
@@ -690,8 +790,7 @@
     pickerChanged();
   });
   const customChanged = () => {
-    const unit = els.pickerUnit.value;
-    picker.repeat = T.normalizeRepeat({ kind: 'custom', every: els.pickerEvery.value, unit, day: picker.date.getDate() });
+    picker.repeat = T.normalizeRepeat({ kind: 'custom', every: els.pickerEvery.value, unit: els.pickerUnit.value, day: picker.date.getDate() });
     pickerChanged();
   };
   els.pickerEvery.addEventListener('change', customChanged);
@@ -703,7 +802,140 @@
     }
   });
 
-  // ---------------- 分类：重命名、菜单、管理 ----------------
+  // ---------------- 项目标签：换项目、退回日常 ----------------
+  let tagItemId = '';
+  function openTagMenu(id, anchor) {
+    closePicker();
+    closeManager();
+    const entry = find(id);
+    if (!entry) return;
+    tagItemId = id;
+    const buttons = projectList().map((project) => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.setAttribute('role', 'menuitemradio');
+      button.setAttribute('aria-checked', String(project.id === entry.categoryId));
+      button.dataset.tag = project.id;
+      button.innerHTML = '<i class="task-dot" aria-hidden="true"></i><span></span>';
+      button.dataset.color = project.color;
+      button.querySelector('span').textContent = project.name;
+      return button;
+    });
+    const separator = document.createElement('div');
+    separator.className = 'task-sep';
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'muted';
+    back.setAttribute('role', 'menuitem');
+    back.dataset.tag = '';
+    back.textContent = '退回日常，不属于项目';
+    els.tagMenu.replaceChildren(...buttons, separator, back);
+    positionPopover(els.tagMenu, anchor, 'below');
+  }
+
+  function closeTagMenu() {
+    if (els.tagMenu.hidden) return false;
+    els.tagMenu.hidden = true;
+    tagItemId = '';
+    return true;
+  }
+
+  els.tagMenu.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-tag]');
+    if (!button) return;
+    const id = tagItemId;
+    const target = button.dataset.tag || dailyId();
+    closeTagMenu();
+    if (moveToCategory(id, target)) persist();
+  });
+
+  // ---------------- 拖动：换到今日 / 本周，或放回某个项目 ----------------
+  let dragId = '';
+  const zoneOf = (target) => {
+    if (!(target instanceof Element)) return null;
+    const project = target.closest('.task-proj');
+    if (project) return project;
+    const column = target.closest('.task-col');
+    return column && column.dataset.col !== 'projects' ? column : null;
+  };
+  // 日常待办进不了项目；项目的一步可以换项目、也可以去今日 / 本周。
+  function canDrop(zone) {
+    const entry = dragId ? find(dragId) : null;
+    if (!entry || !zone) return false;
+    if (zone.classList.contains('task-proj')) return isProject(entry.categoryId);
+    return true;
+  }
+  function clearDrag() {
+    dragId = '';
+    board.querySelectorAll('.dragging, .over').forEach((node) => node.classList.remove('dragging', 'over'));
+  }
+  function dropOn(zone) {
+    const entry = find(dragId);
+    if (!entry) return;
+    const id = dragId;
+    const now = Date.now();
+    if (zone.classList.contains('task-proj')) {
+      const project = zone.dataset.project;
+      moveToCategory(id, project);
+      setDeadline(id, 0);
+      if (isDoing(id)) doing = null;
+      openProjects.add(project);
+      persist();
+      flashZone(projectEl(project));
+      return;
+    }
+    const key = zone.dataset.col;
+    if (bucketOf(entry, now) === key) return;
+    if (key === 'today') {
+      // 本来有日期的，挪到今天的同一钟点（已经过了就是今天 23:30）；没有的定在今天 23:30。
+      const due = Date.parse(entry.item.deadline);
+      let at = T.todayDeadline(now);
+      if (Number.isFinite(due)) {
+        const base = new Date(now);
+        const clock = new Date(due);
+        const same = new Date(base.getFullYear(), base.getMonth(), base.getDate(), clock.getHours(), clock.getMinutes()).getTime();
+        if (same > now) at = same;
+      }
+      setDeadline(id, at);
+    } else {
+      setDeadline(id, T.weekEndDeadline(now));
+      if (isDoing(id)) doing = null;
+    }
+    persist();
+    flashZone(columnEl(key));
+  }
+  board.addEventListener('dragstart', (event) => {
+    const row = event.target instanceof Element ? event.target.closest('.task-row') : null;
+    if (!row || row.classList.contains('done')) return;
+    dragId = row.dataset.id;
+    row.classList.add('dragging');
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = 'move';
+      try { event.dataTransfer.setData('text/plain', dragId); } catch (error) {}
+    }
+  });
+  board.addEventListener('dragover', (event) => {
+    const zone = zoneOf(event.target);
+    if (!canDrop(zone)) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    if (!zone.classList.contains('over')) {
+      board.querySelectorAll('.over').forEach((node) => node.classList.remove('over'));
+      zone.classList.add('over');
+    }
+  });
+  board.addEventListener('drop', (event) => {
+    const zone = zoneOf(event.target);
+    if (!canDrop(zone)) return;
+    event.preventDefault();
+    dropOn(zone);
+    clearDrag();
+  });
+  board.addEventListener('dragend', clearDrag);
+
+  // ---------------- 管理项目 ----------------
+  const maxProjects = () => T.MAX_CATEGORIES - 1;
+
   function renameCategory(id, name) {
     const category = categoryOf(id);
     const clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 24);
@@ -713,40 +945,20 @@
     return true;
   }
 
-  function startRename(card) {
-    const name = card.querySelector('.task-name');
-    const category = categoryOf(card.dataset.category);
-    if (!name || !category || name.isContentEditable) return;
-    name.contentEditable = 'plaintext-only';
-    name.spellcheck = false;
-    name.focus();
-    document.getSelection()?.selectAllChildren(name);
-    let finished = false;
-    const finish = (save) => {
-      if (finished) return;
-      finished = true;
-      name.removeEventListener('blur', onBlur);
-      name.removeEventListener('keydown', onKey);
-      name.contentEditable = 'false';
-      name.removeAttribute('contenteditable');
-      if (!(save && renameCategory(category.id, name.textContent))) name.textContent = category.name;
-    };
-    const onBlur = () => finish(true);
-    const onKey = (event) => {
-      if (event.isComposing) return;
-      if (event.key === 'Enter') { event.preventDefault(); finish(true); }
-    };
-    name.addEventListener('blur', onBlur);
-    name.addEventListener('keydown', onKey);
-    name._cancelRename = () => finish(false);
+  // 项目的顺序只在项目之间调；日常那一类不参与排序。
+  function reorderProjects(order) {
+    const daily = T.dailyCategory(categories);
+    categories = [...order, daily];
+    persist();
   }
 
   function moveCategory(id, direction) {
-    const index = categories.findIndex((category) => category.id === id);
+    const order = projectList();
+    const index = order.findIndex((category) => category.id === id);
     const target = index + direction;
-    if (index < 0 || target < 0 || target >= categories.length) return;
-    [categories[index], categories[target]] = [categories[target], categories[index]];
-    persist();
+    if (index < 0 || target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+    reorderProjects(order);
   }
 
   function recolor(id, color) {
@@ -758,71 +970,36 @@
 
   function addCategory(name) {
     const clean = String(name || '').replace(/\s+/g, ' ').trim().slice(0, 24);
-    if (!clean || categories.length >= T.MAX_CATEGORIES) return false;
+    if (!clean || projectList().length >= maxProjects()) return false;
     const category = { id: uid('c'), name: clean, color: T.nextColor(categories) };
     categories.push(category);
     data[category.id] = [];
+    openProjects.add(category.id);
     persist();
     return true;
   }
 
-  // 删除分类：空分类直接删；有待办要先选一个分类合并过去。至少保留一个分类。
+  // 删除项目：空的直接删；有步骤的先选一个项目（或日常）并过去。日常那一类不能删。
   function removeCategory(id, mergeInto = '') {
-    if (categories.length <= 1) return false;
+    if (id === dailyId() || categories.length <= 1) return false;
     const items = data[id] || [];
     if (items.length && !categoryOf(mergeInto)) return false;
     if (items.length) data[mergeInto].push(...items);
     delete data[id];
     categories = categories.filter((category) => category.id !== id);
-    drafts.delete(id);
-    expandedDone.delete(id);
+    drafts.delete(`${PROJECT_PREFIX}${id}`);
+    expandedDone.delete(`${PROJECT_PREFIX}${id}`);
+    openProjects.delete(id);
     persist();
     return true;
   }
 
-  let menuCategory = '';
-  function openMenu(card, anchor) {
-    closePicker();
-    els.manager.hidden = true;
-    menuCategory = card.dataset.category;
-    const category = categoryOf(menuCategory);
-    const index = categories.indexOf(category);
-    els.menuSwatches.replaceChildren(...T.COLORS.map((color) => {
-      const swatch = document.createElement('button');
-      swatch.type = 'button';
-      swatch.className = 'task-swatch';
-      swatch.dataset.color = color;
-      swatch.setAttribute('aria-label', '换成这个颜色');
-      swatch.setAttribute('aria-pressed', String(color === category.color));
-      return swatch;
-    }));
-    els.menu.querySelector('[data-menu="up"]').disabled = index === 0;
-    els.menu.querySelector('[data-menu="down"]').disabled = index === categories.length - 1;
-    els.menu.querySelector('[data-menu="remove"]').disabled = categories.length <= 1;
-    positionPopover(els.menu, anchor, 'below');
-  }
-
-  els.menu.addEventListener('click', (event) => {
-    const swatch = event.target.closest('.task-swatch');
-    if (swatch) {
-      recolor(menuCategory, swatch.dataset.color);
-      els.menu.hidden = true;
-      return;
-    }
-    const action = event.target.closest('[data-menu]')?.dataset.menu;
-    if (!action) return;
-    els.menu.hidden = true;
-    if (action === 'rename') startRename(cardFor(menuCategory));
-    else if (action === 'up') moveCategory(menuCategory, -1);
-    else if (action === 'down') moveCategory(menuCategory, 1);
-    else if (action === 'remove') openManager(menuCategory);
-  });
-
   let removingId = '';
   function renderManager() {
-    els.managerCount.textContent = `${categories.length} / ${T.MAX_CATEGORIES}`;
-    els.managerAdd.hidden = categories.length >= T.MAX_CATEGORIES;
-    els.managerList.replaceChildren(...categories.map((category, index) => {
+    const list = projectList();
+    els.managerCount.textContent = `${list.length} / ${maxProjects()}`;
+    els.managerAdd.hidden = list.length >= maxProjects();
+    els.managerList.replaceChildren(...list.map((category, index) => {
       const li = document.createElement('li');
       li.className = 'task-manager-row';
       li.dataset.id = category.id;
@@ -831,26 +1008,25 @@
       const count = (data[category.id] || []).length;
       li.innerHTML = `
         <button class="task-swatch" type="button" data-manage="color" aria-label="换颜色"></button>
-        <input class="task-manager-name" maxlength="24" aria-label="分类名称" />
+        <input class="task-manager-name" maxlength="24" aria-label="项目名称" />
         <span class="task-manager-meta"></span>
         <button class="task-icon" type="button" data-manage="up" aria-label="上移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5"/></svg></button>
         <button class="task-icon" type="button" data-manage="down" aria-label="下移"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg></button>
-        <button class="task-icon" type="button" data-manage="remove" aria-label="删除分类">${ICON.trash}</button>`;
+        <button class="task-icon" type="button" data-manage="remove" aria-label="删除项目">${ICON.trash}</button>`;
       li.querySelector('.task-manager-name').value = category.name;
       li.querySelector('.task-manager-meta').textContent = count ? `${count} 条` : '空';
       li.querySelector('[data-manage="up"]').disabled = index === 0;
-      li.querySelector('[data-manage="down"]').disabled = index === categories.length - 1;
-      li.querySelector('[data-manage="remove"]').disabled = categories.length <= 1;
+      li.querySelector('[data-manage="down"]').disabled = index === list.length - 1;
       if (removingId === category.id) {
         const confirm = document.createElement('div');
         confirm.className = 'task-manager-confirm';
         if (count) {
-          const others = categories.filter((other) => other.id !== category.id);
-          confirm.innerHTML = '<span></span><select aria-label="合并到"></select><button class="task-danger" type="button" data-manage="merge">合并并删除</button><button class="task-ghost" type="button" data-manage="cancel">取消</button>';
-          confirm.querySelector('span').textContent = `${count} 条待办合并到`;
-          confirm.querySelector('select').replaceChildren(...others.map((other) => new Option(other.name, other.id)));
+          const others = list.filter((other) => other.id !== category.id);
+          confirm.innerHTML = '<span></span><select aria-label="并到"></select><button class="task-danger" type="button" data-manage="merge">并过去并删除</button><button class="task-ghost" type="button" data-manage="cancel">取消</button>';
+          confirm.querySelector('span').textContent = `${count} 条待办并到`;
+          confirm.querySelector('select').replaceChildren(...others.map((other) => new Option(other.name, other.id)), new Option('日常（今日 / 本周）', dailyId()));
         } else {
-          confirm.innerHTML = '<span>删除这个空分类？</span><button class="task-danger" type="button" data-manage="confirm">删除</button><button class="task-ghost" type="button" data-manage="cancel">取消</button>';
+          confirm.innerHTML = '<span>删除这个空项目？</span><button class="task-danger" type="button" data-manage="confirm">删除</button><button class="task-ghost" type="button" data-manage="cancel">取消</button>';
         }
         li.append(confirm);
       }
@@ -860,7 +1036,7 @@
 
   function openManager(removeId = '') {
     closePicker();
-    els.menu.hidden = true;
+    closeTagMenu();
     removingId = removeId;
     renderManager();
     positionPopover(els.manager, els.manage, 'below');
@@ -893,7 +1069,7 @@
     else if (action === 'confirm' || action === 'merge') {
       const target = row.querySelector('.task-manager-confirm select')?.value || '';
       const name = categoryOf(id)?.name || '';
-      const merged = categoryOf(target)?.name || '';
+      const merged = target === dailyId() ? '日常' : categoryOf(target)?.name || '';
       removingId = '';
       if (removeCategory(id, target)) toast(merged ? `已删除「${name}」，待办并入「${merged}」` : `已删除「${name}」`);
     }
@@ -905,23 +1081,25 @@
   els.managerList.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' && event.target.matches('.task-manager-name') && !event.isComposing) event.target.blur();
   });
-  let draggedId = '';
+  let draggedCategory = '';
   els.managerList.addEventListener('dragstart', (event) => {
-    draggedId = event.target.closest('.task-manager-row')?.dataset.id || '';
-    event.dataTransfer?.setData('text/plain', draggedId);
+    draggedCategory = event.target.closest('.task-manager-row')?.dataset.id || '';
+    event.dataTransfer?.setData('text/plain', draggedCategory);
   });
   els.managerList.addEventListener('dragover', (event) => {
-    if (draggedId) event.preventDefault();
+    if (draggedCategory) event.preventDefault();
   });
   els.managerList.addEventListener('drop', (event) => {
     event.preventDefault();
     const target = event.target.closest('.task-manager-row')?.dataset.id;
-    if (!draggedId || !target || target === draggedId) return;
-    const from = categories.findIndex((category) => category.id === draggedId);
-    const [moved] = categories.splice(from, 1);
-    categories.splice(categories.findIndex((category) => category.id === target) + (from <= categories.findIndex((category) => category.id === target) ? 1 : 0), 0, moved);
-    draggedId = '';
-    persist();
+    if (!draggedCategory || !target || target === draggedCategory) return;
+    const order = projectList();
+    const from = order.findIndex((category) => category.id === draggedCategory);
+    const [moved] = order.splice(from, 1);
+    const to = order.findIndex((category) => category.id === target);
+    order.splice(to + (from <= to ? 1 : 0), 0, moved);
+    draggedCategory = '';
+    reorderProjects(order);
   });
   els.managerAdd.addEventListener('submit', (event) => {
     event.preventDefault();
@@ -929,80 +1107,82 @@
   });
 
   function closeMenus() {
-    const closed = !els.menu.hidden;
-    els.menu.hidden = true;
-    return closeManager() || closed;
+    const closedTag = closeTagMenu();
+    return closeManager() || closedTag;
   }
 
   // ---------------- 事件 ----------------
-  grid.addEventListener('click', (event) => {
+  board.addEventListener('click', (event) => {
     const target = event.target.closest('[data-action]');
     if (!target) return;
-    const card = target.closest('.task-card');
     const row = target.closest('.task-row');
+    const form = target.closest('.task-add');
     const action = target.dataset.action;
     if (action === 'toggle' && row) toggleRow(row);
     else if (action === 'edit' && row) startEdit(row.dataset.id);
-    else if (action === 'date' && row) openPicker('edit', card.dataset.category, row.dataset.id, target);
+    else if (action === 'date' && row) openPicker('edit', row.dataset.id, target);
     else if (action === 'doing' && row) setDoing(row.dataset.id);
     else if (action === 'delete' && row) removeItem(row.dataset.id);
-    else if (action === 'fold' && card) {
-      if (expandedDone.has(card.dataset.category)) expandedDone.delete(card.dataset.category);
-      else expandedDone.add(card.dataset.category);
-      renderBody(categoryOf(card.dataset.category), Date.now());
-    } else if (action === 'menu' && card) openMenu(card, target);
-    else if (action === 'add-date' && card) {
-      if (picker.mode === 'add' && picker.categoryId === card.dataset.category) closePicker();
-      else openPicker('add', card.dataset.category, '', target);
-    } else if (action === 'unparse' && card) {
-      draftOf(card.dataset.category).unparsed = true;
-      refreshAddRow(card.dataset.category);
-      card.querySelector('.task-add-input').focus({ preventScroll: true });
+    else if (action === 'tag' && row) {
+      if (tagItemId === row.dataset.id) closeTagMenu();
+      else openTagMenu(row.dataset.id, target);
+    } else if (action === 'fold') {
+      const key = target.dataset.key;
+      if (expandedDone.has(key)) expandedDone.delete(key);
+      else expandedDone.add(key);
+      render();
+    } else if (action === 'project') {
+      const id = target.closest('.task-proj')?.dataset.project;
+      if (!id) return;
+      if (openProjects.has(id)) openProjects.delete(id);
+      else {
+        openProjects.add(id);
+        focusKey = `${PROJECT_PREFIX}${id}`;
+      }
+      render();
+    } else if (action === 'add-date' && form) {
+      const key = form.dataset.add;
+      if (picker.mode === 'add' && picker.key === key) closePicker();
+      else openPicker('add', key, target);
+    } else if (action === 'unparse' && form) {
+      draftOf(form.dataset.add).unparsed = true;
+      refreshAddRow(form.dataset.add);
+      form.querySelector('.task-add-input').focus({ preventScroll: true });
     }
   });
-  grid.addEventListener('dblclick', (event) => {
-    const name = event.target.closest('.task-name');
-    if (name) startRename(name.closest('.task-card'));
-  });
-  grid.addEventListener('input', (event) => {
+  board.addEventListener('input', (event) => {
     const input = event.target.closest('.task-add-input');
     if (!input) return;
-    const categoryId = input.closest('.task-card').dataset.category;
-    if (!input.value.trim()) draftOf(categoryId).unparsed = false;
-    refreshAddRow(categoryId);
+    const key = input.closest('.task-add').dataset.add;
+    const draft = draftOf(key);
+    draft.text = input.value;
+    if (!input.value.trim()) draft.unparsed = false;
+    refreshAddRow(key);
   });
-  grid.addEventListener('keydown', (event) => {
+  board.addEventListener('keydown', (event) => {
     if (event.isComposing || event.keyCode === 229) return;
     const add = event.target.closest('.task-add-input');
     if (add) {
-      const categoryId = add.closest('.task-card').dataset.category;
+      const form = add.closest('.task-add');
       if (event.key === 'Enter') {
         event.preventDefault();
-        if (!event.repeat) submitAdd(categoryId);
+        if (!event.repeat) submitAdd(form.dataset.add);
       } else if (event.key === 'Tab' && !event.shiftKey) {
         event.preventDefault();
-        openPicker('add', categoryId, '', add.closest('.task-card').querySelector('.task-date'));
+        openPicker('add', form.dataset.add, form.querySelector('.task-date'));
       }
       return;
     }
-    if (event.target.closest('.task-edit')) {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        finishEdit(true);
-      }
+    if (event.target.closest('.task-edit') && event.key === 'Enter') {
+      event.preventDefault();
+      finishEdit(true);
     }
   });
-  grid.addEventListener('focusout', (event) => {
+  board.addEventListener('focusout', (event) => {
     if (event.target.closest('.task-edit') && editingId) finishEdit(true);
   });
-  grid.addEventListener('submit', (event) => event.preventDefault());
+  board.addEventListener('submit', (event) => event.preventDefault());
 
-  els.filters?.addEventListener('click', (event) => {
-    const button = event.target.closest('[data-filter]');
-    if (!button) return;
-    filter = button.dataset.filter;
-    render();
-  });
   els.search?.addEventListener('input', () => {
     query = els.search.value;
     render();
@@ -1012,15 +1192,13 @@
   document.addEventListener('pointerdown', (event) => {
     const target = event.target instanceof Element ? event.target : document.body;
     if (!els.picker.hidden && !els.picker.contains(target) && !target.closest('[data-action="add-date"], [data-action="date"]')) closePicker();
-    if (!els.menu.hidden && !els.menu.contains(target) && !target.closest('[data-action="menu"]')) els.menu.hidden = true;
+    if (!els.tagMenu.hidden && !els.tagMenu.contains(target) && !target.closest('[data-action="tag"]')) closeTagMenu();
     if (!els.manager.hidden && !els.manager.contains(target) && !target.closest('#task-manage')) closeManager();
   }, true);
 
   // Esc（由主进程转发）：先收起浮层，再退出行内编辑。
   function escape() {
     if (closePicker() || closeMenus()) return true;
-    const renaming = grid.querySelector('.task-name[contenteditable]');
-    if (renaming?._cancelRename) { renaming._cancelRename(); return true; }
     if (editingId) { finishEdit(false); return true; }
     return false;
   }
@@ -1045,6 +1223,7 @@
   }, 30_000);
   document.addEventListener('notch:tabchange', (event) => { if (event.detail?.tab === 'todo') refreshLabels(); });
 
+  // 跳到某一条：在今日 / 本周栏里的就在那里闪一下；只留在项目里的先把项目展开。
   async function focusItem(id) {
     const entry = find(id);
     if (typeof window.setActiveTab === 'function') await window.setActiveTab('todo');
@@ -1052,12 +1231,13 @@
     query = '';
     if (els.search) els.search.value = '';
     if (entry.item.done) {
-      if (filter !== 'done') expandedDone.add(entry.categoryId);
-      if (filter !== 'all' && filter !== 'done') filter = 'all';
-    } else if (!T.matches(entry.item, filter === 'done' ? 'all' : filter) || filter === 'done') filter = 'all';
+      expandedDone.add('today');
+    } else if (bucketOf(entry, Date.now()) === 'none') {
+      openProjects.add(entry.categoryId);
+    }
     render();
     requestAnimationFrame(() => {
-      const row = grid.querySelector(`.task-row[data-id="${CSS.escape(String(id))}"]`);
+      const row = board.querySelector(`.task-row[data-id="${CSS.escape(String(id))}"]`);
       if (!row) return;
       row.scrollIntoView({ block: 'nearest' });
       row.classList.remove('flash');
@@ -1067,10 +1247,14 @@
     });
   }
 
+  const withCategory = ({ item, categoryId }) => ({ ...item, categoryId });
   window.NotchTodos = {
     items: () => data,
-    list: () => allEntries().map(({ item, categoryId }) => ({ ...item, categoryId })),
+    list: () => allEntries().map(withCategory),
+    today: () => sortEntries(allEntries().filter((entry) => !entry.item.done && bucketOf(entry, Date.now()) === 'today')).map(withCategory),
     categories: () => categories.map((category) => ({ ...category })),
+    dailyCategory: () => dailyId(),
+    projects: () => projectList().map((category) => ({ ...category })),
     categoryName: (id) => categoryOf(id)?.name || '',
     categoryColor: (id) => categoryOf(id)?.color || 'cat-4',
     add: (categoryId, text, deadline, extra) => addItem(categoryId, text, deadline, extra),
@@ -1086,7 +1270,7 @@
     focus: focusItem,
     open: () => window.setActiveTab?.('todo'),
   };
-  window.NotchTodoPage = { render, escape, state: () => ({ filter, query, expanded: [...expandedDone] }) };
+  window.NotchTodoPage = { render, escape, state: () => ({ query, open: [...openProjects], expanded: [...expandedDone] }) };
 
   persist({ render: false });
   render();

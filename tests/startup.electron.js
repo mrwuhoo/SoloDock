@@ -170,9 +170,9 @@ app.on('web-contents-created', (_event, contents) => {
       let captured = '';
       for (let attempt = 0; attempt < 30 && !captured; attempt += 1) {
         await new Promise((resolve) => setTimeout(resolve, 100));
-        captured = await contents.executeJavaScript(`window.NotchTodos.items().P1.find((item) => item.text === '给王总回电话')?.deadline || ''`);
+        captured = await contents.executeJavaScript(`window.NotchTodos.items()[window.NotchTodos.dailyCategory()].find((item) => item.text === '给王总回电话')?.deadline || ''`);
       }
-      assert.equal(new Date(captured).getHours(), 15, 'the panel parsed and stored the todo');
+      assert.equal(new Date(captured).getHours(), 15, 'the panel parsed and stored the todo under the daily category, not the one the window named');
       const changed = await contents.executeJavaScript(`window.notchAPI.setCaptureShortcut('Control+Alt+Shift+F19')`);
       assert.deepEqual(changed, { ok: true, shortcut: 'Control+Alt+Shift+F19' });
       assert.equal(globalShortcut.isRegistered('Control+Alt+Shift+F19'), true);

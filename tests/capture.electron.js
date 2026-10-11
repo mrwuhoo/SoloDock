@@ -57,7 +57,7 @@ app.whenReady().then(async () => {
     await settle(120);
     out.opened = [$('capture-root').classList.contains('is-open'), document.activeElement === input, view()];
 
-    // Live detection: a todo with a date, in the category of the latest todo.
+    // Live detection: a todo with a date lands in this week's plan; ⌘1 cannot move it into a project.
     await type('明天下午3点 给王总回电话');
     out.todo = view();
     key({ key: '1', metaKey: true });
@@ -133,12 +133,12 @@ app.whenReady().then(async () => {
   assert.deepEqual(result.opened.slice(0, 2), [true, true]);
   assert.deepEqual(result.opened[2].pills, ['随笔', '待办', '生活'], 'link is only offered with a URL');
   assert.equal(result.opened[2].state, 'hint');
-  assert.deepEqual(result.todo, { type: 'todo', color: 'cat-3', selected: '待办', pills: ['随笔', '待办', '生活'], target: 'Vibe coding · 明天 15:00', state: '' });
-  assert.equal(result.category, '课程 · 明天 15:00', '⌘1 picks the first category');
+  assert.deepEqual(result.todo, { type: 'todo', color: 'cat-4', selected: '待办', pills: ['随笔', '待办', '生活'], target: '本周计划 · 明天 15:00', state: '' }, 'todos always go to the daily category');
+  assert.equal(result.category, '本周计划 · 明天 15:00', '⌘1 does not move a todo into a project');
   assert.equal(result.tab, '生活');
   assert.equal(result.shiftTab, '待办');
   assert.equal(result.composingSubmits, 0);
-  assert.deepEqual(result.submitted, { text: '明天下午3点 给王总回电话', type: 'todo', category: 'P0', habitId: '', open: false });
+  assert.deepEqual(result.submitted, { text: '明天下午3点 给王总回电话', type: 'todo', category: 'P3', habitId: '', open: false });
   assert.equal(result.cleared, '');
   assert.deepEqual([result.link.type, result.link.target, result.link.pills], ['link', 'figma.com · 封面稿', ['随笔', '待办', '链接', '生活']]);
   assert.deepEqual(result.linkSubmit, { text: 'https://www.figma.com/files 封面稿', type: 'link', category: '', habitId: '', open: true });
@@ -189,8 +189,9 @@ app.whenReady().then(async () => {
     const out = {};
     out.collapsed = !document.getElementById('app').classList.contains('expanded');
 
+    // Whatever category the entry names, the panel files it under the daily one: projects never get todos this way.
     await add({ text: '明天下午3点 给王总回电话', type: 'todo', category: 'P0' });
-    const todo = window.NotchTodos.items().P0.find((item) => item.text === '给王总回电话');
+    const todo = window.NotchTodos.items().P3.find((item) => item.text === '给王总回电话');
     const due = new Date(todo?.deadline || 0);
     out.todo = [Boolean(todo), due.getHours(), due.getMinutes(), new Date(Date.now() + 86400000).getDate() === due.getDate()];
     out.todoFlash = [flash(), window.NotchNotchStatus.current()?.kind, document.getElementById('notch-status').dataset.icon];

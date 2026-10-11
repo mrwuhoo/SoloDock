@@ -13,12 +13,15 @@ const at = (month, day, hour, minute = 0) => new Date(2026, month - 1, day, hour
 test('a date, a time or "记得" makes a todo; the date words leave the text', () => {
   const call = parse('明天下午3点 给王总回电话');
   assert.deepEqual([call.type, call.text, call.at, call.hasTime, call.category], ['todo', '给王总回电话', at(9, 26, 15), true, 'P1']);
-  assert.equal(capture.describe(call, { now, categoryNames: names }), '自媒体&写作 · 明天 15:00');
+  assert.equal(capture.describe(call, { now, categoryNames: names }), '本周计划 · 明天 15:00', 'tomorrow lands in this week\'s plan');
   assert.equal(capture.confirmation(call, { now }), '已加待办 · 明天 15:00');
 
   const friday = parse('周五前交稿');
   assert.deepEqual([friday.type, friday.text, friday.at, friday.hasTime], ['todo', '交稿', at(9, 25, 23, 30), false], 'a date alone is due at 23:30');
-  assert.deepEqual([parse('记得买猫粮').type, parse('记得买猫粮').text, parse('记得买猫粮').at], ['todo', '买猫粮', at(9, 25, 23, 30)]);
+  assert.deepEqual([parse('记得买猫粮').type, parse('记得买猫粮').text, parse('记得买猫粮').at, parse('记得买猫粮').deadline], ['todo', '买猫粮', null, ''], 'no date: no deadline, today\'s column');
+  assert.equal(capture.describe(parse('记得买猫粮'), { now }), '今日待办 · 不定时间');
+  assert.equal(capture.confirmation(parse('记得买猫粮'), { now }), '已加到今日待办');
+  assert.equal(capture.describe(parse('下午5点 发报价'), { now }), '今日待办 · 今天 17:00');
   assert.equal(parse('下周一 10:30 复盘会').at, at(9, 28, 10, 30));
   assert.equal(parse('下下周二 体检').at, at(10, 6, 23, 30));
   assert.equal(parse('周末 大扫除').at, at(9, 26, 23, 30));
@@ -87,13 +90,14 @@ test('Tab picks another type; a picked habit or category wins', () => {
   const todo = parse('买猫粮', { type: 'todo', category: 'P3' });
   assert.deepEqual([todo.type, todo.text, todo.category], ['todo', '买猫粮', 'P3']);
   const late = capture.parseCapture('买猫粮', { now: at(9, 25, 23, 45), type: 'todo' });
-  assert.equal(late.at, at(9, 26, 23, 30), 'after 23:30 the default is tomorrow');
+  assert.deepEqual([late.at, late.deadline], [null, ''], 'a forced todo without a date still has no deadline');
   assert.equal(capture.nextType('note', ['note', 'todo', 'life']), 'todo');
   assert.equal(capture.nextType('life', ['note', 'todo', 'life']), 'note');
   assert.equal(capture.nextType('note', ['note', 'todo', 'life'], -1), 'life');
 });
 
-test('the default category is where the latest todo went; notes append one line per capture', () => {
+test('the latest category helper, where a todo lands, and notes appending one line per capture', () => {
+  assert.deepEqual([capture.todoWhere(null, now), capture.todoWhere(at(9, 25, 20), now), capture.todoWhere(at(9, 26, 9), now)], ['今日待办', '今日待办', '本周计划']);
   assert.equal(capture.lastUsedCategory({ P0: [{ createdAt: 5 }], P2: [{ createdAt: 9 }], P3: [] }), 'P2');
   assert.equal(capture.lastUsedCategory(null), 'P3');
   assert.equal(capture.captureDayKey(at(9, 26, 2)), '2026-09-25', 'before 04:00 still counts as the day before');

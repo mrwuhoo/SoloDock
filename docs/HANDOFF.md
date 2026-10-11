@@ -76,7 +76,7 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 |---|---|---|
 | ⌘K 搜索 | 88994ec | `search-domain.js` + `command-palette.js` |
 | 随手记 ⌥⇧N | 55afe4a | 不激活应用的 NSPanel；不要对它调用 `focus()` |
-| 待办页 | d8d3357 | 1–6 个分类、重复、提醒、在做；旧数据有迁移和备份 |
+| 待办页 | d8d3357 → 本轮三栏改版 | 今日 / 本周 / 重点项目三栏（见 6.10）；重复、提醒、在做；旧数据有迁移和备份 |
 | 笔记页 | 1cbc547 | 分组列表、Markdown 预览、每日随笔同步 |
 | 链接页 | b9d3b1e | 分组侧栏、剪贴板建议（只存哈希） |
 | 录制页 | 64ee783 | 波形播放器、提取待办、实时视图 |
@@ -155,6 +155,16 @@ hdiutil create -volname "SoloDock 0.2.0-beta.3" -srcfolder <暂存目录> -forma
 - 番茄钟计时（`renderer/focus-timer.js`，对外 `window.NotchPomodoro`）：按结束时刻计时；15 / 25 / 45 / 60 分钟存 `notch-focus-minutes-v1`（旧的 `[分, 秒]` 只沿用正好是四档之一的）；暂停、+5 分钟（总长不超过 2 小时）、提前结束（专注满 1 分钟记下时长，专注记录多一个 `complete: false`，不算番茄）。专注中收起的 AI 通知数由主进程 `focus:held` 推送。
 - 「精力」：主进程 `energy:status` 给距离上次休息（`bodyTracker.state().activeSince`）、久坐提醒分钟数、收工时间与 `worklogEnabled`；「休息 5 分钟」调 `body:break` 再开始 5 分钟休息。纯函数在 `renderer/home-domain.js`。**用户要求：只陈述事实，不和平时比较、不显示平均、不打分**；暖色只用来提醒该歇了或某天超过 10 小时。
 - 矮屏（内容区不足 540）靠 `@container` 收起说明文字与第二条「接下来」。
+
+### 6.10 待办页三栏改版（2026-10-11，示例经用户七轮确认）
+
+- 页面是「今日待办 · 本周计划 · 重点项目」三栏（`renderer/todo-page.js`，列骨架在 `index.html`，行与项目卡由 JS 渲染）。用户的原话：「以后」这个说法不好，长期的是重点项目（YouTube 变现、X 账号运营、大陆自媒体自动化这种）；每个项目下面一个 ➕ 加下一步是合理的；手动输入的入口放在首页让它自己分类；**日常创建的待办不要进入长期项目清单**，长期项目清单不会频繁变化，是深思熟虑的结果；今日和本周各自也要有添加入口；项目是展开的，但项目里的待办是收起来的。
+- 数据不换：分类数组多一个 `daily: true` 标记（`todo-domain.js` 的 `markDaily`），标了的是日常、其余是项目；`deadline` 允许空字符串。归属规则在 `bucketOf`，本周默认截止 `weekEndDeadline`，拖进今日用 `todayDeadline`。首页「记一笔」、随手记窗口（`capture.js` 不再切换分类，`⌘1–6` 只换习惯）、录音提取都写 `NotchTodos.dailyCategory()`；`capture-domain.js` 的待办不再默认 23:30，`describe` 写「今日待办 / 本周计划 · 时间」。
+- 去掉了：筛选分段、分类卡 ⋯ 菜单、双击改名、`gridShape` / `matches` / `counts` / `defaultDeadline`。保留：截止时间选择器（编辑模式多了「不定时间」）、重复、提醒、在做、行内编辑、删除撤销、管理项目（原管理分类，只列项目）。
+- 首页「现在」：没有带截止的待办时取今日栏里没定时间的第一条（`home.js` 的 `todayItems` 追加 `NotchTodos.today()` 里没截止的），日常待办不显示分类小标签。
+- 测试：`tests/todo-page.electron.js` 重写（迁移、三栏归属、三种添加行、项目展开、标签换项目、不定时间、拖动、管理项目）；`notch-focus.electron.js` 里的截止选择器与跨天用例改用本周栏；`capture*` 与 `startup` 的用例改成落到日常分类。
+- 添加行的落点提示不另占输入框宽度，直接跟在时间按钮上（「明天 15:00 → 本周」，`data-moves`），悬停标题里写全「会放到本周计划 / 也会排进本周计划」。
+- 这轮在 Linux 容器（xvfb、无 dbus）里跑过 `npm test`：Node 单测 231 全过；Electron 用例里 `credentials` / `notification` / `notch-status` / `command-palette` / `capture` / `onboarding` / `usage-detail` / `startup` 在未改动的基线上同样失败（焦点与窗口可见性断言），不是本轮引入，**合并前请在 macOS 上再跑一遍 `npm test`**。
 
 ## 7. Claude 订阅额度（2026-09-29 已实现）
 

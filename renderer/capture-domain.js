@@ -252,19 +252,14 @@
     const result = { type, detected, types, raw, valid: Boolean(raw) };
 
     if (type === 'todo') {
-      // 没写日期：今天 23:30；已经过了 23:30 就算明天的。
-      let at = when.at;
-      if (!at) {
-        const today = new Date(now);
-        at = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 30).getTime();
-        if (at <= now) at = new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1, 23, 30).getTime();
-      }
+      // 没写日期就不定时间：进今日待办，不催也不算逾期。写了「明天」「周五前」的进本周计划。
+      const at = when.at || null;
       const todoText = clean((when.at ? when.rest : body).replace(TODO_MARKER, ''), 200);
       return {
         ...result,
         text: todoText,
         valid: Boolean(todoText),
-        deadline: new Date(at).toISOString(),
+        deadline: at ? new Date(at).toISOString() : '',
         at,
         hasTime: Boolean(when.at && when.hasTime),
         category: categoryIds(options).includes(options.category) ? options.category : categoryIds(options).at(-1),
@@ -326,6 +321,13 @@
     return `${Number(at) < Number(now) ? '已过 · ' : ''}${dayLabel(at, now)} ${clock(at)}`;
   }
 
+  // 待办会落到哪一栏：明天起的在本周计划，其余（含没定时间的）在今日待办。
+  function todoWhere(at, now = Date.now()) {
+    if (!at) return '今日待办';
+    const date = new Date(Number(at));
+    return offsetOf(new Date(Number(now)), date.getFullYear(), date.getMonth(), date.getDate()) >= 1 ? '本周计划' : '今日待办';
+  }
+
   function hostOf(url) {
     try { return new URL(url).hostname.replace(/^www\./, ''); } catch (error) { return ''; }
   }
@@ -337,10 +339,7 @@
       return '';
     }
     const now = Number(context.now) || Date.now();
-    if (result.type === 'todo') {
-      const names = context.categoryNames || {};
-      return `${names[result.category] || result.category} · ${formatDue(result.at, now)}`;
-    }
+    if (result.type === 'todo') return result.at ? `${todoWhere(result.at, now)} · ${formatDue(result.at, now)}` : '今日待办 · 不定时间';
     if (result.type === 'link') return [hostOf(result.url), result.title].filter(Boolean).join(' · ');
     if (result.type === 'life') {
       const habit = (context.habits || []).find((item) => item.id === result.habitId);
@@ -353,7 +352,7 @@
   // 存好后刘海下沿闪一下的那句话（要短，刘海只有 200 宽）。
   function confirmation(result, context = {}) {
     if (!result) return '';
-    if (result.type === 'todo') return `已加待办 · ${formatDue(result.at, Number(context.now) || Date.now()).replace('已过 · ', '')}`;
+    if (result.type === 'todo') return result.at ? `已加待办 · ${formatDue(result.at, Number(context.now) || Date.now()).replace('已过 · ', '')}` : '已加到今日待办';
     if (result.type === 'link') return '已收藏链接';
     if (result.type === 'life') {
       const habit = (context.habits || []).find((item) => item.id === result.habitId);
@@ -405,6 +404,7 @@
     parseCapture,
     nextType,
     lastUsedCategory,
+    todoWhere,
     dayLabel,
     formatDue,
     describe,

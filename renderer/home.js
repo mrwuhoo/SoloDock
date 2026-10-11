@@ -85,10 +85,16 @@
     return Home.focusToday(readJson(FOCUS_LOG_KEY, []), dayStart(now));
   }
 
+  // 今天的待办：有截止的按时间（逾期在前），后面跟着今日栏里没定时间的日常待办，没有截止的日子「现在」也有事可做。
   function todayItems(now = Date.now()) {
     const store = todos();
     if (!store || !window.NotchDomain?.todayTodoItems) return [];
-    return window.NotchDomain.todayTodoItems(store.items(), now, store.categories().map((category) => category.id));
+    const dated = window.NotchDomain.todayTodoItems(store.items(), now, store.categories().map((category) => category.id));
+    const seen = new Set(dated.map((item) => item.id));
+    const undated = (store.today?.() || [])
+      .filter((item) => !item.deadline && !seen.has(String(item.id)))
+      .map((item) => ({ priority: item.categoryId, id: String(item.id), text: String(item.text || ''), due: NaN, overdue: false, label: '' }));
+    return [...dated, ...undated];
   }
 
   // 「现在」这件事，也供计时器开始专注时带上。
@@ -97,8 +103,10 @@
   }
 
   // ---------------- 现在：空闲 ----------------
+  // 只有重点项目的一步才带项目名；日常待办不标。
   function paintChip(chip, categoryId) {
-    const name = categoryId ? todos()?.categoryName?.(categoryId) : '';
+    const store = todos();
+    const name = categoryId && categoryId !== store?.dailyCategory?.() ? store?.categoryName?.(categoryId) : '';
     chip.hidden = !name;
     if (!name) return;
     chip.textContent = name;
