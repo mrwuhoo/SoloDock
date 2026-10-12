@@ -20,7 +20,7 @@ app.whenReady().then(async () => {
       getAppSettings: async () => ({ features: {}, body }),
       setBodySettings: async (patch) => {
         window.__patches.push(patch);
-        body = { sit: { ...body.sit, ...(patch.sit || {}) }, eye: { ...body.eye, ...(patch.eye || {}) }, offwork: { ...body.offwork, ...(patch.offwork || {}) } };
+        body = { sit: { ...body.sit, ...(patch.sit || {}) }, eye: { ...body.eye, ...(patch.eye || {}) }, offwork: { ...body.offwork, ...(patch.offwork || {}) }, cat: { ...body.cat, ...(patch.cat || {}) } };
         return { ok: true, body };
       },
       setFocusState: (state) => window.__focus.push(state),
@@ -32,7 +32,7 @@ app.whenReady().then(async () => {
     await setActiveTab('settings');
     await window.NotchBodySettings.load();
     const out = {
-      initial: [$('settings-body-sit').checked, $('settings-body-eye').checked, $('settings-body-offwork').checked, $('settings-body-sit-minutes').value, $('settings-body-offwork-time').value],
+      initial: [$('settings-body-sit').checked, $('settings-body-eye').checked, $('settings-body-offwork').checked, $('settings-body-sit-minutes').value, $('settings-body-offwork-time').value, $('settings-body-cat').checked],
       sitHint: $('settings-body-sit-hint').textContent,
     };
     $('settings-body-eye').checked = true;
@@ -43,9 +43,11 @@ app.whenReady().then(async () => {
     $('settings-body-offwork-time').dispatchEvent(new Event('change', { bubbles: true }));
     $('settings-body-offwork').checked = false;
     $('settings-body-offwork').dispatchEvent(new Event('change', { bubbles: true }));
+    $('settings-body-cat').checked = false;
+    $('settings-body-cat').dispatchEvent(new Event('change', { bubbles: true }));
     await settle();
     out.patches = window.__patches;
-    out.after = { sitHint: $('settings-body-sit-hint').textContent, offworkHint: $('settings-body-offwork-hint').textContent, timeDisabled: $('settings-body-offwork-time').disabled };
+    out.after = { sitHint: $('settings-body-sit-hint').textContent, offworkHint: $('settings-body-offwork-hint').textContent, timeDisabled: $('settings-body-offwork-time').disabled, cat: $('settings-body-cat').checked };
 
     // "休息 5 分钟" from a reminder: the home card shows a break, and the main process hears it is not focus.
     await setActiveTab('home');
@@ -73,10 +75,10 @@ app.whenReady().then(async () => {
     return out;
   })()`);
 
-  assert.deepEqual(result.initial, [true, false, true, '50', '22:30']);
+  assert.deepEqual(result.initial, [true, false, true, '50', '22:30', true], 'the break cat is on unless turned off');
   assert.equal(result.sitHint, '连续用电脑 50 分钟，提醒起来活动');
-  assert.deepEqual(result.patches, [{ eye: { enabled: true } }, { sit: { minutes: 45 } }, { offwork: { time: '21:45' } }, { offwork: { enabled: false } }]);
-  assert.deepEqual(result.after, { sitHint: '连续用电脑 45 分钟，提醒起来活动', offworkHint: '21:45 还在用电脑时，提醒把剩下的挪到明天', timeDisabled: true });
+  assert.deepEqual(result.patches, [{ eye: { enabled: true } }, { sit: { minutes: 45 } }, { offwork: { time: '21:45' } }, { offwork: { enabled: false } }, { cat: { enabled: false } }]);
+  assert.deepEqual(result.after, { sitHint: '连续用电脑 45 分钟，提醒起来活动', offworkHint: '21:45 还在用电脑时，提醒把剩下的挪到明天', timeDisabled: true, cat: false });
   assert.deepEqual(result.breakCard, { state: 'break', label: '休息中', finish: '结束休息' });
   assert.deepEqual(result.focusReports, [[true, 'break', true]]);
   assert.deepEqual(result.afterReset, { state: 'idle', label: '现在', last: { running: false, mode: 'focus', endsAt: 0 } });

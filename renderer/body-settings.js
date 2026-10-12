@@ -1,4 +1,4 @@
-// 设置 › 身体与作息：久坐、护眼、收工三个提醒的开关与时间。设置保存在主进程（app-settings.json 的 body）。
+// 设置 › 身体与作息：久坐、护眼、收工三个提醒的开关与时间，以及休息时的大猫陪伴。设置保存在主进程（app-settings.json 的 body）。
 (function bootstrapBodySettings() {
   'use strict';
 
@@ -13,6 +13,7 @@
     offwork: get('settings-body-offwork'),
     offworkTime: get('settings-body-offwork-time'),
     offworkHint: get('settings-body-offwork-hint'),
+    cat: get('settings-body-cat'),
     worklog: get('settings-body-worklog'),
     worklogClear: get('settings-body-worklog-clear'),
   };
@@ -32,6 +33,7 @@
     els.offworkTime.value = body.offwork.time;
     els.offworkTime.disabled = !body.offwork.enabled;
     els.offworkHint.textContent = `${body.offwork.time} 还在用电脑时，提醒把剩下的挪到明天`;
+    if (els.cat) els.cat.checked = body.cat?.enabled !== false;
     if (els.worklog) els.worklog.checked = body.worklog?.enabled !== false;
   }
 
@@ -63,6 +65,7 @@
     if (/^\d{2}:\d{2}$/.test(els.offworkTime.value)) save({ offwork: { time: els.offworkTime.value } }, `收工时间改为 ${els.offworkTime.value}`);
   });
 
+  els.cat?.addEventListener('change', () => save({ cat: { enabled: els.cat.checked } }, els.cat.checked ? '休息时大猫会来陪你' : '休息时不再出现大猫'));
   els.worklog?.addEventListener('change', () => save({ worklog: { enabled: els.worklog.checked } }, els.worklog.checked ? '已开始记录工作时间' : '已停止记录工作时间'));
   // 清除要点两次：第一次变成「确认清除」，3 秒内再点才清。
   els.worklogClear?.addEventListener('click', async () => {
