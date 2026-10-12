@@ -16,9 +16,10 @@
 
   const FRAME_RATIO = 16 / 9;
   // 猫睡下以后在视频画面里的范围（占画面宽高的比例，逐帧量出来的）。
-  // 按它摆位：睡下的猫在屏幕上居中、约占屏宽七成，倒计时放在它下方。
+  // 按它摆位：睡下的猫在屏幕上居中、约占屏宽五成，倒计时放在它下方。
   const SLEEP_BOX = { left: 0.183, right: 0.845, bottom: 0.9 };
-  const SCREEN_SHARE = 0.7;
+  const SCREEN_SHARE = 0.5;
+  const ENTER_PAN_MS = 2200; // 画面贴着屏幕右沿让猫走进来，之后这么久平移到居中
   const PILL_GAP = 12;
   const SAFE_EDGE = 24;
   const HIT_ALPHA = 230; // 只有猫身上才算点中，半透明的影子不算
@@ -40,9 +41,13 @@
   probe.height = 90;
   const probeContext = probe.getContext('2d', { willReadFrequently: true });
 
+  let restLeft = 0;
+  let enterLeft = 0;
+
   // 视频画面的上沿贴着菜单栏下沿：伸懒腰时翘起的尾巴像是伸到菜单栏后面，不会盖住菜单栏。
-  // 猫从画面右边走进来，所以画面右沿要碰到屏幕右沿，它才像是从屏幕外走进来的。
-  function layout() {
+  // 猫从画面右边走进来，所以进场时画面右沿要碰到屏幕右沿，它才像是从屏幕外走进来的；
+  // 画面比屏幕窄时，猫边走边把画面平移回居中（enterLeft → restLeft），睡下的猫在屏幕正中。
+  function layout(entering = false) {
     const vw = window.innerWidth;
     const vh = window.innerHeight - bottomInset;
     const top = menuBar;
@@ -53,12 +58,11 @@
     const maxHeight = (vh - top - SAFE_EDGE - pillHeight - PILL_GAP) / SLEEP_BOX.bottom;
     if (width / FRAME_RATIO > maxHeight) width = Math.max(0, maxHeight) * FRAME_RATIO;
     const height = width / FRAME_RATIO;
-    let left = vw / 2 - ((SLEEP_BOX.left + SLEEP_BOX.right) / 2) * width;
-    // 特别宽的屏：画面够不到屏幕右沿时整体右移，但睡下的猫不出屏。
-    const gap = vw - (left + width);
-    if (gap > 0) left += Math.min(gap, Math.max(0, vw - SAFE_EDGE - (left + SLEEP_BOX.right * width)));
+    const left = vw / 2 - ((SLEEP_BOX.left + SLEEP_BOX.right) / 2) * width;
+    restLeft = left;
+    enterLeft = left + Math.max(0, vw - (left + width));
     const style = document.documentElement.style;
-    style.setProperty('--cat-left', `${Math.round(left)}px`);
+    style.setProperty('--cat-left', `${Math.round(entering ? enterLeft : restLeft)}px`);
     style.setProperty('--cat-top', `${Math.round(top)}px`);
     style.setProperty('--cat-width', `${Math.round(width)}px`);
     style.setProperty('--cat-height', `${Math.round(height)}px`);
@@ -101,11 +105,20 @@
     setActive(arrive);
     try { arrive.currentTime = 0; } catch (error) {}
     play(arrive);
+    if (enterLeft !== restLeft) {
+      arrive.addEventListener('playing', () => {
+        if (!visible) return;
+        stage.style.transition = `left ${ENTER_PAN_MS}ms cubic-bezier(0.33, 0, 0.25, 1), opacity 320ms ease`;
+        document.documentElement.style.setProperty('--cat-left', `${Math.round(restLeft)}px`);
+      }, { once: true });
+    }
   }
 
   // arrive 的最后一帧就是 sleep 的第一帧：先让 sleep 播起来，再藏起 arrive，接缝看不出来。
   function settleIntoSleep() {
     if (!visible) return;
+    // 进场视频没播起来（出错）时也要回到居中
+    document.documentElement.style.setProperty('--cat-left', `${Math.round(restLeft)}px`);
     sleep.addEventListener('playing', () => { if (visible) setActive(sleep); }, { once: true });
     play(sleep);
   }
@@ -188,7 +201,8 @@
     visible = true;
     root.hidden = false;
     root.classList.remove('is-leaving', 'is-pill-visible', 'is-visible', 'is-hovering-cat');
-    layout();
+    stage.style.transition = '';
+    layout(!reducedMotion.matches);
     tick();
     ticker = setInterval(tick, 1000);
     startVideos();
@@ -205,6 +219,7 @@
 
   function hide() {
     clearTimeout(pillTimer);
+    stage.style.transition = '';
     clearInterval(ticker);
     if (!visible) {
       api.breakCatLeft?.();
@@ -243,7 +258,7 @@
     if (catAt(event.clientX, event.clientY)) pat(event.clientX, event.clientY);
   });
   leaveButton.addEventListener('click', () => api.breakCatDismiss?.());
-  window.addEventListener('resize', () => { if (visible) layout(); });
+  window.addEventListener('resize', () => { if (visible) { stage.style.transition = ''; layout(); } });
 
   api.onBreakCatShow?.(show);
   api.onBreakCatUpdate?.(update);

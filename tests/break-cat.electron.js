@@ -40,13 +40,19 @@ app.whenReady().then(async () => {
 
   const shown = await run(`
     window.NotchBreakCat.show({ endsAt: Date.now() + 5 * 60 * 1000, menuBar: ${SCREEN.menuBar} });
+    // Right after show() the video frame sits against the right screen edge so the cat walks in from off screen.
+    const entering = box('break-cat-stage');
     await wait(1500);
     const time = $('break-cat-time').textContent;
     await pillSettled();
     const arrive = $('break-cat-arrive');
     const sleep = $('break-cat-sleep');
     await until(() => arrive.readyState >= 1 && sleep.readyState >= 1);
+    // As it walks in, the frame pans back so the cat ends up in the middle of the screen.
+    const centred = () => { const s = box('break-cat-stage'); return Math.abs(s.left + 0.514 * s.width - window.innerWidth / 2) < 2; };
+    await until(centred, 4000);
     return {
+      entering,
       hidden: $('break-cat').hidden,
       time,
       active: [arrive.dataset.active, sleep.dataset.active],
@@ -62,22 +68,23 @@ app.whenReady().then(async () => {
   assert.match(shown.time, /^(5:00|4:59)$/);
   assert.deepEqual(shown.active, ['true', 'false'], 'the cat walks in first');
   assert.equal(shown.pillVisible, true);
-  assert.deepEqual([shown.arrive.width, shown.arrive.height, shown.sleep.width], [1280, 720, 1280]);
+  assert.deepEqual([shown.arrive.width, shown.arrive.height, shown.sleep.width], [2560, 1440, 2560]);
   assert.ok(shown.arrive.duration > 13 && shown.arrive.duration < 15, `arrive lasts ${shown.arrive.duration}s`);
   assert.ok(shown.sleep.duration > 2 && shown.sleep.duration < 3, `sleep loop lasts ${shown.sleep.duration}s`);
   assert.equal(shown.sleep.loop, true);
   assert.equal(shown.sleep.muted, true);
 
-  // Layout: the video starts under the menu bar and reaches the right screen edge (the cat walks in
-  // from off screen); the sleeping cat is centred at about 70% of the width with the countdown under it.
+  // Layout: the video starts under the menu bar and, while the cat walks in, reaches the right screen
+  // edge (the cat comes from off screen); then the sleeping cat is centred at about half the width with
+  // the countdown under it.
   // (The test display may be smaller than the requested window, so measure against the real viewport.)
   const { stage, pill, screen } = shown;
   const sleepLeft = stage.left + 0.183 * stage.width;
   const sleepRight = stage.left + 0.845 * stage.width;
   assert.equal(Math.round(stage.top), SCREEN.menuBar);
-  assert.ok(stage.right >= screen.width - 1, `video right edge ${stage.right} of ${screen.width}`);
+  assert.ok(shown.entering.right >= screen.width - 1, `video right edge on entering ${shown.entering.right} of ${screen.width}`);
   assert.ok(Math.abs((sleepLeft + sleepRight) / 2 - screen.width / 2) < 2, 'the sleeping cat is centred');
-  assert.ok((sleepRight - sleepLeft) / screen.width > 0.55 && (sleepRight - sleepLeft) / screen.width <= 0.71, `cat share ${(sleepRight - sleepLeft) / screen.width}`);
+  assert.ok((sleepRight - sleepLeft) / screen.width > 0.45 && (sleepRight - sleepLeft) / screen.width <= 0.51, `cat share ${(sleepRight - sleepLeft) / screen.width}`);
   assert.ok(Math.abs((pill.left + pill.right) / 2 - screen.width / 2) < 2, 'the countdown is centred under the cat');
   assert.ok(pill.top >= stage.top + 0.9 * stage.height, 'the countdown sits below the sleeping cat');
   assert.ok(pill.bottom <= screen.height - 20, `countdown bottom ${pill.bottom} of ${screen.height}`);
@@ -162,7 +169,7 @@ app.whenReady().then(async () => {
   win.setContentSize(1600, 700);
   const short = await run(`
     await until(() => window.innerHeight !== ${shown.screen.height}, 2000);
-    window.NotchBreakCat.layout();
+    window.NotchBreakCat.layout(true);
     return { stage: box('break-cat-stage'), pill: box('break-cat-pill'), width: window.innerWidth, height: window.innerHeight };
   `);
   assert.ok(short.height < shown.screen.height, `resized to ${short.width}×${short.height}`);
