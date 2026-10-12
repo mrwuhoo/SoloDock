@@ -253,7 +253,7 @@ app.whenReady().then(async () => {
   assert.equal(stored.lifeFlash, '已记一笔 · 运动');
   assert.equal(stored.opened[0], true);
   assert.equal(stored.opened[1], true);
-  assert.match(stored.opened[2], /^已加待办 · /);
+  assert.equal(stored.opened[2], '已加到今日待办', 'an undated todo lands in 今日 with no time');
   assert.equal(stored.flashed, true);
   assert.deepEqual(stored.taken, ['⌥⇧N 被其他应用占用，换一个', 'warning']);
   assert.equal(stored.free, '⌥⇧N · 在任何应用里记一条');
