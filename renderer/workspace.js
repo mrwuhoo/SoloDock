@@ -1251,9 +1251,9 @@
       if (typeof showStatusToast === 'function') showStatusToast('转写里没有带时间或动作的句子');
       return;
     }
+    // 提取出来的待办都是日常待办：有时间的按时间进今日 / 本周，没有的留在今日，不定时间。
     const todos = window.NotchTodos;
-    const categories = todos?.categories?.() || [];
-    const category = window.NotchCapture?.lastUsedCategory?.(todos?.items?.(), categories.map((item) => item.id)) || categories[0]?.id;
+    const category = todos?.dailyCategory?.() || 'P3';
     const box = document.createElement('div');
     box.className = 'rec-todos';
     box.setAttribute('role', 'dialog');
@@ -1289,26 +1289,24 @@
     add.type = 'button';
     add.className = 'rec-primary';
     add.disabled = true;
-    const categoryName = todos?.categoryName?.(category) || '待办';
-    add.textContent = `加入「${categoryName}」`;
+    add.textContent = '加入待办';
     foot.append(cancel, add);
     box.append(head, list, foot);
     list.addEventListener('change', () => {
       const count = list.querySelectorAll('input:checked').length;
       add.disabled = count === 0;
-      add.textContent = count ? `加入「${categoryName}」· ${count} 条` : `加入「${categoryName}」`;
+      add.textContent = count ? `加入待办 · ${count} 条` : '加入待办';
     });
     cancel.addEventListener('click', closeTodoPicker);
     add.addEventListener('click', () => {
       const picked = [...list.querySelectorAll('input:checked')].map((input) => candidates[Number(input.dataset.index)]);
       let added = 0;
       picked.forEach((candidate) => {
-        const at = candidate.at || window.NotchTodo?.defaultDeadline?.(Date.now());
-        if (todos?.add?.(category, candidate.text, at)) added += 1;
+        if (todos?.add?.(category, candidate.text, candidate.at || '')) added += 1;
       });
       closeTodoPicker();
       if (typeof showStatusToast === 'function') {
-        showStatusToast(added ? `已加 ${added} 条待办到「${categoryName}」` : '没加上，请到待办页再试', added ? { actionLabel: '查看', duration: 5000, onAction: () => todos?.open?.() } : undefined);
+        showStatusToast(added ? `已加 ${added} 条待办` : '没加上，请到待办页再试', added ? { actionLabel: '查看', duration: 5000, onAction: () => todos?.open?.() } : undefined);
       }
     });
     recordingDetail.append(box);

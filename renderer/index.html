@@ -385,25 +385,33 @@
           </section>
 
           <section id="tab-todo" class="tab-panel" role="tabpanel" aria-labelledby="tab-button-todo" aria-hidden="true" inert>
-            <!-- 待办：筛选 · 搜索 · 管理分类；分类卡由 todo-page.js 按分类数排成 2×2 或 3×2。 -->
+            <!-- 待办：三栏——今日待办 · 本周计划 · 重点项目。前两栏各有添加行；项目栏列出所有项目，点开才看步骤。行与项目卡由 todo-page.js 渲染。 -->
             <div class="task-page" id="task-page">
               <div class="task-toolbar">
-                <div class="task-filters" id="task-filters" role="tablist" aria-label="筛选待办">
-                  <button type="button" role="tab" data-filter="all" aria-selected="true">全部 <b>0</b></button>
-                  <button type="button" role="tab" data-filter="today" aria-selected="false">今天 <b>0</b></button>
-                  <button type="button" role="tab" data-filter="overdue" aria-selected="false">逾期 <b>0</b></button>
-                  <button type="button" role="tab" data-filter="done" aria-selected="false">已完成 <b>0</b></button>
-                </div>
+                <p class="task-hint">首页记的只进今日 / 本周；项目的下一步在项目里加</p>
                 <span class="task-flex"></span>
                 <label class="task-search">
                   <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="m15.5 15.5 4 4"/></svg>
                   <input id="task-search" type="search" placeholder="搜索待办" aria-label="搜索待办" autocomplete="off" spellcheck="false" />
                 </label>
                 <button class="task-manage" id="task-manage" type="button" aria-expanded="false">
-                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="6" height="6" rx="1.5"/><rect x="13.5" y="4.5" width="6" height="6" rx="1.5"/><rect x="4.5" y="13.5" width="6" height="6" rx="1.5"/><rect x="13.5" y="13.5" width="6" height="6" rx="1.5"/></svg>管理分类
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4.5" y="4.5" width="6" height="6" rx="1.5"/><rect x="13.5" y="4.5" width="6" height="6" rx="1.5"/><rect x="4.5" y="13.5" width="6" height="6" rx="1.5"/><rect x="13.5" y="13.5" width="6" height="6" rx="1.5"/></svg>管理项目
                 </button>
               </div>
-              <div class="task-grid" id="task-grid"></div>
+              <div class="task-board" id="task-board">
+                <section class="task-col tile" data-col="today" aria-label="今日待办">
+                  <header class="task-col-head"><h2>今日待办</h2><span class="task-count"></span><span class="task-col-sub">首页「现在」取第一条</span></header>
+                  <div class="task-body"></div>
+                </section>
+                <section class="task-col tile" data-col="week" aria-label="本周计划">
+                  <header class="task-col-head"><h2>本周计划</h2><span class="task-count"></span><span class="task-col-sub">到了日子自动进今日</span></header>
+                  <div class="task-body"></div>
+                </section>
+                <section class="task-col tile" data-col="projects" aria-label="重点项目">
+                  <header class="task-col-head"><h2>重点项目</h2><span class="task-count"></span><span class="task-col-sub">点项目名展开它的待办</span></header>
+                  <div class="task-body" id="task-projects"></div>
+                </section>
+              </div>
 
               <div class="task-pop task-picker" id="task-picker" role="dialog" aria-label="截止时间" hidden>
                 <div class="task-quick" id="task-picker-quick"></div>
@@ -421,23 +429,17 @@
                 <div class="task-pop-foot"><button class="task-ghost" type="button" data-pick="clear">清除</button><button class="task-primary" type="button" data-pick="ok">确定</button></div>
               </div>
 
-              <div class="task-pop task-manager" id="task-manager" role="dialog" aria-label="管理分类" hidden>
-                <header class="task-pop-head"><b>管理分类</b><span id="task-manager-count"></span></header>
+              <div class="task-pop task-manager" id="task-manager" role="dialog" aria-label="管理项目" hidden>
+                <header class="task-pop-head"><b>管理项目</b><span id="task-manager-count"></span></header>
                 <ol class="task-manager-list" id="task-manager-list"></ol>
                 <form class="task-manager-add" id="task-manager-add" autocomplete="off">
-                  <input id="task-manager-name" maxlength="24" placeholder="新分类名称" aria-label="新分类名称" />
+                  <input id="task-manager-name" maxlength="24" placeholder="新项目名称，如「YouTube 变现」" aria-label="新项目名称" />
                   <button class="task-primary" type="submit">添加</button>
                 </form>
-                <p class="task-pop-hint">拖动或用箭头调整顺序；有待办的分类要先合并到别的分类才能删除</p>
+                <p class="task-pop-hint">重点项目是深思熟虑的几件长期的事；拖动或用箭头调整顺序，有步骤的项目要先并到别处才能删除</p>
               </div>
 
-              <div class="task-pop task-menu" id="task-menu" role="menu" hidden>
-                <div class="task-swatches" id="task-menu-swatches"></div>
-                <button type="button" role="menuitem" data-menu="rename">重命名</button>
-                <button type="button" role="menuitem" data-menu="up">上移</button>
-                <button type="button" role="menuitem" data-menu="down">下移</button>
-                <button type="button" role="menuitem" data-menu="remove" class="danger">删除分类…</button>
-              </div>
+              <div class="task-pop task-tagmenu" id="task-tagmenu" role="menu" aria-label="换项目" hidden></div>
             </div>
           </section>
 

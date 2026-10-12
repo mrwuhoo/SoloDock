@@ -405,13 +405,13 @@ async function main() {
       },
     }, '权限等待期间的多入口连点只能启动一次录音');
 
-    // 待办截止时间选择器：翻到明年一月选 2 号，这一条用手选的日期；下一条回到默认（今天 23:30）。
+    // 待办「本周计划」添加行的截止时间选择器：翻到明年一月选 2 号，这一条用手选的日期；下一条回到默认（这周日 23:30）。
     const todoCalendarNavigation = await window.webContents.executeJavaScript(`
       (async () => {
         document.getElementById('tab-button-todo').click();
         await new Promise((resolve) => setTimeout(resolve, 200));
-        const card = document.querySelector('.task-card[data-category="P0"]');
-        const trigger = card.querySelector('.task-date');
+        const form = document.querySelector('.task-add[data-add="week"]');
+        const trigger = form.querySelector('.task-date');
         trigger.click();
         const picker = document.getElementById('task-picker');
         const previous = picker.querySelector('[data-pick="prev"]');
@@ -447,33 +447,37 @@ async function main() {
 
     const todoDeadlineReset = await window.webContents.executeJavaScript(`
       (() => {
-        const card = document.querySelector('.task-card[data-category="P0"]');
-        const input = card.querySelector('.task-add-input');
+        const form = document.querySelector('.task-add[data-add="week"]');
+        const input = form.querySelector('.task-add-input');
+        const daily = window.NotchTodos.dailyCategory();
         const submit = (text) => {
           input.value = text;
           input.dispatchEvent(new Event('input', { bubbles: true }));
           input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }));
-          return JSON.parse(localStorage.getItem('notch-todo-data')).P0.find((item) => item.text === text)?.deadline;
+          return JSON.parse(localStorage.getItem('notch-todo-data'))[daily].find((item) => item.text === text)?.deadline;
         };
         const first = new Date(submit('deadline-reset-first'));
-        const defaultLabel = card.querySelector('.task-date').textContent.trim();
+        const defaultLabel = form.querySelector('.task-date').textContent.trim();
         const second = submit('deadline-reset-second');
+        const weekEnd = window.NotchTodo.weekEndDeadline(Date.now());
         return {
           first: [first.getFullYear(), first.getMonth(), first.getDate(), first.getHours(), first.getMinutes()],
-          secondIsDefault: second === new Date(window.NotchTodo.defaultDeadline()).toISOString(),
-          defaultLabel,
-          manual: card.querySelector('.task-date').dataset.manual,
+          secondIsDefault: second === new Date(weekEnd).toISOString(),
+          defaultIsWeekEnd: defaultLabel === window.NotchTodo.shortDate(weekEnd, Date.now()),
+          manual: form.querySelector('.task-date').dataset.manual,
           popoverHidden: document.getElementById('task-picker').hidden,
+          todayDefault: document.querySelector('.task-add[data-add="today"] .task-date').textContent.trim(),
         };
       })()
     `);
     assert.deepEqual(todoDeadlineReset.first, [nextYear, 0, 2, 23, 30], '当前待办应使用本次手动选择的截止时间');
     assert.equal(todoDeadlineReset.secondIsDefault, true, '下一条待办不得沿用上一条的截止时间');
-    assert.match(todoDeadlineReset.defaultLabel, /^(今天|明天) 23:30$/, '新建表单应重置为默认 23:30');
+    assert.equal(todoDeadlineReset.defaultIsWeekEnd, true, '本周栏的添加行应回到默认的这周日 23:30');
     assert.equal(todoDeadlineReset.manual, 'false');
     assert.equal(todoDeadlineReset.popoverHidden, true, '提交后应关闭日期选择器');
+    assert.equal(todoDeadlineReset.todayDefault, '定时间', '今日栏默认不定时间');
 
-    // 跨天、跨年、闰年：默认截止随「现在」计算，不会用到打开面板那天的旧日期；23:30 之后算明天。
+    // 跨天、跨年、闰年：本周栏的默认截止随「现在」计算，不会用到打开面板那天的旧日期；周日当天算下周日。
     const todoRollover = await window.webContents.executeJavaScript(`
       (async () => {
         const RealDate = window.Date;
@@ -482,37 +486,38 @@ async function main() {
           constructor(...args) { super(...(args.length ? args : [now])); }
           static now() { return now; }
         };
-        const card = document.querySelector('.task-card[data-category="P0"]');
-        const input = card.querySelector('.task-add-input');
+        const form = document.querySelector('.task-add[data-add="week"]');
+        const input = form.querySelector('.task-add-input');
+        const daily = window.NotchTodos.dailyCategory();
         const iso = (...parts) => new RealDate(...parts).toISOString();
         const submit = (text) => {
           input.value = text;
           input.dispatchEvent(new Event('input', { bubbles: true }));
           input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
-          return JSON.parse(localStorage.getItem('notch-todo-data')).P0.find((item) => item.text === text)?.deadline;
+          return JSON.parse(localStorage.getItem('notch-todo-data'))[daily].find((item) => item.text === text)?.deadline;
         };
         try {
           const results = [];
           for (const [label, parts, expected] of [
-            ['a', [2026, 8, 11, 22], [2026, 8, 11, 23, 30]],
-            ['b', [2026, 8, 12, 9], [2026, 8, 12, 23, 30]],
-            ['c', [2027, 0, 1, 0], [2027, 0, 1, 23, 30]],
-            ['d', [2028, 1, 29, 9], [2028, 1, 29, 23, 30]],
-            ['e', [2028, 2, 1, 23, 50], [2028, 2, 2, 23, 30]],
+            ['a', [2026, 8, 11, 22], [2026, 8, 13, 23, 30]],
+            ['b', [2026, 8, 13, 9], [2026, 8, 20, 23, 30]],
+            ['c', [2027, 0, 1, 0], [2027, 0, 3, 23, 30]],
+            ['d', [2028, 1, 29, 9], [2028, 2, 5, 23, 30]],
+            ['e', [2028, 2, 1, 23, 50], [2028, 2, 5, 23, 30]],
           ]) {
             now = new RealDate(...parts).getTime();
             results.push(submit('rollover-' + label) === iso(...expected));
           }
           now = new RealDate(2028, 2, 3, 10).getTime();
           document.dispatchEvent(new CustomEvent('notch:tabchange', { detail: { tab: 'todo' } }));
-          const label = card.querySelector('.task-date').textContent.trim();
+          const label = form.querySelector('.task-date').textContent.trim();
           return { results, label };
         } finally {
           window.Date = RealDate;
         }
       })()
     `);
-    assert.deepEqual(todoRollover, { results: [true, true, true, true, true], label: '今天 23:30' }, '常驻跨天、跨年和闰年都应使用当天 23:30；23:30 之后是明天');
+    assert.deepEqual(todoRollover, { results: [true, true, true, true, true], label: '后天 23:30' }, '常驻跨天、跨年和闰年都应使用这周日 23:30；周日当天是下周日');
 
     await window.webContents.executeJavaScript(`
       window.__measureHomepage = function measureHomepage() {

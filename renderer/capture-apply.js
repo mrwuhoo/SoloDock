@@ -34,6 +34,7 @@
     return id ? { tab: 'notes', open: () => window.NotchNotes.open(id) } : null;
   }
 
+  // 随手记与首页「记一笔」只进今日 / 本周（日常那一类），从不写进重点项目；项目的下一步只能在项目里加。
   async function apply(entry) {
     const at = Number(entry?.at) || Date.now();
     const lifeHabits = habits();
@@ -41,7 +42,7 @@
     const result = Capture.parseCapture(entry?.text, {
       now: at,
       type: entry?.type,
-      category: entry?.category || Capture.lastUsedCategory(window.NotchTodos?.items?.(), categoryIds),
+      category: window.NotchTodos?.dailyCategory?.() || Capture.lastUsedCategory(window.NotchTodos?.items?.(), categoryIds),
       categories: categoryIds,
       habits: lifeHabits,
       habitId: entry?.habitId,

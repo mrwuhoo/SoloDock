@@ -1,6 +1,7 @@
 // 随手记窗口：输入一条，实时显示会存成什么、存到哪里。
-// ↩ 存入 · ⌘↩ 存入并打开 · ⇧↩ 换行 · ⇥ 换类型 · ⌘1–6 换分类 / 习惯 · esc 取消。
-// 这里只读 LocalStorage 做预览（分类名、习惯、最近的分类），从不写；要存的内容交给主进程转给面板。
+// ↩ 存入 · ⌘↩ 存入并打开 · ⇧↩ 换行 · ⇥ 换类型 · ⌘1–6 换习惯 · esc 取消。
+// 待办只进今日 / 本周（日常那一类），从不进重点项目；项目的下一步在面板的项目里加。
+// 这里只读 LocalStorage 做预览（日常分类、习惯），从不写；要存的内容交给主进程转给面板。
 (function bootstrapCapture() {
   'use strict';
 
@@ -23,8 +24,8 @@
   const reduceMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  let context = { categories: [], names: {}, habits: [], category: 'P3' };
-  let picked = { type: '', category: '', habitId: '' };
+  let context = { categories: [], habits: [], category: 'P3' };
+  let picked = { type: '', habitId: '' };
   let result = null;
   let composing = false;
   let compositionEndedAt = 0;
@@ -50,9 +51,8 @@
     try { habits = Life ? Life.normalizeLife(readJson('notch-life-v1', {}) || {}).habits : []; } catch (error) {}
     context = {
       categories,
-      names: Object.fromEntries(categories.map((category) => [category.id, category.name])),
       habits,
-      category: Capture.lastUsedCategory(readJson('notch-todo-data', {}), ids),
+      category: (window.NotchTodo ? window.NotchTodo.dailyCategory(categories) : null)?.id || ids.at(-1) || 'P3',
     };
   }
 
@@ -78,7 +78,7 @@
     const empty = !text.trim();
     result = Capture.parseCapture(text, {
       type: picked.type,
-      category: picked.category || context.category,
+      category: context.category,
       categories: categoryIds(),
       habits: context.habits,
       habitId: picked.habitId,
@@ -96,16 +96,16 @@
       button.setAttribute('aria-selected', String(type === result.type));
     });
 
-    const pickable = !empty && (result.type === 'todo' || (result.type === 'life' && context.habits.length > 1));
+    const pickable = !empty && result.type === 'life' && context.habits.length > 1;
     target.dataset.pickable = String(pickable);
     if (empty) {
       target.dataset.state = 'hint';
       targetText.textContent = '⇥ 换类型 · ⌘↩ 存入并打开';
     } else {
       target.dataset.state = result.valid ? '' : 'invalid';
-      targetText.textContent = Capture.describe(result, { now: Date.now(), categoryNames: context.names, habits: context.habits });
+      targetText.textContent = Capture.describe(result, { now: Date.now(), habits: context.habits });
     }
-    target.title = pickable ? (result.type === 'todo' ? `换分类（⌘1–${context.categories.length}）` : `换习惯（⌘1–${Math.min(6, context.habits.length)}）`) : '';
+    target.title = pickable ? `换习惯（⌘1–${Math.min(6, context.habits.length)}）` : '';
     save.disabled = empty;
     autosize();
   }
@@ -117,17 +117,13 @@
   }
 
   function pickIndex(index) {
-    if (result.type === 'todo' && categoryIds()[index]) picked.category = categoryIds()[index];
-    else if (result.type === 'life' && context.habits[index]) picked.habitId = context.habits[index].id;
-    else return;
+    if (result.type !== 'life' || !context.habits[index]) return;
+    picked.habitId = context.habits[index].id;
     update();
   }
 
   function cyclePick() {
-    if (result.type === 'todo') {
-      const ids = categoryIds();
-      picked.category = ids[(ids.indexOf(result.category) + 1) % ids.length];
-    } else if (result.type === 'life' && context.habits.length > 1) {
+    if (result.type === 'life' && context.habits.length > 1) {
       const index = context.habits.findIndex((habit) => habit.id === result.habitId);
       picked.habitId = context.habits[(index + 1) % context.habits.length].id;
     } else {
@@ -145,7 +141,7 @@
 
   function reset() {
     input.value = '';
-    picked = { type: '', category: '', habitId: '' };
+    picked = { type: '', habitId: '' };
     update();
   }
 
@@ -237,7 +233,7 @@
     loadContext();
     if (hiddenAt && Date.now() - hiddenAt > DRAFT_TTL_MS) {
       input.value = '';
-      picked = { type: '', category: '', habitId: '' };
+      picked = { type: '', habitId: '' };
     }
     busy = false;
     root.classList.add('no-motion');

@@ -1,4 +1,5 @@
-// 待办：分类（可增减，最多 6 个）、重复、可读的剩余时间、筛选与添加行的日期识别。纯函数，页面与 Node 测试共用。
+// 待办：分类（可增减，最多 6 个，其中一个是「日常」、其余是重点项目）、三栏归属、重复、可读的剩余时间与添加行的日期识别。
+// 纯函数，页面与 Node 测试共用。
 // 存储兼容：`notch-todo-data` 仍是「分类 id → 待办数组」，原来的四类沿用 P0–P3 作为 id，
 // 新增的分类只是多出新的键，旧版本读到的前四类不受影响。
 (function exposeTodoDomain(root, factory) {
@@ -13,8 +14,9 @@
     { id: 'P0', name: '课程', color: 'cat-1' },
     { id: 'P1', name: '自媒体&写作', color: 'cat-2' },
     { id: 'P2', name: 'Vibe coding', color: 'cat-3' },
-    { id: 'P3', name: '日常', color: 'cat-4' },
+    { id: 'P3', name: '日常', color: 'cat-4', daily: true },
   ];
+  const BUCKETS = { today: '今日待办', week: '本周计划', none: '' };
   // 旧待办没有提醒设置，沿用原来的「到期前 1 小时」；新建的默认提前 15 分钟。
   const LEGACY_REMIND_MIN = 60;
   const DEFAULT_REMIND_MIN = 15;
@@ -41,6 +43,19 @@
   }
 
   // ---------------- 分类 ----------------
+  // 分类里有且只有一个是「日常」（daily: true）：首页记一笔、今日 / 本周添加行写进去的待办都在这里；其余分类就是重点项目。
+  // 没标过的旧数据：P3（原来的「日常」）是日常，没有 P3 就取最后一个。
+  function markDaily(list) {
+    const flagged = list.findIndex((category) => category.daily === true);
+    const legacy = list.findIndex((category) => category.id === 'P3');
+    const index = flagged >= 0 ? flagged : legacy >= 0 ? legacy : list.length - 1;
+    return list.map((category, position) => {
+      const copy = { id: category.id, name: category.name, color: category.color };
+      if (position === index) copy.daily = true;
+      return copy;
+    });
+  }
+
   function normalizeCategories(value, legacyNames = {}) {
     const list = Array.isArray(value) ? value : [];
     const seen = new Set();
@@ -54,25 +69,62 @@
         id,
         name: clean(item.name, 24) || '未命名',
         color: COLORS.includes(item.color) ? item.color : COLORS[index % COLORS.length],
+        daily: item.daily === true,
       });
     });
-    if (out.length) return out.slice(0, MAX_CATEGORIES);
+    if (out.length) return markDaily(out.slice(0, MAX_CATEGORIES));
     // 第一次升级：原来的四类按旧名字、原顺序、原颜色迁过来。
-    return DEFAULT_CATEGORIES.map((category) => ({
+    return markDaily(DEFAULT_CATEGORIES.map((category) => ({
       ...category,
       name: clean(legacyNames && legacyNames[category.id], 24) || category.name,
-    }));
+    })));
   }
+
+  const dailyCategory = (categories) => categories.find((category) => category.daily === true) || categories[categories.length - 1] || null;
+  const projects = (categories) => categories.filter((category) => category !== dailyCategory(categories));
 
   function nextColor(categories) {
     const used = new Set(categories.map((category) => category.color));
     return COLORS.find((color) => !used.has(color)) || COLORS[categories.length % COLORS.length];
   }
 
-  function gridShape(count) {
-    if (count <= 3) return { columns: Math.max(1, count), rows: 1 };
-    if (count === 4) return { columns: 2, rows: 2 };
-    return { columns: 3, rows: 2 };
+  // ---------------- 三栏归属 ----------------
+  const endOfDay = (now) => { const date = new Date(Number(now)); return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1).getTime(); };
+
+  // 一条待办出现在哪一栏：有截止且在今天结束前（含逾期）→ 今日；明天起 → 本周；
+  // 没有截止：日常待办在今日，项目的一步只留在项目里；标了「在做」的永远在今日。
+  function bucketOf(item, { now = Date.now(), daily = false, doing = false } = {}) {
+    if (!item || item.done) return 'none';
+    if (doing) return 'today';
+    const due = Date.parse(String(item.deadline || ''));
+    if (Number.isFinite(due)) return due < endOfDay(now) ? 'today' : 'week';
+    return daily ? 'today' : 'none';
+  }
+
+  const bucketLabel = (bucket) => BUCKETS[bucket] || '';
+
+  // 本周计划添加行的默认截止：这周日 23:30；今天就是周日（或已过）就是下周日。
+  function weekEndDeadline(now = Date.now()) {
+    const base = new Date(Number(now));
+    const untilSunday = (7 - base.getDay()) % 7;
+    const sunday = (extra) => new Date(base.getFullYear(), base.getMonth(), base.getDate() + untilSunday + extra, 23, 30).getTime();
+    return dayOffset(sunday(0), now) <= 0 ? sunday(7) : sunday(0);
+  }
+
+  // 拖进今日、或在选择器里从「不定时间」起步时用：今天 23:30，已经过了就是今天 23:59。
+  function todayDeadline(now = Date.now()) {
+    const base = new Date(Number(now));
+    const at = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 30).getTime();
+    return at > Number(now) ? at : new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59).getTime();
+  }
+
+  // 本周栏里，这周日之后的放到「下周起」分隔线下面。
+  function beyondThisWeek(deadline, now = Date.now()) {
+    const due = Date.parse(String(deadline || ''));
+    if (!Number.isFinite(due)) return false;
+    const base = new Date(Number(now));
+    const sunday = new Date(base.getFullYear(), base.getMonth(), base.getDate() + ((7 - base.getDay()) % 7));
+    return due >= endOfDay(sunday.getTime());
   }
 
   // ---------------- 待办 ----------------
@@ -107,7 +159,7 @@
     return item;
   }
 
-  // 「分类 id → 待办数组」。已删除分类留下的待办并入第一个分类，永远不丢。
+  // 「分类 id → 待办数组」。已删除分类留下的待办并入日常那一类，永远不丢。
   function normalizeData(raw, categories) {
     const source = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
     const data = Object.fromEntries(categories.map((category) => [category.id, []]));
@@ -120,7 +172,8 @@
       });
     };
     categories.forEach((category) => take(source[category.id], category.id));
-    Object.keys(source).filter((key) => !data[key]).forEach((key) => take(source[key], categories[0].id));
+    const fallback = dailyCategory(categories).id;
+    Object.keys(source).filter((key) => !data[key]).forEach((key) => take(source[key], fallback));
     return data;
   }
 
@@ -232,39 +285,14 @@
     return date.toISOString();
   }
 
-  // ---------------- 筛选 ----------------
-  function matches(item, filter, now = Date.now()) {
-    if (filter === 'done') return item.done;
-    if (item.done) return false;
-    if (filter === 'today') return Boolean(item.deadline) && dayOffset(Date.parse(item.deadline), now) === 0;
-    if (filter === 'overdue') return Boolean(item.deadline) && Date.parse(item.deadline) <= Number(now);
-    return true;
-  }
-
+  // ---------------- 搜索 ----------------
   function matchesSearch(item, query) {
     const tokens = String(query || '').toLocaleLowerCase().trim().split(/\s+/).filter(Boolean);
     const text = item.text.toLocaleLowerCase();
     return tokens.every((token) => text.includes(token));
   }
 
-  function counts(data, now = Date.now()) {
-    const all = Object.values(data || {}).flat();
-    return {
-      all: all.filter((item) => !item.done).length,
-      today: all.filter((item) => matches(item, 'today', now)).length,
-      overdue: all.filter((item) => matches(item, 'overdue', now)).length,
-      done: all.filter((item) => item.done).length,
-    };
-  }
-
   // ---------------- 添加行 ----------------
-  function defaultDeadline(now = Date.now()) {
-    const base = new Date(Number(now));
-    let at = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 30).getTime();
-    if (at <= Number(now)) at = new Date(base.getFullYear(), base.getMonth(), base.getDate() + 1, 23, 30).getTime();
-    return at;
-  }
-
   // 输入「明天下午3点 给会计打电话」→ 文字「给会计打电话」+ 截止 明天 15:00。认不出日期就原样返回、不显示标签。
   function parseAddInput(text, now = Date.now()) {
     const raw = clean(text, 200);
@@ -327,8 +355,14 @@
     WEEK,
     dayOffset,
     normalizeCategories,
+    dailyCategory,
+    projects,
     nextColor,
-    gridShape,
+    bucketOf,
+    bucketLabel,
+    weekEndDeadline,
+    todayDeadline,
+    beyondThisWeek,
     normalizeRepeat,
     normalizeItem,
     normalizeData,
@@ -342,10 +376,7 @@
     remindLabel,
     describe,
     nextOccurrence,
-    matches,
     matchesSearch,
-    counts,
-    defaultDeadline,
     parseAddInput,
     quickDates,
     monthGrid,
