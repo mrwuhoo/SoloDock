@@ -260,39 +260,21 @@
                   <span class="now-label" id="now-label">现在</span>
                   <span class="now-meta" id="now-meta"></span>
                 </header>
-                <!-- 空闲：当前这件事、开始专注、接下来 -->
-                <div class="now-idle" id="now-idle">
-                  <div class="now-task" id="now-task">
+                <!-- 拉环表盘（参考锤子时钟）：一圈 60 分钟，拖拉环定时长，蓝色弧是剩下的时间；空闲与专注中共用同一个表盘，位置不变。 -->
+                <div class="now-focus" id="now-focus">
+                  <div class="now-dial" id="now-dial" role="slider" tabindex="0" aria-label="专注时长" aria-valuemin="1" aria-valuemax="120" aria-valuenow="25" aria-valuetext="25 分钟"></div>
+                  <!-- 空闲：当前这件事、开始专注 -->
+                  <div class="now-side now-idle" id="now-idle">
                     <h2 class="now-title" id="now-task-title"></h2>
                     <div class="now-task-meta"><span class="now-chip" id="now-task-chip" hidden></span><p class="now-due" id="now-task-due"></p></div>
-                  </div>
-                  <div class="now-focus">
-                    <!-- 时间圆盘：一圈是 60 分钟，蓝色扇形是这一轮的时长（由 home.js 画）。 -->
-                    <div class="now-disc" id="now-disc" role="img" aria-label="专注 25 分钟"></div>
-                    <div class="now-focus-side">
-                      <div class="now-seg" id="now-duration" role="radiogroup" aria-label="专注时长">
-                        <button type="button" role="radio" data-minutes="15" aria-checked="false">15</button>
-                        <button type="button" role="radio" data-minutes="25" aria-checked="true">25</button>
-                        <button type="button" role="radio" data-minutes="45" aria-checked="false">45</button>
-                        <button type="button" role="radio" data-minutes="60" aria-checked="false">60 分钟</button>
-                      </div>
-                      <div class="now-actions">
-                        <button class="now-button primary" id="now-start" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>开始专注</button>
-                        <button class="now-button ghost" id="now-switch" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="now-picker">换一件事</button>
-                      </div>
-                      <p class="now-hint">专注时，AI 完成的通知会先收起，结束后一起告诉你</p>
+                    <div class="now-actions">
+                      <button class="now-button primary" id="now-start" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" /></svg>开始专注</button>
+                      <button class="now-button ghost" id="now-switch" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="now-picker">换一件事</button>
                     </div>
+                    <p class="now-hint">拖动拉环调时长，计时中也能再拨</p>
                   </div>
-                  <div class="now-next">
-                    <span class="now-sub">接下来</span>
-                    <ul class="now-next-list" id="now-next-list"></ul>
-                  </div>
-                </div>
-                <!-- 专注中 / 休息中 / 已暂停 -->
-                <div class="now-running" id="now-running" hidden>
-                  <!-- 专注中：扇形随时间缩小，不跳秒；悬停才浮出还剩几分钟。 -->
-                  <div class="now-disc big" id="now-disc-big" role="img" aria-label=""><span class="now-disc-peek" id="now-peek" aria-hidden="true"></span></div>
-                  <div class="now-running-side">
+                  <!-- 专注中 / 休息中 / 已暂停 -->
+                  <div class="now-side now-running" id="now-running" hidden>
                     <h2 class="now-title" id="now-running-title"></h2>
                     <div class="now-task-meta"><span class="now-chip" id="now-running-chip" hidden></span><p class="now-due" id="now-running-due"></p></div>
                     <div class="now-tomatoes" id="now-tomatoes"></div>
@@ -302,6 +284,10 @@
                       <button class="now-button ghost danger" id="now-finish" type="button">结束</button>
                     </div>
                   </div>
+                </div>
+                <div class="now-next">
+                  <span class="now-sub">接下来</span>
+                  <ul class="now-next-list" id="now-next-list"></ul>
                 </div>
                 <p class="now-held" id="now-held" role="status" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 16.5V11a5 5 0 0 1 10 0v5.5l1.5 1.5h-13Z" /><path d="M10.2 20.2a2 2 0 0 0 3.6 0" /></svg><span id="now-held-text"></span></p>
                 <!-- 记一笔：和随手记同一套规则，带时间的变成待办，网址变成链接，其余进笔记 -->

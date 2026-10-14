@@ -173,6 +173,18 @@
     changed();
   }
 
+  // 计时中再拨拉环：把「还剩多少」改成新的分钟数，已经走过的时间照常计入（1–120 分钟）。
+  function setRemaining(seconds) {
+    if (!session) return;
+    const next = Math.max(60, Math.min(EXTEND_LIMIT_SECONDS, Math.round(Number(seconds) || 0)));
+    const left = remainingSeconds();
+    session.seconds = Math.max(next, Math.round(session.seconds - left + next));
+    if (session.running) session.endsAt = Date.now() + next * 1000;
+    else session.remaining = next;
+    reportFocusState();
+    changed();
+  }
+
   // 「结束」：专注满 1 分钟就记下实际专注的时长（不算一个完整番茄）；休息直接结束。
   function finish() {
     if (!session) return;
@@ -203,6 +215,7 @@
     pause,
     resume,
     extend,
+    setRemaining,
     finish,
     setMinutes,
     minutes: () => minutes,

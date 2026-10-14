@@ -16,9 +16,12 @@ test('countdown and duration text read naturally', () => {
   assert.equal(Home.untilText(100 * 60000), '1 小时 40 分后');
 });
 
-test('focus minutes stay on the four choices and migrate the old timer', () => {
+test('focus minutes are any whole minute from 1 to 120 and migrate the old timer', () => {
   assert.equal(Home.focusMinutes(45), 45);
-  assert.equal(Home.focusMinutes(30), 25);
+  assert.equal(Home.focusMinutes(30), 30);
+  assert.equal(Home.focusMinutes(37.4), 37);
+  assert.equal(Home.focusMinutes(500), 120);
+  assert.equal(Home.focusMinutes(0), 25);
   assert.equal(Home.focusMinutes('x'), 25);
   assert.equal(Home.focusMinutesFromLegacy([15, 0]), 15);
   assert.equal(Home.focusMinutesFromLegacy([5, 0]), 25, 'the old 5 minute default becomes 25');
@@ -27,21 +30,29 @@ test('focus minutes stay on the four choices and migrate the old timer', () => {
   assert.equal(Home.focusMinutesFromLegacy(null), 25);
 });
 
-test('the time disc starts white and fills with elapsed time; one turn is the session', () => {
-  assert.equal(Home.elapsedFraction(1500, 1500), 0, 'pure white before any time has passed');
-  assert.equal(Home.elapsedFraction(375, 1500), 0.75);
-  assert.equal(Home.elapsedFraction(0, 1500), 1, 'fully blue when the session ends');
-  assert.equal(Home.elapsedFraction(-5, 0), 1);
-  const ticks = Home.discTicks(25);
-  assert.equal(ticks.length, 25, 'one tick per minute of the session');
-  assert.deepEqual(ticks.filter((tick) => tick.major).length, 5);
-  assert.deepEqual([ticks[0].x1, ticks[0].y1, ticks[0].y2], [50, 4, 9.5], 'the 12 o\'clock tick is the longest');
-  assert.equal(Home.discTicks(45).length, 45);
-  assert.equal(Home.discTicks(500).length, 120);
-  assert.equal(Home.wedgePath(50, 50, 40, 0), '');
-  assert.equal(Home.wedgePath(50, 50, 40, 0.25), 'M50 50L50 10A40 40 0 0 1 90 50Z');
-  assert.equal(Home.wedgePath(50, 50, 40, 0.75), 'M50 50L50 10A40 40 0 1 1 10 50Z');
-  assert.match(Home.wedgePath(50, 50, 40, 1), /^M50 10A40 40 0 1 1 50 90A40 40 0 1 1 50 10Z$/);
+test('the pull-ring dial: one turn is an hour, the arc starts at 12 o\'clock', () => {
+  assert.deepEqual(Home.dialPoint(0, 40), { x: 50, y: 10 });
+  assert.deepEqual(Home.dialPoint(15, 40), { x: 90, y: 50 });
+  assert.equal(Home.dialArc(0, 40), '');
+  assert.equal(Home.dialArc(15, 40), 'M50 10A40 40 0 0 1 90 50');
+  assert.match(Home.dialArc(45, 40), /^M50 10A40 40 0 1 1 10 50$/);
+  assert.match(Home.dialArc(90, 40), /^M50 10A40 40 0 1 1 50 90A40 40 0 1 1 50 10$/, 'a full lap is a full circle');
+  const ticks = Home.dialTicks();
+  assert.equal(ticks.length, 24, 'sparse ticks, one every 2.5 minutes');
+  assert.equal(ticks.filter((tick) => tick.major).length, 4, '0 / 15 / 30 / 45');
+  assert.equal(Math.round(Home.dialMinutesAt(50, 0, 50, 50)), 0);
+  assert.equal(Math.round(Home.dialMinutesAt(100, 50, 50, 50)), 15);
+  assert.equal(Math.round(Home.dialMinutesAt(0, 50, 50, 50)), 45);
+  assert.equal(Home.dialStep(58, 2), 4, 'crossing 12 o\'clock keeps counting forward');
+  assert.equal(Home.dialStep(2, 58), -4);
+  assert.equal(Home.dialResist(130), 123, 'past the end the ring pulls back');
+  assert.equal(Home.dialResist(-9), -2);
+  assert.equal(Home.dialResist(40), 40);
+  assert.equal(Home.dialSettle(37.6), 38);
+  assert.equal(Home.dialSettle(-3), 1);
+  assert.equal(Home.dialSettle(140), 120);
+  assert.equal(Home.remainingMinutes(14 * 60 + 32), 15);
+  assert.equal(Home.remainingMinutes(0), 0);
   assert.equal(Home.remainingText(14 * 60 + 32), '还剩 15 分钟');
   assert.equal(Home.remainingText(20), '还剩 1 分钟');
   assert.equal(Home.remainingText(190, 'break'), '休息还剩 4 分钟');
