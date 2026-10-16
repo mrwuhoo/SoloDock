@@ -14,6 +14,8 @@
   const toast = (message) => {
     if (typeof window.showStatusToast === 'function') window.showStatusToast(message);
   };
+  // 「跳回窗口」缺系统权限时主进程会说缺哪一项（键与 main.js 的 PRIVACY_SETTINGS_PANES 一致）。
+  const PERMISSION_NAMES = { 'screen-recording': '屏幕录制', accessibility: '辅助功能', automation: '自动化' };
   const SOURCE = {
     codex: ['Codex', 'check'],
     claude: ['Claude', 'spark'],
@@ -211,7 +213,14 @@
     }
     actionButton.disabled = true;
     const result = await api().actOnNotice?.(item.dataset.id, action)?.catch?.(() => null);
-    if (!result?.ok && action === 'open') toast('没找到对应的窗口，可能已经关掉了');
+    if (!result?.ok && action === 'open') {
+      const name = PERMISSION_NAMES[result?.pane];
+      if (result?.error === 'permission' && name && typeof window.showStatusToast === 'function') {
+        window.showStatusToast(`跳回窗口要先在系统设置里打开「${name}」`, { actionLabel: '打开设置', onAction: () => api().openPrivacySettings?.(result.pane), duration: 8000 });
+      } else {
+        toast('没找到对应的窗口，可能已经关掉了');
+      }
+    }
     if (result?.ok && action === 'todo-done') toast('待办已完成');
     await load();
     render();

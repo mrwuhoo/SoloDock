@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SoloDock 休息</title>
+    <link rel="stylesheet" href="./tokens.css" />
+    <link rel="stylesheet" href="./break-cat.css" />
+  </head>
+  <body>
+    <!-- 休息陪伴：一只大猫走进屏幕趴下，旁边是休息倒计时。整窗透明，只有猫和倒计时能点。 -->
+    <main id="break-cat" class="break-cat" hidden>
+      <div id="break-cat-stage" class="break-cat-stage">
+        <video id="break-cat-sleep" class="break-cat-video" src="./assets/break-cat/sleep.webm" muted loop playsinline preload="auto" aria-hidden="true"></video>
+        <video id="break-cat-arrive" class="break-cat-video" src="./assets/break-cat/arrive.webm" muted playsinline preload="auto" aria-hidden="true"></video>
+      </div>
+      <section id="break-cat-pill" class="break-cat-pill" role="timer" aria-live="off" aria-label="休息倒计时">
+        <span class="break-cat-label">休息</span>
+        <span id="break-cat-time" class="break-cat-time">5:00</span>
+        <span class="break-cat-hint">点猫可以摸摸它</span>
+        <button id="break-cat-leave" class="break-cat-leave" type="button">让它走</button>
+      </section>
+    </main>
+
+    <script src="./break-cat.js" defer></script>
+  </body>
+</html>

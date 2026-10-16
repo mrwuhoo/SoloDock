@@ -68,9 +68,12 @@ const {
   connectClaudeSettings,
   repairClaudeSettings,
   disconnectClaudeSettings,
+  connectCodexConfig,
+  repairCodexConfig,
+  windowPermissionPane,
 } = require('./main-services');
 const { createVaultLock } = require('./vault-lock');
-const { reminderPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES, createQuotaWatch, quotaWindows } = require('./reminder-rules');
+const { reminderPresentation, autoBreakPresentation, isAiSource, normalizeBodySettings, createActivityTracker, createFocusHold, createBreakCompanion, createReminderPause, pauseUntil, pauseResumeLabel, PAUSE_CHOICES, createQuotaWatch, quotaWindows } = require('./reminder-rules');
 const { createNoticeStore } = require('./notice-store');
 const { createWorklogStore } = require('./worklog-store');
 const { createFrameStore, FRAME_MAX_PHOTOS } = require('./frame-store');
@@ -621,6 +624,178 @@ ipcMain.on('focus:state', (event, payload) => {
   } else {
     flushHeldFocusNotifications();
   }
+  syncBreakCompanion();
+});
+
+// ============ 休息陪伴：休息时一只大猫走进屏幕陪你 ============
+// 番茄钟进入「休息」时出现：专注结束和久坐提醒到点时自动开始休息（startAutoBreak），首页的「休息 5 分钟」也走这里，
+// 休息结束、暂停、提前结束或点「让它走」就离开。全屏透明窗口，只有猫和倒计时能点，
+// 其余地方点击穿透；不抢焦点、不挡后面的窗口，提醒卡片和刘海都在它上面。
+const BREAK_CAT_LEAVE_MS = 1200; // 离场动画的兜底时长；渲染层播完会先报告
+const breakCompanion = createBreakCompanion();
+let breakCatWindow = null;
+let breakCatReady = false;
+let breakCatPending = null;
+let breakCatLeaveTimer = null;
+let breakCatEndTimer = null;
+let autoBreakRequestedAt = 0;
+let breakCatAuto = false; // 这次休息是到点自己开始的（不是你点的「休息 5 分钟」）
+
+// 到点自动休息（规则见 reminder-rules.js 的 autoBreakPresentation）：开着大猫、提醒没暂停时，
+// 直接开始 5 分钟休息，猫随之走进来。返回 true 表示已经开始。
+function startAutoBreak(source, now = Date.now()) {
+  if (!autoBreakPresentation(source)) return false;
+  if (!bodyTracker.settings().cat.enabled || getReminderPause().paused(now)) return false;
+  if (!mainWindow || mainWindow.isDestroyed()) return false;
+  bodyTracker.startBreak(now);
+  autoBreakRequestedAt = now;
+  sendReminderAction('break-5', { source });
+  return true;
+}
+
+// 不想休息：结束这次自动开始的休息（猫跟着离开）。
+function endAutoBreak() {
+  sendReminderAction('break-end', { source: 'break-cat' });
+}
+
+function syncBreakCompanion(now = Date.now()) {
+  const step = breakCompanion.update(focusHold.focus(), bodyTracker.settings().cat.enabled, now);
+  if (step && step.type === 'show') {
+    breakCatAuto = now - autoBreakRequestedAt < 10_000;
+    autoBreakRequestedAt = 0;
+    showBreakCat(step.endsAt);
+  } else if (step && step.type === 'update') sendBreakCat('break-cat:update', { endsAt: step.endsAt });
+  else if (step && step.type === 'hide') {
+    breakCatAuto = false;
+    hideBreakCat();
+  }
+  // 渲染层没来得及报告休息结束时，到点也让猫离开。
+  if (breakCatEndTimer) clearTimeout(breakCatEndTimer);
+  breakCatEndTimer = null;
+  if (breakCompanion.visible()) {
+    breakCatEndTimer = setTimeout(() => syncBreakCompanion(), Math.max(0, breakCompanion.endsAt() - now) + 1500);
+    breakCatEndTimer.unref?.();
+  }
+}
+
+function createBreakCatWindow() {
+  if (breakCatWindow && !breakCatWindow.isDestroyed()) return breakCatWindow;
+  breakCatReady = false;
+  const win = new BrowserWindow({
+    ...getTargetDisplay().bounds,
+    frame: false,
+    transparent: true,
+    backgroundColor: '#00000000',
+    resizable: false,
+    movable: false,
+    focusable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    hiddenInMissionControl: true,
+    fullscreenable: false,
+    minimizable: false,
+    maximizable: false,
+    roundedCorners: false,
+    enableLargerThanScreen: true,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, 'preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      backgroundThrottling: false,
+    },
+  });
+  breakCatWindow = win;
+  installLocalWebContentsGuards(win.webContents);
+  // 菜单栏之上、刘海与提醒卡片之下。
+  win.setAlwaysOnTop(true, 'status');
+  if (process.platform === 'darwin') win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.loadFile(path.join(__dirname, 'renderer', 'break-cat.html'));
+  win.webContents.once('did-finish-load', () => {
+    if (breakCatWindow !== win || win.isDestroyed()) return;
+    breakCatReady = true;
+    flushBreakCat();
+  });
+  win.webContents.on('render-process-gone', () => {
+    if (!win.isDestroyed()) win.destroy();
+  });
+  win.on('closed', () => {
+    if (breakCatWindow !== win) return;
+    breakCatWindow = null;
+    breakCatReady = false;
+  });
+  return win;
+}
+
+function showBreakCat(endsAt) {
+  if (isQuitting) return;
+  if (breakCatLeaveTimer) clearTimeout(breakCatLeaveTimer);
+  breakCatLeaveTimer = null;
+  const display = getTargetDisplay();
+  // 程序坞在底部时，倒计时要放在它上面。
+  const dock = Math.max(0, display.bounds.y + display.bounds.height - (display.workArea.y + display.workArea.height));
+  breakCatPending = { endsAt, menuBar: getMenuBarHeight(display), bottom: dock };
+  const win = createBreakCatWindow();
+  win.setBounds(display.bounds);
+  if (breakCatReady) flushBreakCat();
+}
+
+function flushBreakCat() {
+  const win = breakCatWindow;
+  if (!breakCatPending || !win || win.isDestroyed()) return;
+  const payload = breakCatPending;
+  breakCatPending = null;
+  win.setIgnoreMouseEvents(true, { forward: true });
+  win.showInactive();
+  win.webContents.send('break-cat:show', payload);
+}
+
+function sendBreakCat(channel, payload) {
+  if (breakCatWindow && !breakCatWindow.isDestroyed() && breakCatReady) breakCatWindow.webContents.send(channel, payload);
+}
+
+function hideBreakCat() {
+  breakCatPending = null;
+  if (!breakCatWindow || breakCatWindow.isDestroyed()) return;
+  breakCatWindow.setIgnoreMouseEvents(true, { forward: true });
+  sendBreakCat('break-cat:hide');
+  if (breakCatLeaveTimer) clearTimeout(breakCatLeaveTimer);
+  breakCatLeaveTimer = setTimeout(destroyBreakCatWindow, BREAK_CAT_LEAVE_MS);
+}
+
+// 猫走了就关掉窗口：视频解码和全屏透明层都不常驻。
+function destroyBreakCatWindow() {
+  if (breakCatLeaveTimer) clearTimeout(breakCatLeaveTimer);
+  breakCatLeaveTimer = null;
+  if (breakCompanion.visible()) return;
+  const win = breakCatWindow;
+  breakCatWindow = null;
+  breakCatReady = false;
+  if (win && !win.isDestroyed()) win.destroy();
+}
+
+const fromBreakCat = (event) => Boolean(breakCatWindow && !breakCatWindow.isDestroyed() && event.sender === breakCatWindow.webContents);
+
+// 指针在猫或倒计时上时接收点击，离开后恢复穿透。
+ipcMain.on('break-cat:interactive', (event, interactive) => {
+  if (!fromBreakCat(event) || !breakCompanion.visible()) return;
+  breakCatWindow.setIgnoreMouseEvents(interactive !== true, { forward: true });
+});
+
+// 「让它走」：你自己点的休息，只让猫离开、休息照常计时；到点自己开始的休息，就是这次不休息了。
+ipcMain.on('break-cat:dismiss', (event) => {
+  if (!fromBreakCat(event)) return;
+  const auto = breakCatAuto;
+  breakCatAuto = false;
+  if (breakCompanion.dismiss()) hideBreakCat();
+  if (auto) endAutoBreak();
+});
+
+ipcMain.on('break-cat:left', (event) => {
+  if (fromBreakCat(event)) destroyBreakCatWindow();
 });
 
 // ============ 通知中心 ============
@@ -638,19 +813,44 @@ function getNoticeStore() {
 }
 
 // 按项目名找到对应的终端 / IDE 窗口并切到前台（提醒卡片与通知中心共用）。
-async function focusWindowForNotice(notice) {
-  if (!notice || !notice.project) return false;
+// 缺权限时系统大多不提示、只是静默失败，所以要认出缺的是哪一项（pane 是 PRIVACY_SETTINGS_PANES 的键）。
+async function focusTaskWindow(task) {
+  if (!task || !task.project) return { ok: false, error: 'window_not_found' };
   const result = await scanCurrentWindows();
+  if (result.error === 'screen_recording_permission_required') return { ok: false, error: 'permission', pane: 'screen-recording' };
   const target = (result.items || [])
-    .map((item) => ({ item, score: taskWindowMatchScore(notice, item) }))
+    .map((item) => ({ item, score: taskWindowMatchScore(task, item) }))
     .filter((candidate) => candidate.score > 0)
     .sort((a, b) => b.score - a.score)[0]?.item;
-  if (!target) return false;
+  if (!target) return { ok: false, error: 'window_not_found' };
   try {
-    return (await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true';
+    if ((await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true') return { ok: true };
   } catch (error) {
-    return false;
+    const pane = windowPermissionPane(error && error.message);
+    if (pane) return { ok: false, error: 'permission', pane };
   }
+  return { ok: false, error: 'window_not_found' };
+}
+
+const PERMISSION_NAMES = { 'screen-recording': '屏幕录制', accessibility: '辅助功能', automation: '自动化' };
+
+// 在提醒卡片上点「跳回窗口」却缺权限：接着弹一张卡片说清缺哪一项，给「打开设置」。不进通知中心。
+function showWindowPermissionHint(pane) {
+  const name = PERMISSION_NAMES[pane];
+  if (!name) return;
+  enqueueTaskNotification({
+    eventId: `permission-${pane}-${Date.now()}`,
+    taskId: `permission-${pane}`,
+    source: 'info',
+    project: '',
+    title: `跳回窗口要先打开「${name}」`,
+    detail: pane === 'automation' ? '系统设置 → 隐私与安全性 → 自动化 → SoloDock，打开「系统事件」' : `系统设置 → 隐私与安全性 → ${name}，打开 SoloDock`,
+    actions: [{ id: 'open-privacy', label: '打开设置', primary: true }, { id: 'dismiss', label: '知道了' }],
+    visibleMs: 0,
+    pane,
+    record: false,
+    completedAt: Date.now(),
+  });
 }
 
 ipcMain.handle('notices:list', () => ({ items: getNoticeStore().list(), summary: getNoticeStore().summary() }));
@@ -664,12 +864,12 @@ ipcMain.handle('notices:act', async (event, payload) => {
   if (!notice) return { ok: false, error: 'not_found' };
   const action = String(payload && payload.action || '');
   if (action === 'open') {
-    const focused = await focusWindowForNotice(notice);
-    if (focused) {
+    const result = await focusTaskWindow(notice);
+    if (result.ok) {
       store.markHandled(notice.id);
       if (notice.source === 'needs-you') clearNeedsYou(notice.agent || null);
     }
-    return { ok: focused, error: focused ? undefined : 'window_not_found' };
+    return result;
   }
   if (action === 'todo-done') {
     sendReminderAction('todo-done', notice);
@@ -711,9 +911,15 @@ async function handleTaskNotificationAction(eventId, actionId) {
       break;
     case 'snooze-10': snoozeNotification(notification, 10); break;
     case 'snooze-30': snoozeNotification(notification, 30); break;
-    case 'body-snooze-10': bodyTracker.snooze('sit', 10, now); break;
+    case 'body-snooze-10':
+      bodyTracker.snooze('sit', 10, now);
+      if (notification.autoBreak) endAutoBreak();
+      break;
     case 'body-snooze-30': bodyTracker.snooze('offwork', 30, now); break;
-    case 'body-mute-today': bodyTracker.muteToday('sit', now); break;
+    case 'body-mute-today':
+      bodyTracker.muteToday('sit', now);
+      if (notification.autoBreak) endAutoBreak();
+      break;
     case 'break-5':
       bodyTracker.startBreak(now);
       sendReminderAction('break-5', notification);
@@ -726,6 +932,9 @@ async function handleTaskNotificationAction(eventId, actionId) {
       break;
     case 'open-usage':
       openRendererPanel('app:open-usage', { provider: notification.taskId || '' });
+      break;
+    case 'open-privacy':
+      openPrivacyPane(notification.pane);
       break;
     case 'quota-mute':
       quotaWatch.mute(notification.taskId, notification.resetsAt || now + 7 * 86400000);
@@ -795,7 +1004,7 @@ function readStoredBodySettings() {
 }
 
 const BODY_COPY = {
-  sit: (settings) => ({ title: '起来活动一下', detail: `已经连续用电脑 ${settings.sit.minutes} 分钟，站起来走走、喝口水` }),
+  sit: (settings, autoBreak) => ({ title: '起来活动一下', detail: autoBreak ? `已经连续用电脑 ${settings.sit.minutes} 分钟，休息 5 分钟，站起来走走` : `已经连续用电脑 ${settings.sit.minutes} 分钟，站起来走走、喝口水` }),
   eye: () => ({ title: '看看远处 20 秒', detail: '眨眨眼，让眼睛歇一会儿' }),
   offwork: (settings) => ({ title: '到收工时间了', detail: `${settings.offwork.time} · 把剩下的挪到明天，早点休息` }),
 };
@@ -851,12 +1060,14 @@ function sampleBodyActivity() {
   if (worklogEnabled) getWorklogStore().record(idleMs, isFocusing(now), now);
   const settings = bodyTracker.settings();
   for (const kind of bodyTracker.sample(idleMs, now)) {
+    const autoBreak = startAutoBreak(kind, now);
     enqueueTaskNotification({
       eventId: `body-${kind}-${now}`,
       taskId: `body-${kind}-${dayKeyOf(now)}-${now}`,
       source: kind,
       project: '',
-      ...BODY_COPY[kind](settings),
+      ...BODY_COPY[kind](settings, autoBreak),
+      ...(autoBreak ? { ...autoBreakPresentation(kind), autoBreak } : {}),
       completedAt: now,
     });
   }
@@ -882,9 +1093,11 @@ ipcMain.handle('settings:set-body', (event, patch) => {
     eye: { ...current.eye, ...(source.eye || {}) },
     offwork: { ...current.offwork, ...(source.offwork || {}) },
     worklog: { ...current.worklog, ...(source.worklog || {}) },
+    cat: { ...current.cat, ...(source.cat || {}) },
   });
   if (!writeJsonFile(getJsonSettingsPath(APP_SETTINGS_FILE), { ...stored, body: next })) return { ok: false };
   bodyTracker.setSettings(next);
+  syncBreakCompanion();
   worklogEnabled = next.worklog.enabled;
   if (!worklogEnabled) getWorklogStore().pause();
   return { ok: true, body: next };
@@ -1198,13 +1411,15 @@ ipcMain.handle('pomodoro:notify', (event, payload) => {
   const safeMinutes = Math.max(1, Math.min(120, Math.round(Number(source.minutes) || 25)));
   const completedAt = Date.now();
   const isBreak = source.mode === 'break';
+  const autoBreak = !isBreak && startAutoBreak('pomodoro', completedAt);
   const notification = {
     eventId: `pomodoro-${completedAt}`,
     taskId: `pomodoro-${completedAt}`,
     source: isBreak ? 'pomodoro-break' : 'pomodoro',
     project: '番茄钟',
     title: isBreak ? '休息结束' : '专注完成',
-    detail: isBreak ? '准备好就继续专注' : `${safeMinutes} 分钟专注完成，休息一下吧`,
+    detail: isBreak ? '准备好就继续专注' : autoBreak ? `${safeMinutes} 分钟专注完成，休息 5 分钟` : `${safeMinutes} 分钟专注完成，休息一下吧`,
+    ...(autoBreak ? { ...autoBreakPresentation('pomodoro'), autoBreak } : {}),
     completedAt,
   };
   return { ok: true, result: enqueueTaskNotification(notification) };
@@ -1488,11 +1703,54 @@ ipcMain.handle('ai:integration-setup', (event, tool) => {
     return { ok: true, file: '~/.claude/settings.json', snippet: `"hooks": ${JSON.stringify({ Stop: hook, Notification: hook }, null, 2)}` };
   }
   if (tool === 'codex') {
-    const script = path.join(__dirname, 'scripts', 'codex-notify.js');
-    return { ok: true, file: '~/.codex/config.toml', snippet: `notify = ${JSON.stringify(['/usr/bin/env', 'ELECTRON_RUN_AS_NODE=1', process.execPath, script])}` };
+    return { ok: true, file: '~/.codex/config.toml', snippet: `notify = ${JSON.stringify(codexNotifyCommand())}` };
   }
   return { ok: false, error: 'invalid' };
 });
+
+function codexNotifyCommand() {
+  return ['/usr/bin/env', 'ELECTRON_RUN_AS_NODE=1', process.execPath, path.join(__dirname, 'scripts', 'codex-notify.js')];
+}
+
+// 一键接入 Codex：只在用户点按钮时写 ~/.codex/config.toml，只加 SoloDock 那一行。
+// 第一次写之前在旁边留一份 config.toml.before-solodock；已有别的 notify 时一律不写。
+async function updateCodexConfig(mutate) {
+  const directory = process.env.CODEX_HOME || path.join(app.getPath('home'), '.codex');
+  const file = path.join(directory, 'config.toml');
+  let raw = null;
+  let mode = 0o600;
+  try {
+    raw = await fs.promises.readFile(file, 'utf8');
+    mode = (await fs.promises.stat(file)).mode & 0o777;
+  } catch (error) {
+    if (error.code !== 'ENOENT') return { ok: false, error: 'read_failed' };
+  }
+  const result = mutate(raw || '');
+  if (!result.ok) return result;
+  if (result.text === (raw || '')) return { ok: true, changed: false };
+  try {
+    await fs.promises.mkdir(directory, { recursive: true });
+    const backup = `${file}.before-solodock`;
+    if (raw !== null && !fs.existsSync(backup)) await fs.promises.writeFile(backup, raw, { mode: 0o600 });
+    const temporary = `${file}.solodock-${process.pid}.tmp`;
+    await fs.promises.writeFile(temporary, result.text, { mode });
+    await fs.promises.rename(temporary, file);
+  } catch (error) {
+    return { ok: false, error: 'write_failed' };
+  }
+  return { ok: true, changed: true };
+}
+
+ipcMain.handle('codex:connect', (event) => {
+  if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'unavailable' };
+  if (!appLocationStable()) return { ok: false, error: 'not_installed' };
+  return updateCodexConfig((text) => connectCodexConfig(text, codexNotifyCommand()));
+});
+
+async function repairCodexLink() {
+  if (!appLocationStable()) return;
+  await updateCodexConfig((text) => ({ ok: true, text: repairCodexConfig(text, codexNotifyCommand()) })).catch(() => {});
+}
 
 // 一键接入 / 断开 Claude Code：只在用户点按钮时写 ~/.claude/settings.json。
 // 第一次写之前在旁边留一份 settings.json.before-solodock；文件不是合法 JSON 时一律不写。
@@ -1566,9 +1824,10 @@ ipcMain.handle('app:move-to-applications', (event) => {
   return { ok: moveToApplications() };
 });
 
+// 返回是否已经移过去（移过去后系统会从新位置重新打开 SoloDock）。
 async function offerMoveToApplications() {
   // 只对用户的正式数据文件夹询问；测试与开发实例（指定了 --user-data-dir）不弹，免得把测试包移进「应用程序」。
-  if (appLocationStable() || app.commandLine.hasSwitch('user-data-dir')) return;
+  if (appLocationStable() || app.commandLine.hasSwitch('user-data-dir')) return false;
   updateTransientSystemInteraction(1);
   let response = 1;
   try {
@@ -1584,9 +1843,19 @@ async function offerMoveToApplications() {
   } finally {
     updateTransientSystemInteraction(-1);
   }
-  if (response === 0 && !moveToApplications()) {
-    dialog.showMessageBox({ type: 'warning', message: '没能移过去', detail: '请把安装盘里的 SoloDock 手动拖进「应用程序」文件夹。', buttons: ['好'] }).catch(() => {});
-  }
+  if (response !== 0) return false;
+  if (moveToApplications()) return true;
+  dialog.showMessageBox({ type: 'warning', message: '没能移过去', detail: '请把安装盘里的 SoloDock 手动拖进「应用程序」文件夹。', buttons: ['好'] }).catch(() => {});
+  return false;
+}
+
+// 新装用户第一次打开：没有 Dock 图标，折叠态又和刘海一样大，看起来像没打开。
+// 让面板自动展开一次，首次引导随之出现（引导看完或跳过后 onboardingPending 就清掉了）。
+let onboardingRevealed = false;
+function revealOnboardingOnce() {
+  if (onboardingRevealed || isQuitting || !readAppSettings().onboardingPending) return;
+  onboardingRevealed = true;
+  openRendererPanel('app:expand');
 }
 ipcMain.handle('claude:disconnect', (event) => {
   if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) return { ok: false, error: 'unavailable' };
@@ -2626,14 +2895,17 @@ const PRIVACY_SETTINGS_PANES = process.platform === 'win32' ? {
   accessibility: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility',
   'screen-recording': 'x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture',
   microphone: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone',
+  automation: 'x-apple.systempreferences:com.apple.preference.security?Privacy_Automation',
 };
 
-ipcMain.handle('shell:open-privacy-settings', (event, pane) => {
-  const target = PRIVACY_SETTINGS_PANES[String(pane || '')];
+function openPrivacyPane(pane) {
+  const target = Object.prototype.hasOwnProperty.call(PRIVACY_SETTINGS_PANES, String(pane || '')) ? PRIVACY_SETTINGS_PANES[pane] : '';
   if (!target) return false;
   shell.openExternal(target);
   return true;
-});
+}
+
+ipcMain.handle('shell:open-privacy-settings', (event, pane) => openPrivacyPane(pane));
 
 // ============ 启动时的权限自检 ============
 // DMG 装的是全新二进制，TCC 授权不会从开发版继承，而这几项缺失时的表现都是「静默失效」：
@@ -3016,22 +3288,14 @@ function taskWindowMatchScore(notification, target) {
 async function activateActiveTaskNotification(eventId = null) {
   const notification = activeTaskNotification;
   if (!notification || (eventId && notification.eventId !== eventId) || notification.source === 'todo') return false;
-  const result = await scanCurrentWindows();
-  const target = (result.items || [])
-    .map((item) => ({ item, score: taskWindowMatchScore(notification, item) }))
-    .filter((candidate) => candidate.score > 0)
-    .sort((a, b) => b.score - a.score)[0]?.item;
-  if (!target) return false;
-  try {
-    const focused = (await runJxa(WINDOW_FOCUS_JXA, [target.pid, target.title, target.windowIndex])) === 'true';
-    if (focused) {
-      getNoticeStore().markHandled(notification.eventId);
-      beginTaskNotificationDismiss();
-    }
-    return focused;
-  } catch (error) {
-    return false;
+  const result = await focusTaskWindow(notification);
+  if (result.ok) {
+    getNoticeStore().markHandled(notification.eventId);
+    beginTaskNotificationDismiss();
+  } else if (result.error === 'permission') {
+    showWindowPermissionHint(result.pane);
   }
+  return result.ok;
 }
 
 ipcMain.handle('task-notification:activate', async (event, eventId) => {
@@ -4354,6 +4618,9 @@ function ensureFirstRunAutoLaunch() {
   // 首次运行时默认开启开机自启；之后尊重用户在托盘菜单的选择。
   // 只对打包后的应用：源码运行与测试每次用新的数据文件夹，不能把开发用的 Electron 加进登录项。
   if (process.platform !== 'darwin' || !app.isPackaged) return;
+  // 在安装盘里或被系统临时转移的位置运行时先不登记：登记进去的是这个临时路径，推出安装盘就失效了。
+  // 移到「应用程序」后会从新位置重新打开，那时再登记。
+  if (!appLocationStable()) return;
   const marker = path.join(app.getPath('userData'), '.first-run-done');
   if (fs.existsSync(marker)) return;
   try {
@@ -4402,7 +4669,12 @@ app.whenReady().then(() => {
   applyAppSettings();
   scheduleReminderResume();
   void repairClaudeLink();
-  setTimeout(() => { if (!isQuitting) void offerMoveToApplications(); }, 1200);
+  void repairCodexLink();
+  // 新装用户：先问要不要移到「应用程序」，再让面板从刘海里展开一次、直接出首次引导。
+  setTimeout(async () => {
+    if (isQuitting) return;
+    if (!await offerMoveToApplications().catch(() => false)) revealOnboardingOnce();
+  }, 1200);
   startTaskNotificationServer();
   // 锁屏或休眠时锁上密钥，并清掉仍在剪贴板上的密码。
   for (const eventName of ['lock-screen', 'suspend']) {
@@ -4456,6 +4728,8 @@ app.on('will-quit', () => {
   if (noticeStore) noticeStore.flush();
   if (worklogStore) worklogStore.flush();
   if (focusFlushTimer) clearTimeout(focusFlushTimer);
+  if (breakCatEndTimer) clearTimeout(breakCatEndTimer);
+  if (breakCatLeaveTimer) clearTimeout(breakCatLeaveTimer);
   stopHoverSpaceShortcut();
   clearTaskNotificationTimers();
   stopTaskNotificationServer();

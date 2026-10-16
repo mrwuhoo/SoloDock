@@ -39,6 +39,8 @@
       $('onboard-summon-key').textContent = `${shortcutLabel(shortcut)} 展开面板`;
       $('onboard-summon-text').textContent = '在任何应用里按下就展开，也可以直接点一下刘海。快捷键可在设置里改。';
     }
+    // 首次运行时默认开机自动打开，系统会提示添加了后台项目：在这里说一声是什么、去哪关。
+    $('onboard-launch-note').hidden = settings?.autoLaunch !== true;
     const capture = settings?.captureShortcut ?? 'Alt+Shift+N';
     if (capture) {
       $('onboard-capture-key').textContent = `${shortcutLabel(capture)} 随手记`;
@@ -85,17 +87,12 @@
       text.append(title, state);
       row.append(avatar, text);
       if (!info.connected) {
+        // 提醒由 SoloDock 直接登记（只加自己的一项）；额度会自动读取，不用接入。
         const button = document.createElement('button');
         button.type = 'button';
         button.className = info.installed ? 'onboard-primary' : 'onboard-secondary';
-        // Claude Code 的提醒由 SoloDock 直接登记（只加自己的一项）；额度会自动读取，不用接入。
-        if (id === 'claude') {
-          button.dataset.connect = id;
-          button.textContent = '接入提醒';
-        } else {
-          button.dataset.setup = id;
-          button.textContent = '复制接入设置';
-        }
+        button.dataset.connect = id;
+        button.textContent = '接入提醒';
         row.append(button);
       }
       return row;
@@ -132,6 +129,11 @@
     }
   }
 
+  async function copySetup(tool) {
+    const result = await Promise.resolve(api().getAiIntegrationSetup?.(tool)).catch(() => null);
+    return Boolean(result?.ok && await Promise.resolve(api().writeClipboard?.({ type: 'text', text: result.snippet })).catch(() => false));
+  }
+
   function close() {
     if (root.hidden) return false;
     root.hidden = true;
@@ -154,27 +156,28 @@
     const connect = event.target.closest('[data-connect]');
     if (connect) {
       connect.disabled = true;
-      const result = await Promise.resolve(window.NotchAiUsageState?.connectClaude?.()).catch(() => null);
+      const tool = connect.dataset.connect;
+      const result = tool === 'claude'
+        ? await Promise.resolve(window.NotchAiUsageState?.connectClaude?.()).catch(() => null)
+        : await Promise.resolve(api().connectCodex?.()).catch(() => null);
+      let message = result?.error === 'not_installed' ? '先把 SoloDock 移到「应用程序」文件夹再接入（现在是从安装盘里运行的）。' : '接入没有成功，请再试一次。';
+      if (result?.ok) {
+        message = tool === 'claude'
+          ? '已接入 Claude Code 提醒：任务完成与「需要你确认」会从刘海提醒你。额度由 SoloDock 自动读取，不用额外设置。原来的设置都保留，在「设置 → AI 与 API」里可以断开。'
+          : '已接入 Codex 提醒：重启 Codex 后，任务完成会从刘海提醒你。原来的设置都保留，改动前的备份在 ~/.codex/config.toml.before-solodock。';
+      } else if (result?.error === 'invalid_settings') {
+        message = '~/.claude/settings.json 格式有误，没有改动。';
+      } else if (result?.error === 'notify_exists') {
+        // 用户已有自己的 notify：不覆盖，把接入设置复制下来，由用户自己合并。
+        const copied = await copySetup('codex');
+        message = copied
+          ? '~/.codex/config.toml 里已经有一条 notify，为了不覆盖它没有改动。接入设置已复制，可以自己合并进去。'
+          : '~/.codex/config.toml 里已经有一条 notify，为了不覆盖它没有改动。';
+      }
       const note = $('onboard-ai-note');
       note.classList.toggle('done', Boolean(result?.ok));
-      note.querySelector('span').textContent = result?.ok
-        ? '已接入 Claude Code 提醒：任务完成与「需要你确认」会从刘海提醒你。额度由 SoloDock 自动读取，不用额外设置。原来的设置都保留，在「设置 → AI 与 API」里可以断开。'
-        : result?.error === 'not_installed' ? '先把 SoloDock 移到「应用程序」文件夹再接入（现在是从安装盘里运行的）。'
-          : result?.error === 'invalid_settings' ? '~/.claude/settings.json 格式有误，没有改动。' : '接入没有成功，请再试一次。';
+      note.querySelector('span').textContent = message;
       await renderAi();
-      return;
-    }
-    const setup = event.target.closest('[data-setup]');
-    if (setup) {
-      const tool = setup.dataset.setup;
-      const result = await Promise.resolve(api().getAiIntegrationSetup?.(tool)).catch(() => null);
-      const copied = result?.ok && await Promise.resolve(api().writeClipboard?.({ type: 'text', text: result.snippet })).catch(() => false);
-      const note = $('onboard-ai-note');
-      const name = TOOLS.find(([id]) => id === tool)[1];
-      note.classList.toggle('done', Boolean(copied));
-      note.querySelector('span').textContent = copied
-        ? `已复制 · 粘贴到 ${result.file} 最前面（任何 [ ] 段落之前），然后重启 ${name}。`
-        : '没复制上，请再试一次。';
       return;
     }
     const action = event.target.closest('[data-onboard]')?.dataset.onboard;

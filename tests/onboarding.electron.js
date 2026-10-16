@@ -31,7 +31,7 @@ app.whenReady().then(async () => {
     const $ = (id) => document.getElementById(id);
     const base = await window.notchAPI.getAppSettings();
     window.__onboarding = { pending: true, finished: 0 };
-    window.notchAPI.getAppSettings = async () => ({ ...base, onboardingPending: window.__onboarding.pending });
+    window.notchAPI.getAppSettings = async () => ({ ...base, autoLaunch: true, onboardingPending: window.__onboarding.pending });
     window.notchAPI.finishOnboarding = async () => { window.__onboarding.pending = false; window.__onboarding.finished += 1; return { ok: true }; };
     await setMode(true);
     await new Promise((resolve) => setTimeout(resolve, 120));
@@ -41,6 +41,7 @@ app.whenReady().then(async () => {
       bars: [...document.querySelectorAll('.onboard-progress i')].map((bar) => bar.classList.contains('on')),
       prevDisabled: document.querySelector('[data-onboard="prev"]').disabled,
       keys: [$('onboard-summon-key').textContent, $('onboard-capture-key').textContent],
+      launchNote: !$('onboard-launch-note').hidden,
       focus: document.activeElement?.dataset.onboard,
     };
   `);
@@ -49,6 +50,8 @@ app.whenReady().then(async () => {
   assert.deepEqual(first.bars, [true, false, false]);
   assert.equal(first.prevDisabled, true);
   assert.deepEqual(first.keys, ['悬停刘海 + 空格', '⌥⇧N 随手记']);
+  // First runs turn on open-at-login, so step 1 says what the system's background-item notice is about.
+  assert.equal(first.launchNote, true);
   assert.equal(first.focus, 'next');
   await shot('onboard-1');
 
@@ -77,13 +80,16 @@ app.whenReady().then(async () => {
   assert.deepEqual(picks.beforeLeaving, []);
   await shot('onboard-2');
 
-  // Step 3: Claude Code is connected with one click (main writes only SoloDock's entry); Codex copies its snippet.
+  // Step 3: Claude Code and Codex both connect with one click (main writes only SoloDock's entry).
+  // When Codex already has its own notify command nothing is overwritten: the snippet is copied to merge by hand.
   const ai = await run(`
     const settle = (ms = 80) => new Promise((resolve) => setTimeout(resolve, ms));
     window.__copied = [];
     window.__linked = false;
     window.__connects = 0;
-    window.notchAPI.getAiIntegrationStatus = async () => ({ claude: { installed: true, connected: window.__linked, usage: window.__linked, reminders: window.__linked }, codex: { installed: false, connected: false } });
+    window.__codex = { calls: 0, results: [{ ok: false, error: 'notify_exists' }, { ok: true, changed: true }], linked: false };
+    window.notchAPI.getAiIntegrationStatus = async () => ({ claude: { installed: true, connected: window.__linked, usage: window.__linked, reminders: window.__linked }, codex: { installed: false, connected: window.__codex.linked } });
+    window.notchAPI.connectCodex = async () => { const result = window.__codex.results[window.__codex.calls++]; if (result.ok) window.__codex.linked = true; return result; };
     window.notchAPI.connectClaude = async () => { window.__connects += 1; window.__linked = true; return { ok: true, changed: true, status: { usage: true, reminders: true } }; };
     window.notchAPI.getAiIntegrationSetup = async (tool) => ({ ok: true, file: '~/.codex/config.toml', snippet: 'notify = []' });
     window.notchAPI.writeClipboard = async (entry) => { window.__copied.push(entry); return true; };
@@ -94,10 +100,13 @@ app.whenReady().then(async () => {
     document.querySelector('[data-connect="claude"]').click();
     await settle(150);
     out.connected = { calls: window.__connects, note: document.querySelector('#onboard-ai-note span').textContent, row: [...document.querySelectorAll('.onboard-ai-row')][0].querySelector('small').textContent, button: Boolean([...document.querySelectorAll('.onboard-ai-row')][0].querySelector('button')), toast: document.getElementById('status-toast-message').textContent };
-    document.querySelector('[data-setup="codex"]').click();
-    await settle();
+    document.querySelector('[data-connect="codex"]').click();
+    await settle(150);
     out.copied = window.__copied.slice();
     out.note = document.querySelector('#onboard-ai-note span').textContent;
+    document.querySelector('[data-connect="codex"]').click();
+    await settle(150);
+    out.codex = { calls: window.__codex.calls, note: document.querySelector('#onboard-ai-note span').textContent, row: [...document.querySelectorAll('.onboard-ai-row')][1].querySelector('small').textContent, button: Boolean([...document.querySelectorAll('.onboard-ai-row')][1].querySelector('button')) };
     // Going back keeps the choices and does not write them twice.
     document.querySelector('[data-onboard="prev"]').click();
     await settle();
@@ -110,13 +119,16 @@ app.whenReady().then(async () => {
   assert.deepEqual(ai.features, [['clip', true], ['life', false]]);
   assert.equal(ai.step, 3);
   assert.equal(ai.next, '完成');
-  assert.deepEqual(ai.rows, [['Claude Code', '已检测到', 'onboard-primary', '接入提醒'], ['Codex', '没有检测到，装好后可以在这里接入', 'onboard-secondary', '复制接入设置']]);
+  assert.deepEqual(ai.rows, [['Claude Code', '已检测到', 'onboard-primary', '接入提醒'], ['Codex', '没有检测到，装好后可以在这里接入', 'onboard-secondary', '接入提醒']]);
   assert.equal(ai.connected.calls, 1);
   assert.match(ai.connected.note, /^已接入 Claude Code/);
   assert.deepEqual([ai.connected.row, ai.connected.button], ['已接入', false]);
   assert.equal(ai.connected.toast, '已接入提醒 · Claude Code 完成或需要你确认时会从刘海提醒你');
   assert.deepEqual(ai.copied, [{ type: 'text', text: 'notify = []' }]);
-  assert.match(ai.note, /^已复制 · 粘贴到 ~\/\.codex\/config\.toml 最前面/);
+  assert.match(ai.note, /已经有一条 notify，为了不覆盖它没有改动。接入设置已复制/);
+  assert.equal(ai.codex.calls, 2);
+  assert.match(ai.codex.note, /^已接入 Codex 提醒：重启 Codex 后/);
+  assert.deepEqual([ai.codex.row, ai.codex.button], ['已接入', false]);
   assert.deepEqual(ai.back, [2, 'true']);
   assert.deepEqual(ai.featuresAfter, [['clip', true], ['life', false]]);
   await shot('onboard-3');

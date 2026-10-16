@@ -43,6 +43,19 @@ function reminderPresentation(source) {
   }
 }
 
+// 到点自动休息：开着「休息时大猫陪你」时，番茄钟专注结束和久坐提醒不再等你点「休息 5 分钟」，
+// 直接开始 5 分钟休息、大猫走进来；卡片上只留不想休息时的选项（它们和「让它走」一样会结束这次休息）。
+function autoBreakPresentation(source) {
+  switch (source) {
+    case 'pomodoro':
+      return { actions: [action('focus-5', '再专注 5 分钟'), action('dismiss', '知道了', true)] };
+    case 'sit':
+      return { actions: [action('body-snooze-10', '10 分钟后'), action('body-mute-today', '今天不再提醒')] };
+    default:
+      return null;
+  }
+}
+
 function isAiSource(source) {
   return AI_SOURCES.has(String(source || ''));
 }
@@ -56,12 +69,15 @@ function normalizeBodySettings(value) {
   const eye = part('eye');
   const offwork = part('offwork');
   const worklog = part('worklog');
+  const cat = part('cat');
   return {
     sit: { enabled: sit.enabled !== false, minutes: SIT_CHOICES.includes(Number(sit.minutes)) ? Number(sit.minutes) : 50 },
     eye: { enabled: eye.enabled === true, minutes: EYE_CHOICES.includes(Number(eye.minutes)) ? Number(eye.minutes) : 20 },
     offwork: { enabled: offwork.enabled !== false, time: TIME.test(String(offwork.time || '')) ? offwork.time : '22:30' },
     // 工作时间统计（时间页）：只记在用电脑与专注的时间段，关掉后立即停止。
     worklog: { enabled: worklog.enabled !== false },
+    // 休息陪伴：番茄钟「休息」时，一只大猫走进屏幕陪你，休息结束就走。
+    cat: { enabled: cat.enabled !== false },
   };
 }
 
@@ -353,7 +369,50 @@ function createReminderPause(initialUntil = 0, now = Date.now()) {
   };
 }
 
+/**
+ * 休息陪伴（大猫）：番茄钟进入「休息」时出现，休息结束、暂停、提前结束或被「让它走」时离开。
+ * 不挡屏幕、不拦操作；被叫走后这一段休息不再出现，下一段休息再来。
+ * update() / dismiss() 返回这一刻要做的事：{ type: 'show' | 'update', endsAt } | { type: 'hide' } | null。
+ */
+function createBreakCompanion() {
+  let visible = false;
+  let dismissed = false;
+  let endsAt = 0;
+  const hide = () => {
+    if (!visible) return null;
+    visible = false;
+    return { type: 'hide' };
+  };
+  return {
+    update(state, enabled, now) {
+      const nextEndsAt = Math.max(0, Number(state && state.endsAt) || 0);
+      const resting = Boolean(state && state.running && state.mode === 'break' && nextEndsAt > now);
+      if (!resting) {
+        dismissed = false;
+        return hide();
+      }
+      if (!enabled || dismissed) return hide();
+      if (!visible) {
+        visible = true;
+        endsAt = nextEndsAt;
+        return { type: 'show', endsAt };
+      }
+      if (nextEndsAt === endsAt) return null;
+      endsAt = nextEndsAt;
+      return { type: 'update', endsAt };
+    },
+    dismiss() {
+      if (!visible) return null;
+      dismissed = true;
+      return hide();
+    },
+    visible: () => visible,
+    endsAt: () => (visible ? endsAt : 0),
+  };
+}
+
 module.exports = {
+  createBreakCompanion,
   createQuotaWatch,
   quotaWindows,
   quotaResetLabel,
@@ -368,6 +427,7 @@ module.exports = {
   SIT_CHOICES,
   EYE_CHOICES,
   reminderPresentation,
+  autoBreakPresentation,
   isAiSource,
   normalizeBodySettings,
   createActivityTracker,

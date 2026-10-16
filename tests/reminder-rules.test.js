@@ -43,13 +43,55 @@ test('body settings default to sit on (50 min), eye off, off-work at 22:30', () 
     eye: { enabled: false, minutes: 20 },
     offwork: { enabled: true, time: '22:30' },
     worklog: { enabled: true },
+    cat: { enabled: true },
   });
-  assert.deepEqual(rules.normalizeBodySettings({ sit: { minutes: 45 }, eye: { enabled: true, minutes: 7 }, offwork: { time: '25:00' }, worklog: { enabled: false } }), {
+  assert.deepEqual(rules.normalizeBodySettings({ sit: { minutes: 45 }, eye: { enabled: true, minutes: 7 }, offwork: { time: '25:00' }, worklog: { enabled: false }, cat: { enabled: false } }), {
     sit: { enabled: true, minutes: 45 },
     eye: { enabled: true, minutes: 20 },
     offwork: { enabled: true, time: '22:30' },
     worklog: { enabled: false },
+    cat: { enabled: false },
   });
+});
+
+test('break companion: the cat comes with a running break and leaves when it ends', () => {
+  const cat = rules.createBreakCompanion();
+  const now = at(10);
+  const breakState = (endsAt, running = true) => ({ running, mode: 'break', endsAt });
+  assert.equal(cat.update({ running: true, mode: 'focus', endsAt: now + 1500_000 }, true, now), null, 'focus never brings the cat');
+  assert.deepEqual(cat.update(breakState(now + 300_000), true, now), { type: 'show', endsAt: now + 300_000 });
+  assert.equal(cat.update(breakState(now + 300_000), true, now + 1000), null, 'same break, nothing new');
+  assert.deepEqual(cat.update(breakState(now + 600_000), true, now + 2000), { type: 'update', endsAt: now + 600_000 }, '+5 分钟 moves the countdown');
+  assert.equal(cat.endsAt(), now + 600_000);
+  assert.deepEqual(cat.update(breakState(now + 600_000, false), true, now + 3000), { type: 'hide' }, 'pausing the break sends it away');
+  assert.equal(cat.visible(), false);
+  assert.deepEqual(cat.update(breakState(now + 600_000), true, now + 4000).type, 'show', 'resuming brings it back');
+  assert.deepEqual(cat.update(breakState(now + 600_000), true, now + 600_000), { type: 'hide' }, 'time is up even if the renderer is late');
+  assert.equal(cat.update({ running: false, mode: 'focus', endsAt: 0 }, true, now + 601_000), null);
+});
+
+test('break companion: 让它走 lasts for this break only, and the setting turns it off', () => {
+  const cat = rules.createBreakCompanion();
+  const now = at(10);
+  const resting = { running: true, mode: 'break', endsAt: now + 300_000 };
+  assert.equal(cat.dismiss(), null, 'nothing to dismiss yet');
+  assert.equal(cat.update(resting, true, now).type, 'show');
+  assert.deepEqual(cat.dismiss(), { type: 'hide' });
+  assert.equal(cat.update(resting, true, now + 1000), null, 'stays away for the rest of this break');
+  assert.equal(cat.update({ running: false, mode: 'focus', endsAt: 0 }, true, now + 2000), null);
+  assert.equal(cat.update({ ...resting, endsAt: now + 900_000 }, true, now + 3000).type, 'show', 'the next break brings it back');
+  assert.deepEqual(cat.update({ ...resting, endsAt: now + 900_000 }, false, now + 4000), { type: 'hide' }, 'switching it off sends it away');
+  assert.equal(cat.update({ ...resting, endsAt: now + 900_000 }, false, now + 5000), null);
+});
+
+test('with the cat on, a finished focus and a sitting reminder start the break themselves: the card only offers not resting', () => {
+  const ids = (source) => rules.autoBreakPresentation(source).actions.map((item) => item.id);
+  assert.deepEqual(ids('pomodoro'), ['focus-5', 'dismiss']);
+  assert.deepEqual(ids('sit'), ['body-snooze-10', 'body-mute-today']);
+  assert.equal(rules.autoBreakPresentation('pomodoro').actions.find((item) => item.primary).id, 'dismiss');
+  for (const source of ['pomodoro-break', 'eye', 'offwork', 'todo', 'codex', 'needs-you']) {
+    assert.equal(rules.autoBreakPresentation(source), null, `${source} never starts a break`);
+  }
 });
 
 test('sitting: 50 minutes of continuous use, reset by a 5-minute break, then again 50 minutes later', () => {

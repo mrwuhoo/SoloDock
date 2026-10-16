@@ -38,8 +38,10 @@ const known = {
     window.__calls.push(['act', id, action]);
     const item = (window.__notices || []).find((entry) => entry.id === id);
     if (item && action !== 'open') item.handled = true;
+    if (action === 'open' && window.__openResult) return window.__openResult;
     return { ok: action !== 'open' || Boolean(window.__openWorks), error: action === 'open' && !window.__openWorks ? 'window_not_found' : undefined };
   },
+  openPrivacySettings: async (pane) => { window.__calls.push(['privacy', pane]); return true; },
 };
 window.notchAPI = new Proxy(known, {
   get(target, key) {

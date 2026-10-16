@@ -712,8 +712,13 @@ function moveDueTodosToTomorrow(now = Date.now()) {
 window.notchAPI?.onReminderAction?.((payload) => {
   const action = payload?.action;
   const pomodoro = window.NotchPomodoro;
-  if (action === 'break-5') pomodoro?.start(5 * 60, 'break');
-  else if (action === 'focus-5') pomodoro?.start(5 * 60, 'focus', { task: window.NotchHomeNow?.task?.() });
+  if (action === 'break-5') {
+    // 和首页的「休息 5 分钟」一样：暂停着的专注先结束（满 1 分钟照常记下），再开始休息。
+    if (pomodoro?.state?.().started && pomodoro.state().mode === 'focus') pomodoro.finish();
+    pomodoro?.start(5 * 60, 'break');
+  } else if (action === 'break-end') {
+    if (pomodoro?.state?.().mode === 'break') pomodoro.finish();
+  } else if (action === 'focus-5') pomodoro?.start(5 * 60, 'focus', { task: window.NotchHomeNow?.task?.() });
   else if (action === 'focus-again') pomodoro?.start(pomodoro.minutes() * 60, 'focus', { task: window.NotchHomeNow?.task?.() });
   else if (action === 'todo-done') completeTodoById(String(payload.taskId || ''));
   else if (action === 'move-tomorrow') {
