@@ -63,9 +63,14 @@
   }
 
   // ---------------- 番茄钟 ----------------
+  // 拉环表盘可以拨到任意整分钟：1–120 分钟（与「+5 分钟」的总长上限一致）。
+  const MIN_FOCUS_MINUTES = 1;
+  const MAX_FOCUS_MINUTES = 120;
+
   function focusMinutes(value) {
     const minutes = Math.round(Number(value));
-    return FOCUS_CHOICES.includes(minutes) ? minutes : DEFAULT_FOCUS_MINUTES;
+    if (!Number.isFinite(minutes) || minutes < MIN_FOCUS_MINUTES) return DEFAULT_FOCUS_MINUTES;
+    return Math.min(MAX_FOCUS_MINUTES, minutes);
   }
 
   // 旧版番茄钟存的是 [分, 秒]（更早是 [时, 分, 秒]），默认 5 分钟；只沿用正好是四档之一的时长。
@@ -73,47 +78,77 @@
     if (!Array.isArray(value)) return DEFAULT_FOCUS_MINUTES;
     const parts = value.map((part) => Number(part) || 0);
     const minutes = parts.length === 3 ? parts[0] * 60 + parts[1] : parts[0];
-    return focusMinutes(parts[parts.length - 1] ? NaN : minutes);
+    return !parts[parts.length - 1] && FOCUS_CHOICES.includes(minutes) ? minutes : DEFAULT_FOCUS_MINUTES;
   }
 
-  // ---------------- 时间圆盘 ----------------
-  // 一圈就是这一轮的时长：开始时表盘纯白，走过的时间从 12 点顺时针慢慢染蓝，走完整圈正好结束。
-  const MAX_DISC_MINUTES = 120;
+  // ---------------- 拉环表盘 ----------------
+  // 参考锤子时钟的拉环计时器：表盘一圈是 60 分钟，从 12 点顺时针拖拉环定时长；
+  // 蓝色弧是「剩下的」时间，计时中拉环沿着表盘慢慢退回 12 点。超过 60 分钟的部分画在第二圈。
+  const DIAL_MINUTES = 60;
+  const round2 = (value) => Math.round(value * 100) / 100;
 
-  function elapsedFraction(remaining, session) {
-    const total = Math.max(1, Number(session) || 1);
-    return Math.max(0, Math.min(1, 1 - Math.max(0, Number(remaining) || 0) / total));
+  // 表盘上某个分钟数的位置（0 在 12 点，顺时针）。
+  function dialPoint(minutes, r, cx = 50, cy = 50) {
+    const angle = ((Number(minutes) || 0) / DIAL_MINUTES) * Math.PI * 2 - Math.PI / 2;
+    return { x: round2(cx + Math.cos(angle) * r), y: round2(cy + Math.sin(angle) * r) };
   }
 
-  // 每分钟一格刻度（每 5 分钟一格长刻度，12 点那格最长），所以没开始时也看得出这一轮有多长。
-  function discTicks(minutes, cx = 50, cy = 50, outer = 46) {
-    const count = Math.max(1, Math.min(MAX_DISC_MINUTES, Math.round(Number(minutes) || 0)));
-    const round = (value) => Math.round(value * 100) / 100;
-    return Array.from({ length: count }, (_, index) => {
-      const angle = (index / count) * Math.PI * 2 - Math.PI / 2;
-      const major = index % 5 === 0;
-      const inner = index === 0 ? outer - 5.5 : major ? outer - 4 : outer - 2;
-      return {
-        x1: round(cx + Math.cos(angle) * outer), y1: round(cy + Math.sin(angle) * outer),
-        x2: round(cx + Math.cos(angle) * inner), y2: round(cy + Math.sin(angle) * inner),
-        major,
-      };
+  // 从 12 点顺时针到某个分钟数的弧线（只画一圈以内；满一圈画成整圆，0 不画）。
+  function dialArc(minutes, r, cx = 50, cy = 50) {
+    const m = Math.max(0, Math.min(DIAL_MINUTES, Number(minutes) || 0));
+    if (m <= 0.01) return '';
+    const top = `M${round2(cx)} ${round2(cy - r)}`;
+    if (m >= DIAL_MINUTES - 0.01) return `${top}A${r} ${r} 0 1 1 ${round2(cx)} ${round2(cy + r)}A${r} ${r} 0 1 1 ${round2(cx)} ${round2(cy - r)}`;
+    const end = dialPoint(m, r, cx, cy);
+    return `${top}A${r} ${r} 0 ${m > DIAL_MINUTES / 2 ? 1 : 0} 1 ${end.x} ${end.y}`;
+  }
+
+  // 一圈 24 格稀疏刻度（每 2.5 分钟一格），0 / 15 / 30 / 45 是长刻度。
+  function dialTicks(cx = 50, cy = 50, outer = 47) {
+    return Array.from({ length: 24 }, (_, slot) => {
+      const index = slot * 2.5;
+      const major = slot % 6 === 0;
+      const a = dialPoint(index, outer, cx, cy);
+      const b = dialPoint(index, major ? outer - 3.5 : outer - 2.2, cx, cy);
+      return { x1: a.x, y1: a.y, x2: b.x, y2: b.y, major };
     });
   }
 
-  // 从 12 点方向顺时针画出的扇形路径；满一圈时画成整圆，为 0 时不画。
-  function wedgePath(cx, cy, r, fraction) {
-    const f = Math.max(0, Math.min(1, Number(fraction) || 0));
-    const round = (value) => Math.round(value * 100) / 100;
-    if (f <= 0.0005) return '';
-    if (f >= 0.9995) return `M${round(cx)} ${round(cy - r)}A${r} ${r} 0 1 1 ${round(cx)} ${round(cy + r)}A${r} ${r} 0 1 1 ${round(cx)} ${round(cy - r)}Z`;
-    const angle = f * Math.PI * 2 - Math.PI / 2;
-    const x = cx + Math.cos(angle) * r;
-    const y = cy + Math.sin(angle) * r;
-    return `M${round(cx)} ${round(cy)}L${round(cx)} ${round(cy - r)}A${r} ${r} 0 ${f > 0.5 ? 1 : 0} 1 ${round(x)} ${round(y)}Z`;
+  // 指针在表盘上的角度换成分钟（0–60，12 点为 0，顺时针）。
+  function dialMinutesAt(x, y, cx, cy) {
+    const angle = Math.atan2(Number(y) - cy, Number(x) - cx) + Math.PI / 2;
+    const turn = ((angle / (Math.PI * 2)) % 1 + 1) % 1;
+    return turn * DIAL_MINUTES;
   }
 
-  // 悬停圆盘时浮出的一句：不跳秒，只说还剩几分钟。
+  // 拖动时两次读数之间走了多少分钟：跨过 12 点时取最近的方向，这样能连续拨到第二圈。
+  function dialStep(from, to) {
+    let step = (Number(to) || 0) - (Number(from) || 0);
+    if (step > DIAL_MINUTES / 2) step -= DIAL_MINUTES;
+    if (step < -DIAL_MINUTES / 2) step += DIAL_MINUTES;
+    return step;
+  }
+
+  // 拖过头时的阻尼：超出 1–120 的部分只跟手三成，松手再弹回界内。
+  function dialResist(value, min = MIN_FOCUS_MINUTES, max = MAX_FOCUS_MINUTES) {
+    const v = Number(value) || 0;
+    if (v < min) return min - (min - v) * 0.3;
+    if (v > max) return max + (v - max) * 0.3;
+    return v;
+  }
+
+  // 松手后停在最近的整分钟，并落回 1–120 之内。
+  function dialSettle(value) {
+    return Math.max(MIN_FOCUS_MINUTES, Math.min(MAX_FOCUS_MINUTES, Math.round(Number(value) || 0)));
+  }
+
+  // 表盘中间的数字：还剩几分钟（不足一分钟也写 1，走完为 0）。
+  function remainingMinutes(seconds) {
+    const safe = Math.max(0, Number(seconds) || 0);
+    return safe <= 0 ? 0 : Math.ceil(safe / 60);
+  }
+
+  // 读屏与提示用的一句：不跳秒，只说还剩几分钟。
   function remainingText(seconds, mode = 'focus') {
     const minutes = Math.max(1, Math.ceil((Number(seconds) || 0) / 60));
     return mode === 'break' ? `休息还剩 ${minutes} 分钟` : `还剩 ${minutes} 分钟`;
@@ -324,9 +359,17 @@
     untilText,
     focusMinutes,
     focusMinutesFromLegacy,
-    elapsedFraction,
-    discTicks,
-    wedgePath,
+    MIN_FOCUS_MINUTES,
+    MAX_FOCUS_MINUTES,
+    DIAL_MINUTES,
+    dialPoint,
+    dialArc,
+    dialTicks,
+    dialMinutesAt,
+    dialStep,
+    dialResist,
+    dialSettle,
+    remainingMinutes,
     remainingText,
     focusToday,
     currentTask,
